@@ -1,32 +1,73 @@
 {
+ "alc_gaps": {
+  "count": 0,
+  "floor_baht": 1000.0,
+  "revenue": 3000.0,
+  "rows": [],
+  "total_revenue": 0
+ },
+ "branch": null,
+ "buffet_over": {
+  "basis": "all",
+  "basis_note": "ยังไม่มีข้อมูลแยกระดับราคา จึงเทียบต่อลูกค้าทั้งหมดของสาขา",
+  "buffet_plates": 300.0,
+  "count": 0,
+  "floor_baht": 1000.0,
+  "floor_plates": 1.0,
+  "food_cost": 2700.0,
+  "rows": [],
+  "total_cost": 0,
+  "total_plates": 0
+ },
  "category_whitespace": [
   {
    "category": "A La Carte",
-   "label": "trim",
+   "label": "watch",
    "n_skus": 1,
-   "qty": 280,
-   "qty_per_sku": 280,
-   "reason": "หมวดกำลังหดตัว → ทบทวนเมนูที่อ่อน",
-   "revenue": 28000,
-   "revenue_per_sku": 28000,
-   "slope_pct": -10.7
-  },
-  {
-   "category": "Sashimi",
-   "label": "trim",
-   "n_skus": 1,
-   "qty": 2800,
-   "qty_per_sku": 2800,
-   "reason": "หมวดกำลังหดตัว → ทบทวนเมนูที่อ่อน",
-   "revenue": 0,
-   "revenue_per_sku": 0,
-   "slope_pct": -10.7
+   "reason": "ทรงตัว",
+   "revenue": 20000.0,
+   "revenue_per_sku": 20000.0,
+   "slope_pct": 0.0
   }
  ],
- "cross_branch_gaps": [],
- "month_range": [
-  null,
-  null
+ "cost_view": true,
+ "group": null,
+ "months": [
+  "2025-12",
+  "2026-01",
+  "2026-02",
+  "2026-03",
+  "2026-04",
+  "2026-05"
  ],
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": false,
+  "cur": [
+   "2026-06-01",
+   "2026-06-03"
+  ],
+  "days": 3,
+  "has_ly": false,
+  "has_prev": true,
+  "kind": "month",
+  "label_th": "1–3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-01",
+   "2025-06-03"
+  ],
+  "ly_label_th": "1–3 มิ.ย. 2568",
+  "prev": [
+   "2026-05-01",
+   "2026-05-03"
+  ],
+  "prev_label_th": "1–3 พ.ค. 2569",
+  "reasons": {
+   "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569"
+  }
+ },
+ "reasons": {
+  "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569"
+ },
  "revive": []
 }

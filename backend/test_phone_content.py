@@ -97,7 +97,6 @@ MB_PAGES = {   # the brief's list (Thai name -> page key)
 }
 # pages whose daily list is not a <table>: it is already one card per row, drawn by the page itself, with the shared state filter
 OWN_CARDS = {
-    "menuactionboard": "four bucket boards of menu cards (_mabCard): no table to turn into cards",
     "fmsg": "one row per conversation (button.fm-row, js/19-fmsg.js) with the shared state filter: no table",
 }
 # a table with fewer than three numeric columns shows what it has

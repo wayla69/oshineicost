@@ -1,16 +1,66 @@
-<!-- ══ ปรับเมนู (Menu Action Board) ══ -->
+<!-- ══ ปรับเมนู (DV7, owner 2026-10-25: the buffet cost per head; backend/menu_board.py) ══ -->
 <div id="tab-menuactionboard" style="display:none">
-  <div class="card p-4 mb-4" style="background:var(--accent-soft);border:1px solid var(--accent)">
-    <h2 class="text-base font-bold" style="color:var(--accent)">ปรับเมนู — สิ่งที่ควรทำกับแต่ละเมนู <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuactionboard-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuactionboard-1" data-title="ปรับเมนู"><p>รวม Menu Engineering (ดาว/ม้าแบก/ปริศนา/หมา) + วงจรชีวิตเมนู (โต/ทรงตัว/ลด/ตาย) เป็น 4 กลุ่มการตัดสินใจ — ตัวเลข quadrant ตรงกับแท็บ Menu Engineering. <b>กลุ่ม “ทบทวน/ตัด” เป็นเพียงรายการที่ควรพิจารณา ไม่ได้ลบเมนูให้อัตโนมัติ</b></p></template>
-  </div>
-  <div id="mabStatus" class="text-xs mb-3" style="color:var(--text-muted)"></div>
-  <div id="mabKpis" class="flex flex-wrap gap-2 mb-4"></div>
-  <div id="mabBoard" class="grid gap-3" style="grid-template-columns:repeat(auto-fit,minmax(260px,1fr))"></div>
-  <div id="mabNeedsWrap" class="card p-4 mt-4" style="display:none;border:1px solid #94a3b8">
-    <div class="flex items-center justify-between">
-      <h3 class="text-sm font-bold" style="color:var(--text-primary)">ℹ️ ยังไม่มีข้อมูลต้นทุน (<span id="mabNeedsCount">0</span>) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuactionboard-mb1" title="คำอธิบาย">?</button></h3><template id="hlp-menuactionboard-mb1" data-title="เมนูที่ยังไม่มีข้อมูลต้นทุน"><p>เมนูเหล่านี้ยังจัดอันดับด้วยมาร์จิ้นไม่ได้ — เพิ่ม BoM/ต้นทุนเพื่อให้ปรากฏในกลุ่มจัดการ</p></template>
-      <button onclick="document.getElementById('mabNeedsBody').classList.toggle('hidden')" class="text-xs border rounded px-2 py-0.5" style="border-color:var(--border);color:var(--text-muted)">แสดง/ซ่อน</button>
+  <style>
+    /* DV7 · figures 15-22 px bold, the lines under them 12-13 px; colour = meaning (price amber, eat red, down green) through the theme inks */
+    .mab-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+    .mab-status { font-size: 12px; color: var(--text-secondary); margin-bottom: 8px; }
+    .mab-ans { display: grid; gap: 6px; margin-bottom: 12px; padding: 12px 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); }
+    .mab-ans-l { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 8px; font-size: 13px; color: var(--text-secondary); }
+    .mab-ans-v { font-size: 18px; font-weight: 800; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+    .mab-up { color: var(--bad-ink); font-weight: 700; }
+    .mab-dn { color: var(--good-ink); font-weight: 700; }
+    .mab-was { color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .mab-board { display: grid; gap: 12px; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); align-items: start; }
+    .mab-bk { border: 1px solid var(--border); border-top: 3px solid var(--mab-c); border-radius: var(--r-md); background: var(--bg-card); overflow: hidden; }
+    .mab-bk-h { padding: 10px 12px; background: var(--bg-subtle); }
+    .mab-bk-t { font-size: 14px; font-weight: 700; color: var(--mab-ink); }
+    .mab-bk-s { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+    .mab-bk-v { font-size: 20px; font-weight: 800; color: var(--mab-ink); font-variant-numeric: tabular-nums; margin-top: 4px; }
+    .mab-bk-price { --mab-c: var(--amber-ink); --mab-ink: var(--amber-ink); }
+    .mab-bk-eat { --mab-c: var(--bad-ink); --mab-ink: var(--bad-ink); }
+    .mab-bk-down { --mab-c: var(--good-ink); --mab-ink: var(--good-ink); }
+    .mab-list { padding: 6px 8px 8px; display: grid; gap: 6px; }
+    .mab-dish { padding: 8px 10px; border-radius: var(--r-md); background: var(--bg-subtle); }
+    .mab-dish-top { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+    .mab-name { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+    .mab-imp { font-size: 17px; font-weight: 800; white-space: nowrap; font-variant-numeric: tabular-nums; color: var(--mab-ink); }
+    .mab-line { font-size: 12px; line-height: 1.5; color: var(--text-secondary); margin-top: 2px; font-variant-numeric: tabular-nums; }
+    .mab-line b { color: var(--text-primary); font-weight: 600; }
+    .mab-cause { display: inline-block; padding: 0 6px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font-size: 12px; font-weight: 600; }
+    .mab-more { position: relative; margin: 2px 8px 10px; padding: 6px 10px; font-size: 13px; font-weight: 600; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); color: var(--accent); cursor: pointer; }
+    .mab-empty { font-size: 13px; color: var(--text-secondary); padding: 10px 6px; }
+    .mab-sec { margin-top: 16px; padding: 14px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); }
+    .mab-sec-h { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+    .mab-sec-t { font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    .mab-sec-s { font-size: 13px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+    .mab-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+    .mab-tbl th { font-size: 12px; font-weight: 600; color: var(--text-secondary); text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+    .mab-tbl td { padding: 6px 8px; border-top: 1px solid var(--border); color: var(--text-primary); vertical-align: top; font-variant-numeric: tabular-nums; }
+    .mab-tbl .mab-num { text-align: right; white-space: nowrap; }
+    .mab-tbl .mab-v { font-weight: 700; font-size: 14px; }
+    .mab-sub { font-size: 12px; color: var(--text-secondary); }
+    .mab-wrap { overflow-x: auto; }
+    .mab-unc summary { cursor: pointer; font-size: 14px; font-weight: 700; color: var(--text-primary); padding: 4px 0; }
+    .mab-unc-row { display: flex; justify-content: space-between; gap: 8px; font-size: 13px; padding: 4px 0; border-top: 1px solid var(--border); color: var(--text-primary); }
+    .mab-unc-row span:last-child { color: var(--text-secondary); white-space: nowrap; font-variant-numeric: tabular-nums; }
+    @media (max-width: 700px) {
+      .mab-board { grid-template-columns: 1fr; }
+      body.ph-on .mab-more { min-height: 0; }
+      body.ph-on .mab-more::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+    }
+  </style>
+  <div class="card p-4 mb-3">
+    <div class="mab-head">
+      <h2 class="text-base font-bold" style="color:var(--accent)">ปรับเมนู · ต้นทุนบุฟเฟ่ต์ต่อหัว <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuactionboard-1" title="คำอธิบาย">?</button></h2>
     </div>
-    <div id="mabNeedsBody" class="hidden mt-2"></div>
+    <template id="hlp-menuactionboard-1" data-title="ปรับเมนู"><p>เทียบช่วงที่เลือกกับช่วงก่อน (จำนวนวันเท่ากัน) ตามช่วงเวลาและสาขาที่เลือกด้านบน</p><p><b>ผลต่อต้นทุน</b> = ต้นทุนของเมนูที่เปลี่ยนไป หักส่วนที่มาจากจำนวนลูกค้าที่เปลี่ยน จึงเหลือเฉพาะส่วนที่มาจาก <b>กินต่อหัว</b> (จานต่อลูกค้า) และ <b>ราคาต่อจาน</b> (ต้นทุนต่อจาน)</p><p>ต่อหัว = ต่อลูกค้าทั้งหมดของสาขา เหมือนหน้าต้นทุนต่อหัว ต้นทุนทุกเมนูรวมกันเท่ากับต้นทุนอาหาร</p><p>แสดงก่อน 5 เมนูที่ถึงเกณฑ์ (0.1% ของต้นทุนอาหาร อย่างน้อย ฿1,000) · ดูทั้งหมดแสดงทุกเมนู</p></template>
+    <div id="mabStatus" class="mab-status"></div>
+    <div id="mabAnswer"></div>
   </div>
+  <div id="mabBoard" class="mab-board"></div>
+  <div id="mabAlc" class="mab-sec" style="display:none"></div>
+  <div id="mabNeedsWrap" class="mab-sec" style="display:none">
+    <details class="mab-unc"><summary>ยังไม่มีต้นทุน (<span id="mabNeedsCount">0</span>)</summary><div id="mabNeedsBody"></div></details>
+  </div>
+  <template id="hlp-menuactionboard-alc" data-title="à la carte"><p>เมนูที่ลูกค้าจ่ายเป็นรายจาน (ไม่รวมเครื่องดื่ม ของหวาน และชุดกลับบ้าน) เรียงตามกำไรขั้นต้น (GP = รายได้ไม่รวม VAT − ต้นทุน)</p><p>เทียบช่วงก่อน = GP ที่เปลี่ยนเป็นบาท · เมนูที่ต้นทุนไม่ครบอยู่ในหัวข้อ ยังไม่มีต้นทุน</p></template>
 </div>
