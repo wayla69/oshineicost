@@ -1245,6 +1245,7 @@ function _spikeDraw(d, oneBr) {
       + `<div class="sp-perday" data-ph-line="">${bad ? '+' : ''}${s.extra_cost_per_head_pp > 0 && s.extra_cost_per_head_pp < 0.005 ? '&lt;0.01' : _spikePct(s.extra_cost_per_head_pp, 2)} จุด</div></td>`;
   };
   // PR-RK · a ranked row that also passes the old rule (x >= the threshold, >= 5 plates)
+  const _spHi = s => s.spike != null ? !!s.spike : s.x >= thrN;    // the red × follows the chip (x is rounded: 1.48 shows ×1.5)
   const hiChip = s => s.spike ? ` <span class="sp-hi-chip" title="${esc(`สูงกว่า${vsBase ? 'ช่วงเทียบ' : 'ปกติ'}ตั้งแต่ ${thr} เท่า และอย่างน้อย 5 จาน`)}">พุ่ง ≥${thr}×</span>` : '';
   const normTd = s => `<td class="sp-num"><span class="sp-v sp-v2">${s.normal_rate != null ? num1(s.normal_rate) : fmtN(s.expected)}</span></td>`;
   // PR-SN (owner 2026-10-24) · two parts: existing menus that spiked, then new menus (first sold at the branch < 4 weeks before the
@@ -1262,7 +1263,7 @@ function _spikeDraw(d, oneBr) {
       ${rateCell(s)}
       ${normTd(s)}
       <td class="sp-num">${s.x != null
-        ? `<div class="sp-v" data-ph-line="${s.x >= thrN ? 'hi' : ''}" style="color:${s.x >= thrN ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${s.x}${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>${s.pct != null ? `<div class="sp-perday" data-ph-line="">${s.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(s.pct))}%</div>` : ''}`
+        ? `<div class="sp-v" data-ph-line="${_spHi(s) ? 'hi' : ''}" style="color:${_spHi(s) ? 'var(--bad-ink)' : 'var(--text-secondary)'};font-weight:700">×${s.x}${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>${s.pct != null ? `<div class="sp-perday" data-ph-line="">${s.pct >= 0 ? '+' : '−'}${fmtN(Math.abs(s.pct))}%</div>` : ''}`
         : `<div class="sp-v" data-ph-line="" style="color:var(--text-muted)">—${s.thin_base ? _spikeThinMk(vsBase) : ''}</div>`}${s.thin_base ? _spikeThinLine(vsBase) : ''}</td>
       ${cv ? costTd(s) : ''}
     </tr>`).join('') + `</tbody></table></div>` + (spAll.length > top
