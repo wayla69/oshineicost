@@ -131,6 +131,38 @@ def tier_code_sql(expr: str) -> str:
     return f"({expr} IN {ALL_TIER_CODES_SQL} OR {expr} LIKE 'BUFFET%')"
 
 
+# ─── Non-food lines (fees, penalties, deposits, coupons) ─────────────────────
+# Owner 2026-10-25 (the menu-spike card): a line that is not a dish - the buffet
+# leftover penalty "(OT) ค่าปรับบุฟเฟ่ต์ 789 Net (10 กรัม)", room / corkage fees,
+# deposits, damage charges, coupon value lines, the service charge - is never a
+# menu in a menu list. Easy files all of these under the "(OT)" (other) prefix,
+# and older codes (OT0001 ...) carry the same words without it. ONE predicate,
+# with its SQL twin derived from the same tuples; packages (is_tier_code) too.
+NON_FOOD_DESC_WORDS = ("ค่าปรับ", "ค่าบริการ", "ค่ามัดจำ", "ค่าเสียหาย", "ค่าเปิด", "คูปอง")
+NON_FOOD_DESC_PREFIXES = ("(OT)",)
+NON_FOOD_CODES = ("SERVICECHARGE", "SERVICE")
+
+
+def is_non_food_line(code: str, desc: str) -> bool:
+    """True for a sales line that is not a dish: a buffet package (is_tier_code), the service charge, or a
+    description holding a fee word (NON_FOOD_DESC_WORDS) or starting with an Easy "other" prefix."""
+    c, d = code or "", (desc or "").strip()
+    if is_tier_code(c) or c.upper() in NON_FOOD_CODES:
+        return True
+    du = d.upper()
+    return any(du.startswith(p) for p in NON_FOOD_DESC_PREFIXES) or any(w in d for w in NON_FOOD_DESC_WORDS)
+
+
+def non_food_sql(code_expr: str, desc_expr: str) -> str:
+    """SQL twin of is_non_food_line for a sku_code and a description expression."""
+    d = f"COALESCE({desc_expr},'')"
+    words = " OR ".join(f"instr({d}, '{w}') > 0" for w in NON_FOOD_DESC_WORDS)
+    pre = " OR ".join(f"UPPER(TRIM({d})) LIKE '{p}%'" for p in NON_FOOD_DESC_PREFIXES)
+    codes = "(" + ",".join(f"'{c}'" for c in NON_FOOD_CODES) + ")"
+    c = f"COALESCE({code_expr},'')"
+    return f"({tier_code_sql(c)} OR UPPER({c}) IN {codes} OR {pre} OR {words})"
+
+
 # ─── Effective unit cost and COGS ────────────────────────────────────────────
 # One SKU, one cost, resolved in this order:
 #   1. sku_effective_cost — precomputed at startup and on every cost/BoM edit

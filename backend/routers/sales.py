@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query, Request
 from typing import Optional
-from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -1321,6 +1321,8 @@ _SPIKE_PER = 100
 _SPIKE_NB = "nonbuffet"                   # the group of plates sold on bills that are not buffet bills
 _SPIKE_NB_LABEL = "ไม่ใช่บุฟเฟ่ต์"
 _SPIKE_TIER_CHIPS = 3
+_SPIKE_RANK_MIN_X = 1.05                   # PR-RK: the ranked list's noise floor - at least x1.05 per head ...
+_SPIKE_RANK_MIN_EXCESS = 3                 # ... and at least 3 plates above the normal (a row of the old 1.5x rule is always listed)
 _SPIKE_TOP = 15                            # PR-SC: the card shows this many rows first; "ดูทั้งหมด (N)" opens the rest
 _SPIKE_COST_MODULES = {"cost.analysis", "profit.pnl"}   # PL3: a role holding neither gets no cost key at all
 
@@ -1715,9 +1717,13 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     baseline plates of that weekday / the branch's baseline customers of that weekday) x the period's customers of that
     weekday, over the 3 weeks before the period (trading days, zeros included; a weekday with no baseline customers uses
     the whole baseline). rate = plates / customers x 100, normal_rate = expected / customers x 100, x = plates / expected.
-    Spike when x >= threshold, plates >= 5 and the SKU sold on >= 5 baseline days; an existing menu sold on < 5 baseline
-    days is listed from 20 plates with thin_base: true when x >= threshold, or when that baseline is 0 (x None). A NEW
-    menu (anchor = period end, anchor - first_sold < 28 days) is never a spike: it goes to new_menus. Listed rows carry
+    PR-RK (owner 2026-10-25, "เรียงผิด"): spikes = the RANKED list of existing menus above their normal - every row with
+    excess = plates - expected >= _SPIKE_RANK_MIN_EXCESS (3) and x >= _SPIKE_RANK_MIN_X (1.05), plus every row of the old rule;
+    spike: true marks the old rule (x >= threshold, plates >= 5, the SKU sold on >= 5 baseline days). An existing menu sold on
+    < 5 baseline days is listed from 20 plates with thin_base: true (and spike: true) when x >= threshold, or when that baseline
+    is 0 (x None). spike_count = the rows with spike: true (the card's เมนูพุ่ง tile); count = all ranked rows. A NEW menu
+    (anchor = period end, anchor - first_sold < 28 days) is never in it: it goes to new_menus. Non-food lines
+    (rules.non_food_sql: packages, fees, penalties, deposits, coupons, service charge) are in no list. Listed rows carry
     the tier split (_spike_tiers). Sorted by excess = plates - expected.
 
     PR-SC (owner 2026-10-25) · with_cost (a role holding cost.analysis or profit.pnl): each row also carries unit_cost
@@ -1735,7 +1741,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     spikes_plates / plates_count (PR-TD, owner 2026-10-25, "แบบเดิม") = the same rule on raw plates - period plates vs the weekday-fair normal
     plates of the base (the chosen base: its plates per trading day x the period's trading days), >= 1.5x and >= 5 plates (thin from 20),
     existing menus only (new and returning menus excluded the same way), sorted by +จาน; no per-head, tier or cost key; in_per_head (PR-SX) =
-    the same branch x SKU is also in spikes (per head), plates_only_count = the rows without it. A buffet package line is in no list (PR-SX).
+    the same branch x SKU is also in spikes with spike: true (PR-RK), plates_only_count = the rows without it. A buffet package line is in no list (PR-SX).
     base = {kind: normal | range, from, to}. summary = the strip of the card: customers of the period and of the base per day
     (customers_vs_base_pct), the tier with the largest summed extra plates over the listed rows (tier_top), the extra plates of
     the first `top` rows (top_excess)."""
@@ -1785,10 +1791,11 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
           FROM sales_sku_daily d {scan} {bjoin}
           WHERE d.day BETWEEN :ps AND :pe {bfilt} GROUP BY d.branch_id, d.sku_id) a
         JOIN branches b ON b.branch_id=a.bid JOIN skus s ON s.sku_id=a.sid
-        WHERE a.q > 0 AND UPPER(COALESCE(s.sku_code,'')) NOT IN ('SERVICECHARGE','SERVICE')
-          AND NOT {tier_code_sql("COALESCE(s.sku_code,'')")}""", q).fetchall()
+        WHERE a.q > 0 AND NOT {non_food_sql("s.sku_code", "s.description")}""", q).fetchall()
     # PR-SX (owner 2026-10-25, "แก้เลย"): a buffet package line (rules.tier_code_sql - BUFFET*, BUFFETCHILD, the legacy tier codes) is the
-    # ticket, not a dish: never a spike, a new menu or a raw-plates row, so never in the counts, the strip or the CSV either
+    # ticket, not a dish: never a spike, a new menu or a raw-plates row, so never in the counts, the strip or the CSV either.
+    # PR-RK (owner 2026-10-25): every other non-food line too - fees, penalties ("(OT) ค่าปรับบุฟเฟ่ต์ ..."), deposits, coupons, the
+    # service charge - through the one predicate rules.non_food_sql (twin rules.is_non_food_line)
     # 2 - the baseline, one pass: qty and days sold per branch x SKU x weekday
     #     (one row per branch x day x SKU, so SUM(qty > 0) = days sold)
     base: dict = {}
@@ -1884,9 +1891,13 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         wt, cp = weights(bid, basis)
         expected = sum(e[w] * wt[w] for w in range(7)) if e else 0.0
         thin = n < _SPIKE_THIN_DAYS
+        spike = True
         if expected > 0 and not thin:
             x = pq / expected
-            if x < threshold or pq < 5:
+            # PR-RK (owner 2026-10-25): the list ranks every existing menu above its normal (noise floor: +3 plates and x1.05),
+            # so a popular menu 10-20 % up per head that adds the most cost is no longer hidden by the 1.5x gate; spike = the old rule
+            spike = x >= threshold and pq >= 5
+            if not spike and (x < _SPIKE_RANK_MIN_X or pq - expected < _SPIKE_RANK_MIN_EXCESS):
                 continue
         elif thin and pq >= _SPIKE_THIN_MIN_QTY:
             # an existing menu that sold on < 5 baseline days: listed from 20 plates (the old floor), "ปกติ" = the
@@ -1900,7 +1911,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         row = {"branch": branch_name, "menu": name, "today": round(pq), "per_day": round(pq / days, 1),
                "avg": round(expected, 1), "expected": round(expected),
                "x": round(x, 1) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
-               "excess": round(pq - expected), "is_new": False,
+               "excess": round(pq - expected), "is_new": False, "spike": spike,
                "kind": kind, "basis": basis, "customers": round(cp) if rated else None,
                "rate": round(pq / cp * _SPIKE_PER, 1) if rated else None,
                "normal_rate": round(expected / cp * _SPIKE_PER, 1) if rated else None,
@@ -1935,7 +1946,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
                     "top_pp": sc.pp(tx), "uncosted_count": sum(1 for s in spikes if s["uncosted"])}
     # PR-SX (owner 2026-10-25) · a raw-plates row whose menu is also a per-head spike (same branch x SKU) carries in_per_head: true; the
     # card hides those by default, so แบบเดิม lists what spiked only because more customers came (plates_only_count = the rest)
-    phk = {(s["_bid"], s["_sid"]) for s in spikes}
+    phk = {(s["_bid"], s["_sid"]) for s in spikes if s["spike"]}       # PR-RK: "also per head" = in the ranked list AND spike
     for r in plates:
         r["in_per_head"] = r.pop("_k") in phk
     for s in spikes:
@@ -1973,7 +1984,7 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             "latest_day": latest.isoformat(),
             "window_days": _SPIKE_BASE_DAYS, "threshold": threshold, "rate_per": _SPIKE_PER,
             "tier_data_to": fh.isoformat() if fh else None,
-            "count": len(spikes), "spikes": shown,
+            "count": len(spikes), "spike_count": sum(1 for s in spikes if s["spike"]), "spikes": shown,
             "plates_count": len(plates), "plates_only_count": sum(1 for r in plates if not r["in_per_head"]), "spikes_plates": [{k: v for k, v in r.items() if k != "_ex"} for r in
                                                            sorted(plates, key=lambda r: (-r["_ex"], r["menu"], r["branch"]))[:limit]],
             "new_days": _SPIKE_NEW_DAYS, "new_count": len(new_menus), "new_menus": new_menus[:limit]}
@@ -1986,8 +1997,12 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
                date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                top: int = Query(_SPIKE_TOP, ge=1, le=1000),
                base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None)):
-    """Menus whose plates PER HEAD spiked, per branch (answers '#5: which menu was abnormally high'). Shows ALL items
-    above `threshold`x (default 1.5x).
+    """Menus whose plates PER HEAD rose, per branch (answers '#5: which menu was abnormally high').
+
+    PR-RK (owner 2026-10-25): `spikes` = every existing menu above its normal ranked by extra_cost (cost roles) or by excess
+    plates (other roles) - noise floor +3 plates and x1.05 - each row with `spike` = x >= `threshold` (default 1.5) and
+    plates >= 5 (the card's "พุ่ง ≥1.5×" chip); `spike_count` = those rows, `count` = all ranked rows. `threshold` is the
+    chip's threshold, no longer a gate. Non-food lines (fees, penalties, deposits, coupons, packages) are in no section.
 
     PR-SC (owner 2026-10-25): for a role holding cost.analysis or profit.pnl the rows carry the food cost of the extra
     plates (unit_cost, extra_cost, cost_share, extra_cost_per_head_pp, uncosted, package) and are sorted by extra_cost;
