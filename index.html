@@ -2038,6 +2038,18 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
 .frc-heat .hd { font-size: 12px; color: var(--text-secondary); }
 .frc-heat .hx { height: 22px; border-radius: 3px; }
 .frc-stars { color: var(--amber-ink); letter-spacing: 1px; font-size: 13px; }
+/* DV6: the period chip of ร้านของฉัน on a phone (the franchise login has no top bar there): 32 px drawn, 44 px to tap */
+.frc-pchip { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--accent);
+  background: var(--bg-card); color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.frc-pchip[hidden] { display: none; }
+.frc-pchip::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
+/* DV6: เรื่องที่ควรดู · the 6 weeks' sales strip (3 x 2 on a phone, 6 in a row from 560 px); the fill is heatRG, the label inkOn */
+.frc-wks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+@media (min-width: 560px) { .frc-wks { grid-template-columns: repeat(6, 1fr); } }
+.frc-wk { display: flex; flex-direction: column; gap: 1px; padding: 8px; border-radius: var(--r-sm); min-width: 0; }
+.frc-wk-l { font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.frc-wk-v { font-size: 15px; font-variant-numeric: tabular-nums; }
+.frc-wk-p { font-size: 12px; font-weight: 600; font-variant-numeric: tabular-nums; }
 /* PR-F4: ติดต่อสำนักงานใหญ่ (#frcMsg, ร้านของฉัน, js/17-franchise.js fm*) and ข้อความจากเจ้าของสาขา (#tab-fmsg, js/19-fmsg.js).
    Message text keeps its own line breaks (pre-wrap) and wraps long words; every target is at least 44 px high. */
 .fm-card { padding: 10px 12px; }
@@ -2886,10 +2898,10 @@ body.php-open { overflow: hidden; }
   <!-- offline: the worker served the last stored copy (sw.js → message offline-fallback) -->
   <div id="msOffline" class="ms-section" role="status" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--r-md);background:#fef3c7;color:#92400e;font-size:12px;font-weight:600"></div>
   <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
-    <select id="msBranch" onchange="loadMobileSummary(true)" aria-label="เลือกสาขา" style="flex:1;min-width:0;min-height:44px;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+    <select id="msBranch" onchange="msPickChanged()" aria-label="เลือกสาขา" style="flex:1;min-width:0;min-height:44px;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>
     </select>
-    <select id="msMonthSel" onchange="loadMobileSummary(true)" aria-label="เลือกเดือน" style="width:140px;flex-shrink:0;min-height:44px;padding:10px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
+    <select id="msMonthSel" onchange="msPickChanged()" aria-label="เลือกเดือน" style="width:140px;flex-shrink:0;min-height:44px;padding:10px 10px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">เดือนล่าสุด</option>
     </select>
   </div>
@@ -2947,10 +2959,11 @@ body.php-open { overflow: hidden; }
   <div id="msv-branches" class="ms-view" style="display:none">
     <div class="ms-section">
       <div style="display:flex;gap:6px;margin-bottom:10px">
-        <button id="msSortRev" class="ms-seg ms-seg-on" onclick="msSetBranchSort('rev')">ยอด</button>
-        <button id="msSortMom" class="ms-seg" onclick="msSetBranchSort('mom')">โต/ตก</button>
+        <!-- DV6: the list opens on the baht against last month; เป้า ranks by the baht away from the target (month-end projection) -->
+        <button id="msSortChg" class="ms-seg ms-seg-on" onclick="msSetBranchSort('chg')" title="บาทที่เปลี่ยนเทียบเดือนก่อน">฿ เปลี่ยน</button>
+        <button id="msSortRev" class="ms-seg" onclick="msSetBranchSort('rev')">ยอด</button>
         <button id="msSortRph" class="ms-seg" onclick="msSetBranchSort('rph')">/หัว</button>
-        <button id="msSortTgt" class="ms-seg" onclick="msSetBranchSort('tgt')">% เป้า</button>
+        <button id="msSortTgt" class="ms-seg" onclick="msSetBranchSort('tgt')">฿ เป้า</button>
       </div>
       <div id="msBranches" class="ms-card"></div>
     </div>
@@ -2959,10 +2972,9 @@ body.php-open { overflow: hidden; }
   <!-- VIEW: เมนู -->
   <div id="msv-menu" class="ms-view" style="display:none">
     <div class="ms-section">
-      <div class="ms-section-title">มาแรงเดือนนี้ (คนกินเพิ่มขึ้น)</div>
+      <!-- DV6: the dishes that push the food cost per head up, in baht (msLoadMenu); a role without cost: ขายดี in plates -->
+      <div class="ms-section-title" id="msMenuTitle">เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)</div>
       <div id="msMenuRisers" class="ms-card"></div>
-      <div class="ms-section-title" style="margin-top:16px">เมนูขายดี (ตามจำนวน)</div>
-      <div id="msMenu" class="ms-card"></div>
     </div>
   </div>
 
