@@ -308,8 +308,8 @@ test('marketing: the plates section is there, no baht anywhere on the card, no c
   await expect(page.locator('#spikeHvSec #spikeHvTable')).toBeVisible();
   const txt = await page.locator('#spikeHvSec').textContent();
   expect(/฿|บาท|ต้นทุน/.test(txt || '')).toBe(false);
-  const card = await page.locator('#dsSpike').textContent();
-  expect(/฿/.test(card || '')).toBe(false);
+  // the rest of the card has no cost either (a tier label such as ฿789 is a price, not a cost)
+  expect(await page.locator('#dsSpike .sp-cost-td, #spikeCost, #spikeNewCostChip').count()).toBe(0);
   expect(urls.filter(u => /\/api\/cost\//.test(u))).toEqual([]);
   await page.locator('#spikeHvSec').scrollIntoViewIfNeeded();
   await shot(page, 'ds_hv_marketing_desktop');
