@@ -11,7 +11,7 @@ registered by main.py right after this one). URLs unchanged.
 from fastapi import HTTPException, Query, Request, Response
 import datetime as _sph_dt
 from typing import Dict, List, Optional
-from rules import avg_ticket_sql, month_projection, net_revenue_row, net_revenue_sum
+from rules import avg_ticket_sql, food_cost_status_th, food_cost_target, month_projection, net_revenue_row, net_revenue_sum
 from targets import attainment
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price)
@@ -2276,9 +2276,9 @@ def analysis_sph(
 def food_cost_trend(
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
-    alert_threshold: float = Query(70.0, description="Food cost % alert threshold (actual Oshinei AYCE buffet 55-70%)"),
+    alert_threshold: Optional[float] = Query(None, description="Food cost % alert line; default = the one food-cost target (Settings → ค่าเริ่มต้น)"),
 ):
-    """Monthly food cost % trend per branch. Returns months, cost%, alert threshold."""
+    """Monthly food cost % trend per branch. Returns months, cost%, the food-cost target."""
     filters = ["b.name != 'ALL'"]
     params: dict = {}
     if branch:
@@ -2288,6 +2288,9 @@ def food_cost_trend(
     where = "WHERE " + " AND ".join(filters)
 
     with get_db() as con:
+        target = food_cost_target(con)
+        if alert_threshold is None:
+            alert_threshold = target
         rows = con.execute(
             f"""
             SELECT sm.period_month,
@@ -2350,7 +2353,7 @@ def food_cost_trend(
                 alerts.append({
                     "branch": br, "period": last_mo,
                     "cost_pct": pct, "threshold": alert_threshold,
-                    "message": f"⚠ {br}: ต้นทุนอาหาร {pct}% เกินเกณฑ์ {alert_threshold}% ในเดือน{_th_ym(last_mo)}",
+                    "message": f"{br}: ต้นทุนอาหาร {pct}% {food_cost_status_th(pct, alert_threshold)} (เป้า {alert_threshold:g}%) ในเดือน{_th_ym(last_mo)}",
                 })
 
     return {
@@ -2360,6 +2363,7 @@ def food_cost_trend(
                             for mo in all_months]
                       for br, mdata in branch_data.items()},
         "alert_threshold": alert_threshold,
+        "food_cost_target": target,
         "alerts": alerts,
     }
 

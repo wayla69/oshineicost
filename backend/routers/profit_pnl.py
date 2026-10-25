@@ -8,7 +8,7 @@ routers/reports.py.
 from fastapi import Query
 from typing import Optional
 import json as _json
-from rules import avg_ticket_sql, coverage_from_sums, coverage_sums_sql, net_revenue_row
+from rules import avg_ticket_sql, coverage_from_sums, coverage_sums_sql, food_cost_target, net_revenue_row
 from core import (
     _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
     _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,
@@ -401,22 +401,7 @@ def gp_by_branch_month(
             ORDER BY b.name, ssm.period_month
         """, params).fetchall()
 
-        try:
-            srows = con.execute(
-                "SELECT key, value FROM app_settings WHERE key IN ('cost_target_lo','cost_target_hi')"
-            ).fetchall()
-            settings = {r["key"]: r["value"] for r in srows}
-        except Exception:
-            settings = {}
-
-    try:
-        target_lo = float(settings.get("cost_target_lo", 55))
-    except Exception:
-        target_lo = 55.0
-    try:
-        target_hi = float(settings.get("cost_target_hi", 70))
-    except Exception:
-        target_hi = 70.0
+        target = food_cost_target(con)   # ONE target (owner 2026-10-25), Settings → ค่าเริ่มต้น
 
     by_branch: dict = {}
     for r in rows:
@@ -535,8 +520,7 @@ def gp_by_branch_month(
     return {
         "rows": out_rows,
         "granularity": granularity,
-        "target_lo": target_lo,
-        "target_hi": target_hi,
+        "food_cost_target": target,
         "grand_total": {
             "revenue":       round(grand_rev, 2),
             "cogs":          round(grand_cogs, 2),

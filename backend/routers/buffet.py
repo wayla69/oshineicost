@@ -8,7 +8,7 @@ from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
 import io as _io
-from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, net_revenue_row, net_revenue_sum, scope_filter
+from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, food_cost_target, net_revenue_row, net_revenue_sum, scope_filter
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price, upsell_pair)
 from core import _FOOD_CATEGORY_FILTER, _cogs_case, _costed_rev_case, _effective_cost_subquery, _group_filter, _month_range_filter, _next_period_month, _ols_regression, _unified_cogs_expr, get_db, ttl_cache
@@ -1706,7 +1706,7 @@ def _bp_pricing(*, bf_cost_by_month, months, tier_list, tier_trend):
     return {"actual_pax": actual_pax, "pricing_rec": pricing_rec}
 
 
-def _bp_kpis(*, actual_pax, adult_pax, bev_rows, bev_trend, branch, branch_bills, branch_pax, buffet_billed_pax, child_pax, child_pct, daily_pax_rows, food_cost_target_hi, food_cost_target_lo, food_cost_trend, group, month_from, month_to, pricing_rec, waste_trend):
+def _bp_kpis(*, actual_pax, adult_pax, bev_rows, bev_trend, branch, branch_bills, branch_pax, buffet_billed_pax, child_pax, child_pct, daily_pax_rows, food_cost_target, food_cost_trend, group, month_from, month_to, pricing_rec, waste_trend):
     # names this section hands on; None where a path never assigns one
     kpis = None
     tier_pct_split = None
@@ -1785,8 +1785,7 @@ def _bp_kpis(*, actual_pax, adult_pax, bev_rows, bev_trend, branch, branch_bills
             1,
         ),
         "food_cost_pct":         round(food_cost_pct_overall, 1),
-        "food_cost_target_lo":   food_cost_target_lo,
-        "food_cost_target_hi":   food_cost_target_hi,
+        "food_cost_target":      food_cost_target,   # ONE target (owner 2026-10-25), Settings → ค่าเริ่มต้น
         "over_consumption_pct":  round(waste_rate_real, 2),
         "beverage_attach_pct":   round(bev_attach_overall, 1),
         "beverage_bill_attach_pct": round(bev_bill_attach_overall, 1),
@@ -1802,6 +1801,11 @@ def _bp_kpis(*, actual_pax, adult_pax, bev_rows, bev_trend, branch, branch_bills
     return {"kpis": kpis, "tier_pct_split": tier_pct_split}
 
 
+def _food_cost_target_now() -> float:
+    with get_db() as con:
+        return food_cost_target(con)
+
+
 @router.get("/api/buffet/performance")
 @ttl_cache
 def buffet_performance(
@@ -1809,15 +1813,13 @@ def buffet_performance(
     group:      Optional[str] = Query(None),
     month_from: Optional[str] = Query(None),
     month_to:   Optional[str] = Query(None),
-    food_cost_target_lo: float = Query(55.0),
-    food_cost_target_hi: float = Query(70.0),
 ):
     """Comprehensive Buffet Performance metrics for the core all-you-can-eat business.
 
     Returns:
     - kpis: pax, bills, avg_pax_per_bill, premium_tier_pct, food_cost_pct, over_consumption_pct, beverage_attach_pct
     - tier_trend: per-month tier mix (BUFFET350/500/590/799 + CHILD)
-    - food_cost_trend: monthly food_cost % vs target band
+    - food_cost_trend: monthly food_cost % vs the one food-cost target
     - seat_util: per-branch daily pax vs network peak (proxy)
     - turnover:   per-branch bills/table/day (turnover proxy)
     - waste:      per-month over-consumption rate from OT0012/0013/0016
@@ -1829,7 +1831,7 @@ def buffet_performance(
     # Each stage is its own function (_bp_*, Phase 3b 2026-09); they run in
     # order and pass what they compute forward through `ctx`. The statements are
     # the ones this function used to hold inline — golden pins the output.
-    ctx = {"branch": branch, "food_cost_target_hi": food_cost_target_hi, "food_cost_target_lo": food_cost_target_lo, "group": group, "month_from": month_from, "month_to": month_to}
+    ctx = {"branch": branch, "group": group, "month_from": month_from, "month_to": month_to}
     ctx.update(_bp_setup(branch=ctx.get("branch"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to")))
     ctx.update(_bp_query(grp_sql=ctx.get("grp_sql"), params_sku=ctx.get("params_sku"), params_tx=ctx.get("params_tx"), tier_named=ctx.get("tier_named"), tier_ph=ctx.get("tier_ph"), waste_named=ctx.get("waste_named"), waste_ph=ctx.get("waste_ph"), where_sku=ctx.get("where_sku"), where_tx=ctx.get("where_tx")))
     ctx.update(_bp_tier_trend(tier_rows=ctx.get("tier_rows")))
@@ -1841,7 +1843,7 @@ def buffet_performance(
     ctx.update(_bp_daypart(daypart_rows=ctx.get("daypart_rows"), defaultdict=ctx.get("defaultdict"), tier_list=ctx.get("tier_list")))
     ctx.update(_bp_cohort(bcohort_rows=ctx.get("bcohort_rows"), branch_first=ctx.get("branch_first"), defaultdict=ctx.get("defaultdict")))
     ctx.update(_bp_pricing(bf_cost_by_month=ctx.get("bf_cost_by_month"), months=ctx.get("months"), tier_list=ctx.get("tier_list"), tier_trend=ctx.get("tier_trend")))
-    ctx.update(_bp_kpis(actual_pax=ctx.get("actual_pax"), adult_pax=ctx.get("adult_pax"), bev_rows=ctx.get("bev_rows"), bev_trend=ctx.get("bev_trend"), branch=ctx.get("branch"), branch_bills=ctx.get("branch_bills"), branch_pax=ctx.get("branch_pax"), buffet_billed_pax=ctx.get("buffet_billed_pax"), child_pax=ctx.get("child_pax"), child_pct=ctx.get("child_pct"), daily_pax_rows=ctx.get("daily_pax_rows"), food_cost_target_hi=ctx.get("food_cost_target_hi"), food_cost_target_lo=ctx.get("food_cost_target_lo"), food_cost_trend=ctx.get("food_cost_trend"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to"), pricing_rec=ctx.get("pricing_rec"), waste_trend=ctx.get("waste_trend")))
+    ctx.update(_bp_kpis(actual_pax=ctx.get("actual_pax"), adult_pax=ctx.get("adult_pax"), bev_rows=ctx.get("bev_rows"), bev_trend=ctx.get("bev_trend"), branch=ctx.get("branch"), branch_bills=ctx.get("branch_bills"), branch_pax=ctx.get("branch_pax"), buffet_billed_pax=ctx.get("buffet_billed_pax"), child_pax=ctx.get("child_pax"), child_pct=ctx.get("child_pct"), daily_pax_rows=ctx.get("daily_pax_rows"), food_cost_target=_food_cost_target_now(), food_cost_trend=ctx.get("food_cost_trend"), group=ctx.get("group"), month_from=ctx.get("month_from"), month_to=ctx.get("month_to"), pricing_rec=ctx.get("pricing_rec"), waste_trend=ctx.get("waste_trend")))
     bev_trend = ctx["bev_trend"]
     cohort_curve = ctx["cohort_curve"]
     daypart_out = ctx["daypart_out"]

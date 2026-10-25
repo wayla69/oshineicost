@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, month_projection, tier_codes_between, tier_label
 from targets import attainment, target_revenue_total, targets_for_month
 from core import (
@@ -3218,6 +3218,7 @@ def report_management(
         out = _mgt_payment(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), pe=ctx.get("pe"), ps=ctx.get("ps"))
         ctx.update(out)
         _mgt_target_scope(con, ctx)
+        ctx["food_cost_target"] = food_cost_target(con)   # ONE target (owner 2026-10-25), Settings → ค่าเริ่มต้น
     branches = ctx["branches"]
     cash_heavy = ctx["cash_heavy"]
     ce = ctx["ce"]
@@ -3289,11 +3290,12 @@ def report_management(
             "text": (f"{reprint['bills']} บิลส่วนลดถูกพิมพ์ซ้ำมากกว่า 1 ครั้ง — อาจมีการพิมพ์ซ้ำผิดปกติ"
                      if th else
                      f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse.")})
-    if food_cost_pct is not None and food_cost_pct >= 53:
+    fc_target = ctx["food_cost_target"]
+    if food_cost_pct is not None and food_cost_pct > fc_target:
         actions.append({"sev": "med",
-            "text": (f"ต้นทุนอาหาร {food_cost_pct:.0f}% — สูงกว่าเป้า ~50%"
+            "text": (f"ต้นทุนอาหาร {food_cost_pct:.1f}% — เป้า {fc_target:g}% · {food_cost_status_th(food_cost_pct, fc_target)}"
                      if th else
-                     f"Food cost {food_cost_pct:.0f}% — above the ~50% target.")})
+                     f"Food cost {food_cost_pct:.1f}% — {food_cost_pct - fc_target:.1f} pts above the {fc_target:g}% target.")})
     _ts = (pace or {}).get("target_scope") or {}
     if ctx.get("target_projected") is not None:          # DV1: like for like - the branches that have a target
         projected = ctx["target_projected"]
@@ -3394,6 +3396,7 @@ def report_management(
         "headline": headline,
         "branches": branches,
         "gp": gp,
+        "food_cost_target": ctx["food_cost_target"],
         "leak": leak,
         "menu": menu_out,
         "pace": pace,
