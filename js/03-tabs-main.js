@@ -2133,7 +2133,8 @@ function _renderMostRev() {
 
 // SPH Distribution — better viz: stacked bar showing tier % + percentile markers + KPI strip
 function renderSphDistribution(sph) {
-  const dist = sph.distribution || [];
+  // bands ascending by spend: the percentile markers rely on it (P50 = 50 % along the bar)
+  const dist = (sph.distribution || []).slice().sort((x, y) => (x.lo || 0) - (y.lo || 0));
   const ov   = sph.overall || {};
   const totalBills = dist.reduce((s, d) => s + (d.count || 0), 0);
 
@@ -2182,28 +2183,33 @@ function renderSphDistribution(sph) {
       onmouseover="this.style.filter='brightness(1.15)'" onmouseout="this.style.filter=''">${inner}</div>`;
   }).join('');
 
-  // Percentile ruler: positions p10/p25/median/p75/p90 along the bar's value range
-  // bar value range = sphMin -> sphMax; markers placed proportionally
-  const lo = ov.sph_min || 0;
-  const hi = ov.sph_max || 1;
-  const span = Math.max(hi - lo, 1);
+  // Percentile ruler. The bar is a share-of-bills bar (segments = bills in each
+  // spend band, bands ascending), so the p-th percentile bill sits p % along it:
+  // P10 at 10 %, median at 50 %, P90 at 90 %. The old value scale (sph_min ->
+  // sph_max) put every marker in the first few % because one outlier bill set the
+  // top end, and the labels piled up at the left edge.
+  const fs = document.body.classList.contains('ph-on') ? 12 : 11;   // >= 12 px on a phone (แตะง่าย), 11 px on a desktop
   const markers = [
-    { p: 'P10',    v: ov.p10,        color: '#94a3b8' },
-    { p: 'P25',    v: ov.p25,        color: '#64748b' },
-    { p: 'Median', v: ov.median_sph, color: '#4a70b0' },
-    { p: 'P75',    v: ov.p75,        color: '#10b981' },
-    { p: 'P90',    v: ov.p90,        color: '#059669' },
+    { p: 'P10',     at: 10, v: ov.p10,        color: '#94a3b8', edge: true },
+    { p: 'P25',     at: 25, v: ov.p25,        color: '#64748b' },
+    { p: 'มัธยฐาน', at: 50, v: ov.median_sph, color: '#4a70b0' },
+    { p: 'P75',     at: 75, v: ov.p75,        color: '#10b981' },
+    { p: 'P90',     at: 90, v: ov.p90,        color: '#059669', edge: true },
   ].filter(m => m.v != null);
+  rulerEl.style.height = Math.ceil(fs * 2.6 + 12) + 'px';
   rulerEl.innerHTML = markers.map(m => {
-    const pct = Math.max(0, Math.min(100, (m.v - lo) / span * 100));
-    return `<div class="absolute" style="left:${pct}%;transform:translateX(-50%);font-size:9px;color:${textInk(m.color)};font-weight:600;white-space:nowrap"
-      title="${m.p} = ${fmtN(m.v)} บาท/หัว">
-      <div style="width:1px;height:6px;background:${m.color};margin:0 auto"></div>
-      ${m.p}<br><span class="font-normal text-[8px]">${fmtN(m.v)}</span>
+    const tip = `${m.p} = ฿${fmtN(m.v)}/หัว · ${m.at}% ของบิลจ่ายต่ำกว่านี้`;
+    return `<div class="sph-mk${m.edge ? ' sph-mk-edge' : ''}" data-at="${m.at}" title="${esc(tip)}"
+      style="position:absolute;top:0;left:${m.at}%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;cursor:help">
+      <div style="width:2px;height:7px;background:${m.color};border-radius:1px"></div>
+      <div class="sph-lbl" style="margin-top:2px;font-size:${fs}px;line-height:1.3;text-align:center;white-space:nowrap;font-weight:600;color:${textInk(m.color)}">${m.p}<br><span style="font-weight:400;color:var(--text-secondary)">฿${fmtN(m.v)}</span></div>
     </div>`;
-  }).join('') +
-  `<div class="absolute left-0 bottom-0 text-[9px] text-slate-400">${fmtN(lo)}</div>` +
-  `<div class="absolute right-0 bottom-0 text-[9px] text-slate-400">${fmtN(hi)}</div>`;
+  }).join('');
+  _sphRulerFit(rulerEl);
+  if (!rulerEl._sphRo && typeof ResizeObserver === 'function') {
+    rulerEl._sphRo = new ResizeObserver(() => _sphRulerFit(rulerEl));
+    rulerEl._sphRo.observe(rulerEl);
+  }
 
   // Tier legend grid
   legendEl.innerHTML = dist.map(d => {
@@ -2218,6 +2224,20 @@ function renderSphDistribution(sph) {
       <span class="font-semibold" style="color:${textInk(d.color)}">${pct.toFixed(1)}%</span>
     </div>`;
   }).join('');
+}
+
+// Collision guard for the SPH percentile ruler: when any two labels would touch
+// (a narrow phone), keep only P25 · มัธยฐาน · P75 labelled; P10/P90 keep their
+// tick and the tooltip.
+function _sphRulerFit(rulerEl) {
+  if (!rulerEl || !rulerEl.offsetWidth) return;
+  const all = [...rulerEl.querySelectorAll('.sph-mk')];
+  all.forEach(m => { m.querySelector('.sph-lbl').style.visibility = ''; });
+  const boxes = all.map(m => m.querySelector('.sph-lbl').getBoundingClientRect());
+  let clash = false;
+  for (let i = 1; i < boxes.length; i++) if (boxes[i].left < boxes[i - 1].right + 4) { clash = true; break; }
+  if (!clash) return;
+  all.forEach(m => { if (m.classList.contains('sph-mk-edge')) m.querySelector('.sph-lbl').style.visibility = 'hidden'; });
 }
 
 async function loadPersona() {
