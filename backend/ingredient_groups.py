@@ -76,18 +76,26 @@ def sku_groups(con) -> Dict[int, List[str]]:
     return out
 
 
-def _rows(con, s: str, e: str, branch, group, floor) -> Tuple[Optional[Dict], Optional[str]]:
+def _rows(con, s: str, e: str, branch, group, floor, with_cost: bool = True) -> Tuple[Optional[Dict], Optional[str]]:
     """Per branch x dish on [s, e]: {(branch, sku_id): [plates, cost, costed_plates]} and per branch the whole food cost
-    and customers -> ({"dish": ..., "food": {branch: cogs}, "cust": {branch: n}}, None) or (None, reason)."""
+    and customers -> ({"dish": ..., "food": {branch: cogs}, "cust": {branch: n}}, None) or (None, reason).
+    with_cost=False (the plates view on ยอดขายรายวัน, every role): the same dishes and plates, no cost read (cost = costed = 0)."""
     pl, why = PC.plan(s, e, floor)
     if pl is None:
-        return None, why
+        if with_cost:
+            return None, why
+        return None, (f"ข้อมูลจานรายวันมีตั้งแต่ {P.label_th(floor, floor)}" if floor else "ยังไม่มีข้อมูลจานรายวัน")
     bw, bp = PC._bscope(branch, group)
-    cg, ok, need = _unified_cogs_expr("ssm"), costed_sql("ssm"), needs_cost_sql("sk.sku_code")
-    # the unit cost depends on the dish and its month only, so the rows are summed per branch x dish x month first and
-    # costed once each (qty x unit cost is linear: the same total as costing every day's row)
-    sel = f"""SELECT b.name AS branch, ssm.sku_id, SUM(ssm.qty) plates, SUM({cg}) cost,
+    need = needs_cost_sql("sk.sku_code")
+    if with_cost:
+        cg, ok = _unified_cogs_expr("ssm"), costed_sql("ssm")
+        # the unit cost depends on the dish and its month only, so the rows are summed per branch x dish x month first and
+        # costed once each (qty x unit cost is linear: the same total as costing every day's row)
+        sel = f"""SELECT b.name AS branch, ssm.sku_id, SUM(ssm.qty) plates, SUM({cg}) cost,
                      SUM(CASE WHEN {ok} THEN ssm.qty ELSE 0 END) costed, MAX(CASE WHEN {need} THEN 1 ELSE 0 END) need"""
+    else:
+        sel = f"""SELECT b.name AS branch, ssm.sku_id, SUM(ssm.qty) plates, 0 AS cost, 0 AS costed,
+                     MAX(CASE WHEN {need} THEN 1 ELSE 0 END) need"""
     dish: Dict[Tuple[str, int], List[float]] = {}
     food: Dict[str, float] = {}
 
@@ -306,3 +314,93 @@ def menus(con, w: Dict, branch: Optional[str], slug: str, group: Optional[str] =
     per = P.public(w) or {}
     return {"period": per, "branch": branch or None, "slug": slug, "label": LABELS.get(slug, slug), "menus": out,
             "reasons": {k: v for k, v in reasons.items() if v}, "cost_floor": floor}
+
+
+# ── The plates view (owner 2026-10-25, ยอดขายรายวัน · เมนูพุ่งผิดปกติ: "โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน") ─────────────────
+# The same groups and dishes as compute() (match / sku_groups / _rows - one definition), plates and customers only: no cost is read
+# and no cost key is in the answer, so every role that sees the card sees it. ONE base: the period before to date (periods.windows) or
+# the card's chosen comparison period (base_from / base_to).
+PLATE_CAUSES = ("customers", "plates_per_head")
+
+
+def split_plates(p1: float, n1: float, p0: float, n0: float) -> Dict:
+    """Why the plates of a group moved: plates = customers x plates per head, so the change splits into two parts in plates that add
+    up to the whole change (LMDI: part_i = L(p1, p0) x ln(x_i now / x_i base)). main = the larger part (None when both are ~0).
+    -> {total, total_pct, customers, plates_per_head, main} (+ reason when it cannot be split)."""
+    out = {"total": None, "total_pct": None, "customers": None, "plates_per_head": None, "main": None}
+    if min(p1, p0, n1, n0) <= 0:
+        out["reason"] = "ไม่มีข้อมูลช่วงที่เทียบ" if p0 <= 0 and n0 <= 0 else "ช่วงใดช่วงหนึ่งไม่มีจาน หรือไม่มีลูกค้า"
+        if p1 > 0 or p0 > 0:
+            out["total"] = round(p1 - p0, 1)
+            out["total_pct"] = P.pct(p1, p0)
+        return out
+    lm = _logmean(p1, p0)
+    parts = {"customers": lm * math.log(n1 / n0), "plates_per_head": lm * math.log((p1 / n1) / (p0 / n0))}
+    main = max(PLATE_CAUSES, key=lambda k: abs(parts[k])) if any(abs(v) > 0.05 for v in parts.values()) else None
+    return {"total": round(p1 - p0, 1), "total_pct": P.pct(p1, p0), **{k: round(v, 1) for k, v in parts.items()}, "main": main}
+
+
+def _plate_scope(data: Optional[Dict], groups, names) -> Optional[Dict]:
+    if data is None:
+        return None
+    names = list(names)
+    acc = _sum_cells(data, groups, names)
+    return {"customers": sum(data["cust"].get(n, 0) for n in names), "plates": {s: acc[s][0] for s in SLUGS}}
+
+
+def _plate_row(cur: Optional[Dict], base: Optional[Dict]) -> Dict:
+    n1 = float((cur or {}).get("customers") or 0)
+    n0 = float(base.get("customers") or 0) if base else 0.0
+    out = {"customers": (cur or {}).get("customers"), "prev_customers": base.get("customers") if base else None,
+           "change": {"customers": P.pct(n1, n0) if base else None}, "cells": {}}
+    for s in SLUGS:
+        p1 = float((cur or {}).get("plates", {}).get(s) or 0)
+        p0 = float(base["plates"].get(s) or 0) if base else 0.0
+        h1 = round(p1 / n1, 3) if n1 else None
+        h0 = round(p0 / n0, 3) if base and n0 else None
+        cause = split_plates(p1, n1, p0, n0) if base else {"total": None, "total_pct": None, "customers": None,
+                                                            "plates_per_head": None, "main": None, "reason": "ไม่มีข้อมูลช่วงที่เทียบ"}
+        out["cells"][s] = {
+            "plates": round(p1, 1), "plates_per_head": h1,
+            "prev": {"plates": round(p0, 1), "plates_per_head": h0} if base else None,
+            "change": {"plates": P.pct(p1, p0) if base else None, "plates_per_head": P.pct(h1, h0) if base else None},
+            "cause": cause}
+    return out
+
+
+def compute_plates(con, w: Dict, branch: Optional[str] = None, group: Optional[str] = None,
+                   base: Optional[Tuple[str, str]] = None) -> Dict:
+    """Plates of the 8 groups per branch and the chain on w["cur"], against one base: `base` (from, to) when the card chose one, else
+    w["prev"] (the period before, to date). -> {period, base, groups, chain, branches, reasons}; no cost key anywhere."""
+    floor = PC.cost_floor(con)
+    reasons = dict(P.reasons(w))
+    cur, reasons["cur"] = _rows(con, *w["cur"], branch, group, floor, with_cost=False)
+    prev = None
+    if base:
+        bw, bkind = (str(base[0])[:10], str(base[1])[:10]), "range"
+        prev, reasons["prev"] = _rows(con, *bw, branch, group, floor, with_cost=False)
+    else:
+        bw, bkind = tuple(w["prev"]), "prev"
+        if w.get("has_prev"):
+            prev, r = _rows(con, *bw, branch, group, floor, with_cost=False)
+            reasons["prev"] = reasons.get("prev") or r
+    reasons.pop("ly", None)
+    groups = sku_groups(con)
+    names = sorted(set((cur or {}).get("cust", {})) | {br for (br, _sid) in (cur or {}).get("dish", {})})
+    chain = _plate_row(_plate_scope(cur, groups, names), _plate_scope(prev, groups, names))
+    branches = []
+    for n in names:
+        row = _plate_row(_plate_scope(cur, groups, [n]), _plate_scope(prev, groups, [n]))
+        if not row["customers"] and not any(c["plates"] for c in row["cells"].values()):
+            continue
+        row["branch"] = n
+        branches.append(row)
+    branches.sort(key=lambda r: -((r["cells"]["salmon"]["plates_per_head"]) or 0))
+    per = {k: v for k, v in (P.public(w) or {}).items() if k not in ("ly", "ly_label_th", "has_ly")}
+    per["prev"] = list(bw)
+    per["prev_label_th"] = P.label_th(*bw)
+    per["has_prev"] = prev is not None
+    per["reasons"] = {"prev": reasons["prev"]} if reasons.get("prev") else {}
+    return {"period": per, "base": {"kind": bkind, "from": bw[0], "to": bw[1], "label_th": P.label_th(*bw)},
+            "groups": [{"slug": s, "label": LABELS[s]} for s in SLUGS], "chain": chain, "branches": branches,
+            "reasons": {k: v for k, v in reasons.items() if v}}
