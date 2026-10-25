@@ -882,10 +882,127 @@ function _spikeBackChip(m) {
     + (m.first_sold_ever ? ` · ขายครั้งแรก ${fmtDateTh(m.first_sold_ever)}` : '') + ' · นับเป็นเมนูใหม่ 28 วันนับจากวันที่กลับมาขาย';
   return ` <span class="sp-back-chip" title="${esc(tip)}">กลับมาขาย</span>`;
 }
+// ── owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน ("เอาไปโชว์ในเมนูยอดขาย ต่อท้าย เมนูใหม่ แต่โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน และให้
+// เลือกช่วงเวลาได้"): the 8 groups of the High Value Product Monitor (backend/ingredient_groups.py, one definition) in PLATES only, after the
+// เมนูใหม่ section, on the card's own period (its chips, กำหนดเอง and เทียบกับ: base_from / base_to) and branch select
+// (/api/sales/ingredient-groups-plates - no cost key, the card's gate: every role that sees the card sees it). One group = the table
+// สาขา · จานที่ออก · จาน/หัว · ลูกค้า · สาเหตุที่เปลี่ยน (the change in plates split ลูกค้า · กินต่อหัว, LMDI); ทั้งหมด = branches x groups.
+const _SPHV_LS = 'oshinei_sphv_slug';
+const _SPHV_CAUSE = { customers: 'ลูกค้า', plates_per_head: 'กินต่อหัว' };
+const _SPHV_SHORT = { customers: 'ลูกค้า', plates_per_head: 'กิน' };
+let _spHv = { slug: 'salmon', d: null, key: '', seq: 0, err: '' };
+try { const s = localStorage.getItem(_SPHV_LS); if (s) _spHv.slug = s; } catch (e) { /* no storage */ }
+const _spHvH = v => v == null || !isFinite(Number(v)) ? '—' : Number(v).toLocaleString('th-TH', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const _spHvS = v => v == null || !isFinite(Number(v)) ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : '±'}${fmtN(Math.abs(v))} จาน`;
+// one change under a figure: up = 'good' (customers) | 'bad' (plates per head of a costly ingredient) | '' (plates: neither)
+function _spHvDelta(v, up, title) {
+  const t = title ? ` title="${esc(title)}"` : '';
+  if (v == null || !isFinite(Number(v))) return `<div class="sp-hv-d" data-ph-line="" style="color:var(--text-muted)"${t}>—</div>`;
+  v = Number(v);
+  const ink = v === 0 || !up ? 'var(--text-secondary)' : (v > 0) === (up === 'good') ? 'var(--good-ink)' : 'var(--bad-ink)';
+  return `<div class="sp-hv-d" data-ph-line="" style="color:${ink}"${t}>${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1)}%</div>`;
+}
+// the card's query (renderMenuSpike) -> this section's; loads once per period / branch / base
+function spikeHvLoad(p) {
+  const q = new URLSearchParams();
+  q.set('period', p.get('period') || 'day');
+  ['date', 'date_from', 'date_to', 'base_from', 'base_to', 'branch', 'group'].forEach(k => { const v = p.get(k); if (v) q.set(k, v); });
+  const key = q.toString();
+  if (key === _spHv.key && (_spHv.d || _spHv.err)) { spikeHvRender(); return; }
+  _spHv.key = key; _spHv.d = null; _spHv.err = '';
+  const seq = ++_spHv.seq;
+  spikeHvRender();
+  api(`${API}/api/sales/ingredient-groups-plates?${q}`).then(d => {
+    if (seq !== _spHv.seq) return;
+    if (!d || typeof d.detail === 'string') _spHv.err = (d && d.detail) || 'โหลดไม่สำเร็จ'; else _spHv.d = d;
+    spikeHvRender();
+  }).catch(() => { if (seq === _spHv.seq) { _spHv.err = 'โหลดไม่สำเร็จ'; spikeHvRender(); } });
+}
+function spikeHvSet(slug) {
+  _spHv.slug = slug;
+  try { localStorage.setItem(_SPHV_LS, slug); } catch (e) { /* no storage */ }
+  spikeHvRender();
+}
+function spikeHvRender() {
+  const sec = document.getElementById('spikeHvSec'); if (!sec) return;
+  sec.innerHTML = spikeHvHtml();
+  const tr = document.getElementById('spikeHvChips'), sc = tr && tr.parentElement, on = tr && tr.querySelector('.gran-active');
+  if (sc && on && sc.scrollWidth > sc.clientWidth + 1) sc.scrollLeft = Math.max(0, /** @type {HTMLElement} */ (on).offsetLeft - tr.offsetLeft - 8);
+  if (typeof phCardsSchedule === 'function') phCardsSchedule();
+}
+function _spHvRows(d, slug) {
+  const br = (d.branches || []).slice();
+  if (slug && slug !== 'all') br.sort((a, b) => ((b.cells[slug] || {}).plates_per_head || 0) - ((a.cells[slug] || {}).plates_per_head || 0));
+  // one branch in scope: its row only (the chain would repeat it)
+  return br.length === 1 ? br : [Object.assign({ branch: 'ทั้งเครือ', _chain: true }, d.chain)].concat(br);
+}
+function _spHvCause(c) {
+  const k = c && c.cause;
+  if (!k || k.total == null) return `<span style="color:var(--text-muted)">${esc((k && k.reason) || '—')}</span>`;
+  const main = k.main ? _SPHV_CAUSE[k.main] : '—';
+  const part = key => k[key] == null ? '' : `<div class="sp-hv-part" data-ph-line="">${_SPHV_CAUSE[key]} ${_spHvS(k[key])}</div>`;
+  return `<div class="sp-hv-main" data-ph-line="">สาเหตุหลัก: ${main}</div>`
+    + `<div class="sp-hv-tot" data-ph-line="">${_spHvS(k.total)}${k.total_pct != null ? ` (${k.total_pct > 0 ? '+' : k.total_pct < 0 ? '−' : ''}${Math.abs(k.total_pct).toFixed(1)}%)` : ''}</div>`
+    + part('customers') + part('plates_per_head');
+}
+function spikeHvHtml() {
+  const d = _spHv.d, groups = (d && d.groups) || [];
+  const slug = _spHv.slug === 'all' || groups.some(g => g.slug === _spHv.slug) ? _spHv.slug : 'salmon';
+  const per = d && d.period, base = d && d.base;
+  const vs = per && base ? `${per.label_th} เทียบ ${base.label_th}` : '';
+  const why = per && per.reasons && per.reasons.prev ? ` · ${per.reasons.prev}` : '';
+  const head = `<h3 class="sp-h">วัตถุดิบมูลค่าสูง · จำนวนจาน
+      <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-hv" title="คำอธิบาย">?</button>
+      ${vs ? `<span class="sp-n" id="spikeHvVs">(${esc(vs + why)})</span>` : ''}</h3>`;
+  const opts = [['all', 'ทั้งหมด']].concat((groups.length ? groups : [{ slug: 'salmon', label: 'แซลมอน' }]).map(g => [g.slug, g.label]));
+  const chips = `<div class="sp-hv-ctl ph-tz-unit"><div class="sp-hv-sc"><div id="spikeHvChips" class="sp-hv-chips" role="group" aria-label="วัตถุดิบ">`
+    + opts.map(([k, l]) => `<button type="button" class="gran-btn${slug === k ? ' gran-active' : ''}" data-g="${esc(k)}" aria-pressed="${slug === k}" onclick="spikeHvSet('${esc(k)}')">${esc(l)}</button>`).join('')
+    + '</div></div></div>';
+  if (_spHv.err) return head + `<p class="sp-hv-empty" style="color:var(--bad-ink)">${esc(_spHv.err)}</p>`;
+  if (!d) return head + chips + '<p class="sp-hv-empty">กำลังโหลด…</p>';
+  if (!d.chain || !(d.branches || []).length) return head + chips + `<p class="sp-hv-empty">${esc((d.reasons || {}).cur || 'ไม่มีข้อมูลในช่วงที่เลือก')}</p>`;
+  const rows = _spHvRows(d, slug);
+  const bvs = `เทียบ ${base.label_th}`;
+  const nameTd = r => `<td class="sp-hv-name">${esc(r.branch)}</td>`;
+  const custTd = r => `<td class="sp-num" title="${esc(`${bvs}: ${r.prev_customers == null ? '—' : fmtN(r.prev_customers) + ' คน'}`)}"><div class="sp-v" data-ph-line="">${fmtN(r.customers)}</div>${_spHvDelta((r.change || {}).customers, 'good', bvs)}</td>`;
+  const cls = r => r._chain ? ' class="sp-hv-chain"' : '';
+  if (slug === 'all') {
+    const word = c => c && c.cause && c.cause.main ? `<span class="sp-hv-cw" data-ph-line="">${_SPHV_SHORT[c.cause.main]}</span>` : '';
+    return head + chips + `<div class="sp-hv-wrap" style="overflow-x:auto"><table class="sp-tbl sp-hv-tbl sp-hv-mx w-full" id="spikeHvMatrix"><thead><tr style="color:var(--text-muted)">
+      <th>สาขา</th>${groups.map(g => `<th>${esc(g.label)} <span class="sp-unit">(จาน/หัว)</span></th>`).join('')}<th>ลูกค้า</th></tr></thead><tbody>`
+      + rows.map(r => `<tr${cls(r)}>${nameTd(r)}${groups.map(g => { const c = r.cells[g.slug] || {};
+        return `<td class="sp-num" title="${esc(`${g.label} · ${fmtN(c.plates)} จาน · ${bvs}: ${c.prev ? _spHvH(c.prev.plates_per_head) + ' จาน/หัว' : '—'}`)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs)}${word(c)}</td>`; }).join('')}${custTd(r)}</tr>`).join('')
+      + '</tbody></table></div>';
+  }
+  return head + chips + `<div class="sp-hv-wrap" style="overflow-x:auto"><table class="sp-tbl sp-hv-tbl w-full" id="spikeHvTable"><thead><tr style="color:var(--text-muted)">
+    <th>สาขา</th><th class="text-right">จานที่ออก</th><th class="text-right">จาน/หัว</th><th class="text-right">ลูกค้า</th><th>สาเหตุที่เปลี่ยน</th></tr></thead><tbody>`
+    + rows.map(r => { const c = r.cells[slug] || {}; const p = c.prev || {};
+      return `<tr${cls(r)}>${nameTd(r)}
+        <td class="sp-num" title="${esc(`${bvs}: ${c.prev ? fmtN(p.plates) + ' จาน' : '—'}`)}"><div class="sp-v" data-ph-line="">${fmtN(c.plates)}</div>${_spHvDelta((c.change || {}).plates, '', bvs)}</td>
+        <td class="sp-num" title="${esc(`${bvs}: ${c.prev ? _spHvH(p.plates_per_head) : '—'}`)}"><div class="sp-v" data-ph-line="">${_spHvH(c.plates_per_head)}</div>${_spHvDelta((c.change || {}).plates_per_head, 'bad', bvs)}</td>
+        ${custTd(r)}<td class="sp-hv-cause">${_spHvCause(c)}</td></tr>`; }).join('')
+    + '</tbody></table></div>';
+}
+// the CSV block of this section (after the card's rows, under its own header line)
+function _spHvCsv() {
+  const d = _spHv.d;
+  if (!d || !d.chain || !(d.groups || []).length) return [];
+  const head = ['ส่วน', 'วัตถุดิบ', 'สาขา', 'จานที่ออก', 'จานที่ออก ช่วงเทียบ', 'จานที่ออก เปลี่ยน (%)', 'จาน/หัว', 'จาน/หัว ช่วงเทียบ', 'จาน/หัว เปลี่ยน (%)',
+    'ลูกค้า', 'ลูกค้า ช่วงเทียบ', 'ลูกค้า เปลี่ยน (%)', 'จานที่เปลี่ยน', 'จากลูกค้า (จาน)', 'จากกินต่อหัว (จาน)', 'สาเหตุหลัก', 'ช่วงนี้', 'ช่วงเทียบ'];
+  const out = [head];
+  _spHvRows(d, '').forEach(r => d.groups.forEach(g => {
+    const c = r.cells[g.slug] || {}, p = c.prev || {}, k = c.cause || {}, ch = c.change || {};
+    out.push(['วัตถุดิบมูลค่าสูง · จำนวนจาน', g.label, r.branch, c.plates, c.prev ? p.plates : '', ch.plates, c.plates_per_head, c.prev ? p.plates_per_head : '',
+      ch.plates_per_head, r.customers, r.prev_customers, (r.change || {}).customers, k.total, k.customers, k.plates_per_head, k.main ? _SPHV_CAUSE[k.main] : '',
+      d.period ? d.period.label_th : '', d.base ? d.base.label_th : '']);
+  }));
+  return out;
+}
 function spikeExport() {
   const d = _spikeLast;
   const sp = (d && d.spikes) || [], nm = (d && d.new_menus) || [];
-  if (!d || (!sp.length && !nm.length && !(d.spikes_plates || []).length)) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
+  const hv = _spHvCsv();
+  if (!d || (!sp.length && !nm.length && !(d.spikes_plates || []).length && !hv.length)) { uiNotice('ไม่มีรายการให้ส่งออก'); return; }
   const per = !!d.period && d.period !== 'day';
   const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
   // PR-SN: one file, two parts - the section column tells เมนูเดิม (spike) from เมนูใหม่ (first sold < 4 weeks ago)
@@ -909,7 +1026,8 @@ function spikeExport() {
       s.excess, s.x != null ? s.x : '', '', '', '', '', '', [s.thin_base ? (vb ? 'ขายน้อยในช่วงเทียบ' : 'ขายน้อยช่วงก่อน') : '', s.in_per_head ? 'อยู่ในส่วนต่อหัวด้วย' : ''].filter(Boolean).join(' · ')]
       .concat(cv ? ['', '', '', '', ''] : [])));
   const span = (per ? `${d.date_from}_${d.date_to}` : (d.date || '')) + (vb ? `_vs_${d.base.from}_${d.base.to}` : '');
-  downloadCSV([head].concat(rows).map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
+  const all = [head].concat(rows).concat(hv.length ? [[]].concat(hv) : []);
+  downloadCSV(all.map(r => r.map(q).join(',')).join('\n'), `menu_spike_${per ? d.period : 'day'}_${span}.csv`);
 }
 // PR-TD (owner 2026-10-25) · the strip under the controls: four small tiles (2-up on a phone). ลูกค้า ช่วงนี้ (customers per day vs the base),
 // เมนูพุ่ง (เมนูเดิม · เมนูใหม่), ต้นทุนเพิ่มรวม of the first `top` rows (cost roles; จานเกินรวม for the others), the tier that adds the most plates.
@@ -967,6 +1085,7 @@ async function renderMenuSpike(focusDate) {
   const oneBr = localBr || getBranch() || '';
   if (oneBr) p.set('branch', oneBr);
   if (getGroup()) p.set('group', getGroup());
+  spikeHvLoad(p);                                // วัตถุดิบมูลค่าสูง · จำนวนจาน: the same period, base and branch, in parallel
   const seq = ++_spikeSeq;
   let d;
   try { d = await api(`${API}/api/sales/menu-spike?${p}`); } catch (e) { if (seq === _spikeSeq) el.innerHTML = ''; return; }
@@ -1122,6 +1241,7 @@ function _spikeDraw(d, oneBr) {
       <h3 class="sp-h"><span class="sp-long">เมนูใหม่และเมนูที่กลับมาขาย · ครบ 4 สัปดาห์แล้วย้ายเป็นเมนูเดิม</span><span class="sp-short">เมนูใหม่ (ไม่เกิน 4 สัปดาห์)</span>
         <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-new" title="คำอธิบาย">?</button>
         <span class="sp-n">(${fmtN(nNew)}${shown(nNew, nm.length)})</span>${nmCostChip}</h3>${newHtml}</section>
+    <section class="sp-sec sp-sec-hv" id="spikeHvSec" aria-label="วัตถุดิบมูลค่าสูง จำนวนจาน">${spikeHvHtml()}</section>
     <section class="sp-sec sp-sec-plates" aria-label="เมนูพุ่ง นับจำนวนจาน แบบเดิม">
       <h3 class="sp-h">เมนูพุ่ง · นับจำนวนจาน (แบบเดิม)
         <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-plates" title="คำอธิบาย">?</button>

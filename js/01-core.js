@@ -4005,7 +4005,10 @@ const PAGE_CARDS = {
     { sel: '#spikeTable.sp-costed', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], 'สูงกว่า', 'ต้นทุนเพิ่ม'], labels: ['ต่อ 100 ลูกค้า', 'สูงกว่า', 'ต้นทุนเพิ่ม'] },
     { sel: '#spikeTable:not(.sp-costed)', title: 'เมนู', sub: ['เพิ่มจาก tier'], subLines: true, keyCols: [['ช่วงนี้', 'วันนี้'], ['ปกติ', 'ช่วงเทียบ'], 'สูงกว่า'], labels: ['ต่อ 100 ลูกค้า', 'ปกติ', 'สูงกว่า'] },
     { sel: '#spikePlatesTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], '+จาน', 'สูงกว่า'], labels: ['จาน', '+จาน', 'สูงกว่า'] },
-    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] }],
+    { sel: '#spikeNewTable', title: 'เมนู', keyCols: [['ช่วงนี้', 'วันนี้'], 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว'], labels: ['จาน', 'ต่อ 100 ลูกค้า', 'ขายมาแล้ว (วัน)'] },
+    // owner 2026-10-25 · วัตถุดิบมูลค่าสูง · จำนวนจาน: one group (plates only) and the branches x groups matrix
+    { sel: '#spikeHvTable', title: 'สาขา', keyCols: ['จานที่ออก', 'จาน/หัว', 'ลูกค้า'] },
+    { sel: '#spikeHvMatrix', title: 'สาขา', keyCols: ['แซลมอน', 'ทูน่า', 'ลูกค้า'] }],
   discounts: [
     { sel: 'table:has(#discCashierBody)', title: 'แคชเชียร์', sub: ['สาขา'], keyCols: ['ส่วนลดรวม', '% ยอดขาย', 'อัตรา'] },
     { sel: 'table:has(#disc-reason-body)', keyCols: [1, 2, 3] }],

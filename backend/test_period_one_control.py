@@ -39,6 +39,21 @@ def test_pages_declare_their_kinds_and_the_top_bar_has_a_hidden_day_chip():
     assert "gPeriodForTab(name);" in CORE                      # switchTab applies the page's kinds before it loads
 
 
+def test_the_phone_period_sheet_is_the_top_bars_own_control():
+    """Owner 2026-10-25 ("ทำให้เลือกช่วงเวลาได้ด้วยนะครับ"): on a phone the range chip opens a bottom sheet that HOLDS the top bar's
+    #gPeriod (moved in while open, put back on close) - its phone presentation, not a second control: no periodBar, no own state."""
+    mob = JS["09c-mobile.js"]
+    start, end = mob.index("function _phpEnsure("), mob.index("function phPeriodChipKey(")
+    sheet = mob[start:end]
+    assert "getElementById('gPeriod')" in sheet and "slot.appendChild(gp)" in sheet          # the same element, moved in
+    assert "insertBefore(gp, _phpHome)" in sheet                                           # and put back where it was
+    assert "periodBar(" not in sheet and "_gp =" not in sheet and "gPeriodSet(" not in sheet   # no second period state
+    assert re.search(r'id="gpRangeChip"[^>]*onclick="if \(typeof phPeriodOpen', INDEX, re.S)
+    assert "if (!phOn() || !gp || !chip || chip.hidden) return;" in sheet                  # a phone only, on a page that follows the period
+    assert "body.ph-on .gp-range-chip .gp-rc-l { display: none; }" in INDEX                 # one line on a phone: the short label
+    assert "phPeriodClose();" in mob.split("function _phSetView(")[1].split("\n}\n")[0]     # leaving the page closes it
+
+
 def test_the_old_page_pickers_are_gone_or_hidden():
     ds = (REPO / "tabs" / "02-dailysales.html").read_text(encoding="utf-8")
     assert 'id="dsDate"' not in ds and 'id="dsPeriod"' not in ds and 'id="dsRange"' not in ds
