@@ -25,7 +25,8 @@ import main  # noqa: E402
 import conftest as _cf  # noqa: E402
 import periods as P  # noqa: E402
 
-TH_TODAY = (dt.datetime.utcnow() + dt.timedelta(hours=7)).date()
+TH_TODAY = _cf.bkk_today()   # the app's Bangkok day (rules.TH_TODAY_SQL) at the session's instant
+pytestmark = pytest.mark.usefixtures("bkk_frozen")   # SQLite 'now' = the instant TH_TODAY is built from
 YESTERDAY = (TH_TODAY - dt.timedelta(days=1)).isoformat()
 FIRST = TH_TODAY - dt.timedelta(days=430)
 PER_DAY = 2 * 10 * 300.0            # 2 branches × 10 bills × ฿300 ex-VAT

@@ -25,7 +25,8 @@ sys.path.insert(0, str(HERE))
 import main  # noqa: E402
 import conftest as _cf  # noqa: E402
 
-TH_TODAY = (dt.datetime.utcnow() + dt.timedelta(hours=7)).date()
+TH_TODAY = _cf.bkk_today()   # the app's Bangkok day (rules.TH_TODAY_SQL) at the session's instant
+pytestmark = pytest.mark.usefixtures("bkk_frozen")   # SQLite 'now' = the instant TH_TODAY is built from
 BACK = 17                      # months of history before the current one (reaches past the YoY guard)
 DAILY_WINDOW = 3               # sales_sku_daily covers only the last 3 months; older months read sales_sku_monthly
 NO_COST_MONTHS = 2             # the oldest months carry no cost source at all

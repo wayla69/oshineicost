@@ -98,7 +98,7 @@ def test_backfill_is_idempotent():
     assert con.execute("SELECT COUNT(*) FROM sales_month_summary").fetchone()[0] == 1
 
 
-def test_backfill_refreshes_current_month():
+def test_backfill_refreshes_current_month(bkk_frozen):
     """The in-progress month must be rebuilt each run so it keeps pace with the
     day's sales — a stale summary row for it is replaced, not skipped."""
     con = _db()
@@ -154,7 +154,7 @@ def test_backfill_catches_up_a_frozen_closed_month():
     assert may == (9999, 8888, 199)
 
 
-def test_backfill_rebuilds_the_previous_month():
+def test_backfill_rebuilds_the_previous_month(bkk_frozen):
     """Bills for the last day of a month land after the rollover; the previous
     month is rebuilt every run so they are counted."""
     con = _db()

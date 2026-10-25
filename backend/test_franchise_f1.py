@@ -93,7 +93,7 @@ def _flat_numbers(o):
         yield round(float(o), 2)
 
 
-def test_the_daily_table_holds_finished_days_only():
+def test_the_daily_table_holds_finished_days_only(bkk_frozen):
     """rules.closed_day_clause: the day still trading (Thai today) never reaches the table or the bars, even when the
     caller asks for it, and the change is on the same weekday a week earlier."""
     from routers import franchise as F
