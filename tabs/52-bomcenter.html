@@ -250,7 +250,8 @@
 
   <!-- ── delivery calendar (ตั้งค่า → รอบส่งของสาขา) ─────────────────────── -->
   <div id="bmc-pane-cal" style="display:none">
-    <div id="bmcFcCal" class="card p-4 mb-3"></div>
+    <div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>
+    <div id="bmcFcCal" class="card p-4 mb-3 desk-only"></div>
     <!-- PR-X: the company branches that make the benchmark (ค่ากลาง) and the temporary stock buffer -->
     <div id="bmcBmCard" class="card p-4 mb-3"></div>
     <!-- batch 4b (3.3 · 3.4): the baht floor of a variance reason and the weekly-count switch -->
@@ -442,6 +443,8 @@
       <span id="bmcIngStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIngReport" class="mb-3"></div>
+    <div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>
+    <div class="desk-only">
     <div id="bmcIngPagerTop" class="bmc-pager mb-2"></div>
     <div class="card p-4 overflow-x-auto">
       <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
@@ -460,6 +463,7 @@
       </table>
     </div>
     <div id="bmcIngPager" class="bmc-pager mt-2"></div>
+    </div>
     <template id="hlp-bomcenter-ing" data-title="ทะเบียนวัตถุดิบ">      <p>แก้ช่องในตารางได้โดยตรง แล้วกด “บันทึกการแก้ไข” · ชื่อต้องไม่ว่าง ตัวเลขต้องเป็นตัวเลขและไม่ติดลบ · แถวที่ไม่ผ่านจะมีข้อความสีแดง และระบบไม่บันทึกจนกว่าจะแก้</p>
       <p>แก้หลายรายการด้วย Excel: ดาวน์โหลดทะเบียนวัตถุดิบ แก้ แล้วกด “นำเข้าไฟล์ทะเบียนวัตถุดิบ” · รับไฟล์ที่ดาวน์โหลดไป หรือไฟล์ที่มีแผ่นงาน DATAP เช่น Cost-RW</p>
       <p>“เติมจากข้อมูลในระบบ” เพิ่มรหัสใหม่จาก<span data-recipe>สูตร</span><span data-stock>ข้อมูลเดิมของระบบ</span> ขนาดบรรจุ และรายการบังคับสั่ง · ไม่เขียนทับค่าที่ตั้งไว้แล้ว</p>
@@ -507,13 +511,16 @@
     <div class="card p-4 overflow-x-auto">
       <table class="text-xs w-full" style="font-variant-numeric:tabular-nums">
         <thead><tr class="text-left border-b" style="color:var(--text-muted)">
-          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th><th class="py-1.5 pr-2">หน่วยฐาน</th>
+          <th class="py-1.5 pr-2">รหัส</th><th class="py-1.5 pr-2">วัตถุดิบ</th>
+          <th class="py-1.5 pr-2 text-right" title="(ราคาเดือนนี้ − ราคาเดือนก่อน) × ปริมาณที่ซื้อ (เดือนนี้ หรือเดือนก่อนเมื่อเดือนนี้ยังไม่มีการซื้อ)">ผลเป็นบาท</th>
+          <th class="py-1.5 pr-2 text-right">เปลี่ยน</th><th class="py-1.5 pr-2">หน่วยฐาน</th>
           <th class="py-1.5 pr-2 text-right">ราคา/หน่วยฐาน</th><th class="py-1.5 pr-2">แหล่ง</th>
           <th class="py-1.5 pr-2">ราคาของเดือน</th><th class="py-1.5 pr-2 text-right">อายุ (เดือน)</th>
           <th class="py-1.5 pr-2 text-right">สาขาที่ซื้อ</th><th class="py-1.5"></th>
         </tr></thead>
         <tbody id="bmcPriceBody"></tbody>
       </table>
+      <div id="bmcPriceMore"></div>
     </div>
     <div id="bmcHistory" class="card p-4 mt-3" style="display:none"></div>
     <template id="hlp-bomcenter-price" data-title="ราคารายเดือน">      <p>ราคาซื้อจริงเฉลี่ยรายเดือนจากบัญชี: ราคา = มูลค่ารวม ÷ ปริมาณ ต่อหน่วยฐาน · หน่วยฐาน = <span data-recipe>หน่วยในสูตร</span><span data-stock>หน่วยฐานของวัตถุดิบในทะเบียน</span> · ต้นทุนคิดจากราคาของเดือนที่เลือก</p>

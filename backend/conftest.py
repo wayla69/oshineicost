@@ -19,6 +19,81 @@ HERE = Path(__file__).parent.resolve()
 sys.path.insert(0, str(HERE))
 
 
+# ── One Bangkok "today" for the app and the tests ────────────────────────────
+# The app anchors its days on SQLite's clock: rules.TH_TODAY_SQL = date('now','+7 hours')
+# (latest_settled_day, closed_day_clause, the month in progress). A test that builds its
+# fixture from its own "today" and asserts what the app reads later breaks when the run
+# crosses Bangkok midnight (17:00 UTC): the fixture says the 25th, SQLite already the 26th.
+# So the session takes ONE instant (OSHINEI_TEST_NOW_UTC, set here once, or set by hand to
+# fake the clock, e.g. 2026-10-25T17:30:00) and:
+#   * bkk_today() evaluates the app's own TH_TODAY_SQL at that instant;
+#   * under the `bkk_frozen` fixture every connection's SQLite 'now' is that instant.
+# Every connection gets date/time/datetime/julianday/strftime/unixepoch overloads that only
+# substitute 'now' while frozen and otherwise pass straight through to SQLite's built-ins.
+import datetime as _dt
+import threading as _threading
+
+_NOW_ENV = "OSHINEI_TEST_NOW_UTC"
+os.environ.setdefault(_NOW_ENV, _dt.datetime.now(_dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%S"))
+_REAL_CONNECT = getattr(sqlite3.connect, "_real", sqlite3.connect)   # once, even if conftest is imported twice
+_BUILTIN = _REAL_CONNECT(":memory:", check_same_thread=False)    # no overloads: SQLite's own functions
+_BUILTIN_LOCK = _threading.Lock()
+_FROZEN = getattr(sqlite3.connect, "_frozen", [0])               # >0 while a test holds bkk_frozen
+_TIME_FUNCS = ("date", "time", "datetime", "julianday", "unixepoch", "strftime")
+
+
+def test_now_utc() -> str:
+    """The session's instant in SQLite's 'now' form (UTC, 'YYYY-MM-DD HH:MM:SS')."""
+    return _dt.datetime.fromisoformat(os.environ[_NOW_ENV]).strftime("%Y-%m-%d %H:%M:%S")
+test_now_utc.__test__ = False                                     # a helper, not a test
+
+
+def _time_func(name, force=False):
+    def fn(*args):
+        frozen = force or _FROZEN[0] > 0
+        args = list(args)
+        if frozen:
+            if not args or (name == "strftime" and len(args) == 1):
+                args.append("now")                                # date() = date('now'), strftime(f) = strftime(f,'now')
+            now = test_now_utc()
+            args = [now if isinstance(a, str) and a.strip().lower() == "now" else a for a in args]
+        with _BUILTIN_LOCK:
+            return _BUILTIN.execute(f"SELECT {name}({','.join('?' * len(args))})", args).fetchone()[0]
+    return fn
+
+
+def _install_clock(con, force=False):
+    for name in _TIME_FUNCS:
+        con.create_function(name, -1, _time_func(name, force), deterministic=True)
+    return con
+
+
+def _connect(*args, **kwargs):
+    return _install_clock(_REAL_CONNECT(*args, **kwargs))
+
+
+_connect._real, _connect._frozen = _REAL_CONNECT, _FROZEN
+sqlite3.connect = _connect
+_FROZEN_CON = _install_clock(_REAL_CONNECT(":memory:", check_same_thread=False), force=True)
+
+
+def bkk_today() -> "_dt.date":
+    """Today in Bangkok as the app computes it (rules.TH_TODAY_SQL) at the session's instant."""
+    import rules
+    return _dt.date.fromisoformat(_FROZEN_CON.execute(f"SELECT {rules.TH_TODAY_SQL}").fetchone()[0])
+
+
+@pytest.fixture
+def bkk_frozen():
+    """SQLite 'now' on every connection = the session's instant, so the app's Bangkok day
+    is bkk_today() for the whole test however long the run takes."""
+    _FROZEN[0] += 1
+    try:
+        yield bkk_today()
+    finally:
+        _FROZEN[0] -= 1
+
+
 def dl_name(resp) -> str:
     """The name a browser saves a download under: the decoded filename* of Content-Disposition (the Thai name people see)."""
     import re

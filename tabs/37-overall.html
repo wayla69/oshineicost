@@ -80,21 +80,12 @@
       <p class="text-xs text-slate-400 mb-2">บุฟเฟ่ต์ · อาหาร à la carte · เครื่องดื่ม · เดลิเวอรี · อื่นๆ</p>
       <div style="height:200px"><canvas id="chartBreakdown"></canvas></div>
     </div>
-    <div class="card p-5 lg:col-span-2" data-needs="/api/sales/top_ordered">
-      <h2 class="section-title mb-0">Top 60 รายการ (ตามต้นทุน BoM · รวมของหวาน/เครื่องดื่ม/เดลิเวอรี) <a class="see-full no-print" onclick="switchTab('menu')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ วิเคราะห์เมนู →</a> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-overall-1" title="คำอธิบาย">?</button></h2><template id="hlp-overall-1" data-title="Top 60 รายการ"><p>รายไอเทม · จำนวนที่ขาย (serving) · ต้นทุน BoM (COGS) · %สัดส่วนต้นทุน · MoM จำนวน — เรียงตามต้นทุน BoM</p></template>
-      <div class="overflow-auto" style="max-height:560px">
-        <table class="text-xs w-full">
-          <thead class="sticky top-0 bg-white"><tr class="text-left text-slate-500 border-b border-slate-200">
-            <th class="py-2 pr-3">#</th>
-            <th class="py-2 pr-3">SKU</th>
-            <th class="py-2 pr-3">เมนู</th>
-            <th class="py-2 pr-3 text-right">จำนวนที่ขาย</th>
-            <th class="py-2 pr-3 text-right">ต้นทุน BoM</th>
-            <th class="py-2 pr-3 text-right">% ต้นทุนรวม</th>
-            <th class="py-2 text-right">จำนวน เทียบเดือนก่อน</th>
-          </tr></thead>
-          <tbody id="topSkusBody"></tbody>
-        </table>
+    <!-- DV2 (phone table review 2026-10-25): the Top 60 by cost was the same list as วิเคราะห์เมนู and ต้นทุนต่อหัว · Top 60 - one link instead -->
+    <div class="card p-5 lg:col-span-2" id="ovTop60Link">
+      <h2 class="section-title mb-2">Top 60 รายการ</h2>
+      <div class="flex flex-wrap gap-2">
+        <button type="button" class="shm-showall" style="margin-left:0" onclick="switchTab('menu')">Top 60 ยอดขายและต้นทุน · วิเคราะห์เมนู ›</button>
+        <button type="button" class="shm-showall" style="margin-left:0" data-needs="/api/period/cost" onclick="switchTab('costhead')">Top 60 ต้นทุนต่อหัว · ต้นทุนต่อหัว ›</button>
       </div>
     </div>
   </div>

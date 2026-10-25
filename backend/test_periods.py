@@ -124,7 +124,7 @@ def test_anchor_excludes_today():
     assert P.resolve("week", "2026-10-22", today="2026-10-24")["cur"] == ("2026-10-19", "2026-10-22")
 
 
-def test_anchor_from_db_skips_the_trading_day():
+def test_anchor_from_db_skips_the_trading_day(bkk_frozen):
     con = sqlite3.connect(":memory:")
     con.executescript("""CREATE TABLE branches(branch_id INTEGER, name TEXT);
         CREATE TABLE sales_transaction(branch_id INTEGER, sold_at TEXT, source TEXT);

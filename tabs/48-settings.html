@@ -505,6 +505,13 @@
         <tbody id="branchConfigBody"></tbody>
       </table>
     </div>
+    <!-- DV2: reference data from the POS, moved here from ราคาและโซน -->
+    <div class="card p-5 mt-4 overflow-x-auto" data-needs="/api/extra/price-zone">
+      <h2 class="section-title mb-3">โซนโต๊ะรายสาขา (ข้อมูลจาก POS)</h2>
+      <table class="text-xs w-full"><thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
+        <th class="py-1.5 pr-2">สาขา</th><th class="py-1.5 pr-2 text-right">โซน</th><th class="py-1.5 text-right">โต๊ะ</th>
+      </tr></thead><tbody id="pzZones"></tbody></table>
+    </div>
   </div>
 
   <!-- ── ชั่วโมงเปิดทำการ ── -->

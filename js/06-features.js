@@ -1547,7 +1547,7 @@ function setupShortcuts() {
 // GP by Branch tab — BoM formula (Easy)
 // ══════════════════════════════════════════════════════════════════════════
 let _gpbData = null;
-let _gpbSortKey = 'total_revenue';
+let _gpbSortKey = 'over_target_baht';   // DV2: the baht of food cost over the target's ceiling, largest first
 let _gpbSortDir = 'desc';
 let _gpbExpanded = new Set();
 window.gpbGranularity = window.gpbGranularity || 'month';
@@ -1741,7 +1741,10 @@ function _gpbSort(key) {
 
 function _gpbRenderTable() {
   if (!_gpbData) return;
-  const rows = _gpbData.rows.slice();
+  const fct = fcTargetSet(_gpbData.food_cost_target);   // ONE food-cost target (owner 2026-10-25)
+  // DV2: the baht the branch is over the food-cost target (= the GP below 100 - target x revenue); 0 within the target
+  const rows = _gpbData.rows.map(r => Object.assign({}, r, {
+    over_target_baht: r.total_food_cost_pct != null && r.total_revenue ? Math.max(0, (r.total_food_cost_pct - fct) / 100 * r.total_revenue) : null }));
   const dir = (_gpbSortDir === 'desc') ? -1 : 1;
   rows.sort((a, b) => {
     const av = a[_gpbSortKey];
@@ -1753,7 +1756,6 @@ function _gpbRenderTable() {
   });
   const fmtB = n => (n == null) ? '—' : Number(n).toLocaleString('th-TH', {maximumFractionDigits:0});
   const fmtPct = n => (n == null) ? '—' : n.toFixed(1) + '%';
-  const fct = fcTargetSet(_gpbData.food_cost_target);
 
   const html = rows.map(r => {
     const bucket = _gpbStatusBucket(r.total_food_cost_pct, fct);
@@ -1762,6 +1764,7 @@ function _gpbRenderTable() {
     const main = `
       <tr class="gpb-row" style="border-bottom:1px solid var(--border);cursor:pointer" onclick="_gpbToggleRow(${r.branch_id})">
         <td class="px-3 py-2 font-medium">${arrow} ${esc(r.branch)}<button class="drill-branch-btn" onclick="event.stopPropagation();drillIntoBranch('${jsAttr(r.branch)}')" title="ดูเฉพาะสาขานี้">เจาะลึก →</button></td>
+        <td class="px-3 py-2 text-right" style="font-weight:600;color:${r.over_target_baht > 0 ? 'var(--bad-ink)' : 'var(--text-muted)'}">${r.over_target_baht == null ? '—' : r.over_target_baht > 0 ? fmtB(r.over_target_baht) : '0'}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_revenue)}</td>
         <td class="px-3 py-2 text-right">${fmtB(r.total_cogs)}</td>
         <td class="px-3 py-2 text-right" style="color:${(r.total_gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'};font-weight:600">${fmtB(r.total_gp)}</td>
@@ -1781,6 +1784,7 @@ function _gpbRenderTable() {
       return `
         <tr style="background:var(--bg-subtle);border-bottom:1px solid var(--border)">
           <td class="px-3 py-1 pl-8 text-xs text-slate-500">${label}</td>
+          <td class="px-3 py-1 text-right text-xs">${m.food_cost_pct != null && m.revenue ? fmtB(Math.max(0, (m.food_cost_pct - fct) / 100 * m.revenue)) : '—'}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.revenue)}</td>
           <td class="px-3 py-1 text-right text-xs">${fmtB(m.cogs)}</td>
           <td class="px-3 py-1 text-right text-xs" style="color:${(m.gp || 0) >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${fmtB(m.gp)}</td>
@@ -1873,7 +1877,10 @@ function _gpbRenderHeatmap() {
   const monthSet = new Set();
   _gpbData.rows.forEach(r => (r.monthly || []).forEach(m => monthSet.add(m.month)));
   const months = Array.from(monthSet).sort();
-  if (months.length === 0) { wrap.innerHTML = '<p class="text-xs text-slate-400">ไม่มีข้อมูล</p>'; return; }
+  // DV2: a heat map of one month is the table again - the card hides until the period has two months or more
+  const card = document.getElementById('gpbHeatCard');
+  if (card) card.style.display = months.length < 2 ? 'none' : '';
+  if (months.length < 2) { wrap.innerHTML = ''; return; }
 
   const fct = fcTargetSet(_gpbData.food_cost_target);
   // Color by food cost % vs the one target
@@ -2453,11 +2460,10 @@ function _bbomRenderCoverage(d) {
 // header row; the table is left alone when a body row does not have one cell per header cell.
 const _WIDE_TABLES = {
   pnlbTable:       { key: [6] },                    // P&L รายสาขา · กำไรดำเนินงาน
-  benchmarkTable:  { key: [10], fold: [6, 7, 8, 9] },  // เทียบสาขา · คะแนน; its 4 weighted parts fold
+  benchmarkTable:  { key: [1], fold: [7, 8, 9, 10] },  // เทียบสาขา · คะแนน (column 2, DV2); its 4 weighted parts fold
   orderedTable:    { key: [5], fold: [7, 9], stick: [3] },   // เมนู · จำนวนขาย; the two running % fold; the menu name stays
   costItemTable:   { key: [9], fold: [5, 7] },        // ต้นทุน · อัตรากำไร; the two mix % fold
   profitBandTable: { key: [5], fold: [8] },           // กำไร · กำไร; BoM per bill folds
-  staffTable:      { key: [9], fold: [7] },           // พนักงาน · % ส่วนลด
   pbLossTable:     { key: [5], fold: [8] },           // P&L ต่อบิล · ขาดทุน
 };
 function _wideFoldKey(id) { return 'oshinei_wide_open:' + id; }

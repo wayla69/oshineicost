@@ -350,14 +350,17 @@ let _primeKey = null;
 async function loadPrimeCost() {
   const msel = document.getElementById('pnlMonthSel');
   const month = (msel && msel.value) || getMonthTo() || getMonthFrom() || '';
-  const _fk = month + '|' + (getGroup() || '');
+  const _fk = month + '|' + (getGroup() || '') + '|' + (getBranch() || '');
   if (_primeKey === _fk) return; _primeKey = _fk;
   const p = new URLSearchParams();
   if (month) p.set('month', month);
   if (getGroup()) p.set('group', getGroup());
   let d; try { d = await api(`${API}/api/finance/prime-cost?${p}`); } catch (e) { return; }
   const ch = d.chain || {}; const band = d.band || { good: 70, high: 78 };
-  const rows = d.branches || [];
+  const rows = (d.branches || []).filter(r => !getBranch() || r.branch === getBranch());   // DV2: follows the top bar's branch
+  // DV2: without labour no row has a ค่าแรง / ต้นทุนหลัก / กำไรดำเนินงาน figure - the banner (what to set and where) stands alone
+  const ptw = document.getElementById('primeTableWrap');
+  if (ptw) ptw.style.display = ch.branches_with_labor ? '' : 'none';
   const pcCol = pp => pp == null ? '#94a3b8' : pp > band.high ? '#ef4444' : pp > band.good ? '#f59e0b' : '#10b981';
   const cw = document.getElementById('primeChain');
   if (cw) cw.textContent = `เดือน ${d.month || '—'} · เฉลี่ยเครือ Food ${ch.food_pct != null ? ch.food_pct + '%' : '—'}${ch.labor_pct != null ? ' + Labor ' + ch.labor_pct + '% = Prime ' + ch.prime_pct + '%' : ''}`;
@@ -424,9 +427,17 @@ async function loadPnlBranch() {
       <div class="text-xs text-slate-500">${esc(l)}</div>
       <div class="text-xl font-bold" style="color:${textInk(col)}">${val}</div>${ch}</div>`).join('');
   const note = document.getElementById('pnl-note');
-  if (!c.fixed_costs_set || (c.fixed_cost_period||0) === 0) {
+  // DV2: with no fixed cost set, กำไรดำเนินงาน = กำไรขั้นต้น on every row and the table repeats GP รายสาขา - one box (what to set, where)
+  // replaces the 28-row table
+  const noFixed = !c.fixed_costs_set || (c.fixed_cost_period||0) === 0;
+  const pcard = document.getElementById('pnlbCard');
+  if (pcard) pcard.style.display = noFixed ? 'none' : '';
+  if (noFixed) {
     note.classList.remove('hidden');
-    note.innerHTML = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ · ตั้งค่าได้ที่ ตั้งค่า → ค่าใช้จ่ายคงที่รายสาขา ' + uiQ('pnl:fixed-unset', 'ค่าใช้จ่ายคงที่', '<p>ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (rent/labor/utilities) → กำไรดำเนินงาน = กำไรขั้นต้น.</p>');
+    note.innerHTML = '⚠ ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ กำไรดำเนินงานจึงเท่ากับกำไรขั้นต้น · '
+      + `<button type="button" class="underline font-semibold" style="color:inherit" onclick="switchTab('settings');if(typeof switchSettingsTab==='function')switchSettingsTab('fixedcosts')">ตั้งค่า → ค่าแรง + ค่าใช้จ่ายคงที่</button>`
+      + (tabAllowed('gpbranch') ? ` · <button type="button" class="underline font-semibold" style="color:inherit" onclick="switchTab('gpbranch')">ดูกำไรขั้นต้นที่ GP รายสาขา</button>` : '')
+      + ' ' + uiQ('pnl:fixed-unset', 'ค่าใช้จ่ายคงที่', '<p>ยังไม่ได้ตั้งค่าใช้จ่ายคงที่ (ค่าเช่า ค่าแรง ค่าสาธารณูปโภค) ตาราง P&amp;L รายสาขาจะแสดงเมื่อตั้งค่าแล้ว</p>');
   } else { note.classList.add('hidden'); }
   _pnlBranchRows = {}; (d.branches||[]).forEach(b => { _pnlBranchRows[b.branch] = b; });
   document.getElementById('pnl-branches').innerHTML = (d.branches||[]).map(b => {

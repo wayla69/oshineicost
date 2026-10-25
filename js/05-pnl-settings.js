@@ -7,8 +7,8 @@
 // ════════════════════════════════════════════════════════════════
 let pnlDeepBranch = '';
 let pnlBranchRows = [];
-let pnlSortCol = 'gross_profit';
-let pnlSortAsc = false;
+let pnlSortCol = 'gp_delta';   // DV2: the GP change in baht against the period before, the largest fall first
+let pnlSortAsc = true;
 
 async function loadPnlTab() {
   const params = new URLSearchParams();
@@ -26,7 +26,7 @@ async function loadPnlTab() {
     api(`${API}/api/profit/summary?${params}`),
     api(`${API}/api/pnl/monthly?${params}`),
     api(`${API}/api/pnl/branches?${branchParams}`),
-    api(`${API}/api/period/cost?${gPeriodQuery()}`).catch(() => null),   // PR-PP3: the two comparisons of the top bar's period
+    api(`${API}/api/period/cost?${gPeriodQuery({ by_branch: 1 })}`).catch(() => null),   // PR-PP3: the two comparisons of the top bar's period (DV2: per branch too)
   ]);
 
   renderPnlKpis(summary);
@@ -44,7 +44,14 @@ async function loadPnlTab() {
   });
   renderPnlTrend(monthly);
 
-  pnlBranchRows = branchRows;
+  // DV2: Δ GP per branch in baht against the period before (the bar's period to date, /api/period/cost by branch); the table follows
+  // the top bar's branch
+  const gpPrev = {};
+  ((PC && PC.branches) || []).forEach(b => { if (b.cur && b.prev && b.cur.gp != null && b.prev.gp != null) gpPrev[b.branch] = b.cur.gp - b.prev.gp; });
+  pnlBranchRows = (branchRows || []).filter(r => !getBranch() || r.branch === getBranch())
+    .map(r => Object.assign({}, r, { gp_delta: gpPrev[r.branch] != null ? gpPrev[r.branch] : null }));
+  const thD = document.getElementById('pnlThDelta');
+  if (thD) thD.title = PC && PC.period ? `${PC.period.label_th} เทียบ ${PC.period.prev_label_th}` : '';
   renderPnlBranchTable();
   populatePnlDeepBranchSelector(branchRows);
 
@@ -155,7 +162,7 @@ function renderPnlBranchTable() {
       : (pnlSortAsc ? va - vb : vb - va);
   });
   // Update sort indicator
-  ['branch','revenue_ex_vat','cogs','gross_profit','margin_pct','tx_count','avg_ticket','profit_per_bill'].forEach(c => {
+  ['branch','gp_delta','revenue_ex_vat','cogs','gross_profit','margin_pct','tx_count','avg_ticket','profit_per_bill'].forEach(c => {
     const el = document.getElementById('pnlSort' + c.charAt(0).toUpperCase() + c.slice(1));
     if (el) el.textContent = c === pnlSortCol ? (pnlSortAsc ? '▲' : '▼') : '↕';
   });
@@ -166,6 +173,7 @@ function renderPnlBranchTable() {
     const mColor = (r.margin_pct||0) > 40 ? '#10b981' : (r.margin_pct||0) > 20 ? '#f59e0b' : '#ef4444';
     return `<tr class="border-b border-slate-100 hover:bg-slate-50 cursor-pointer" onclick="clickPnlBranchRow('${jsAttr(r.branch)}')">
       <td class="py-1.5 pr-3 font-medium text-indigo-600">${esc(r.branch)}</td>
+      <td class="py-1.5 pr-3 text-right font-semibold"${r.gp_delta != null ? ` style="color:${r.gp_delta >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}"` : ''}>${r.gp_delta != null ? dvBaht(r.gp_delta) : '—'}</td>
       <td class="py-1.5 pr-3 text-right">${fmtN(r.revenue_ex_vat||0)}</td>
       <td class="py-1.5 pr-3 text-right text-red-500">${fmtN(r.cogs||0)}</td>
       <td class="py-1.5 pr-3 text-right">
@@ -2178,8 +2186,13 @@ function _insTile(i) {
   const go = tabAllowed('dailysales');
   const rg = i.ranges || {};
   const tip = rg.current ? `${_insRange(rg.current)} เทียบ ${_insRange(rg.previous)} และ ${_insRange(rg.last_year)}` : '';
+  // DV2: a branch tile leads with the baht change (the ranking key); the % is the secondary figure below; the next two branches by baht follow
+  const bd = v => (v >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(v));
+  const chg = !isRev && i.change_baht != null
+    ? `<span class="ins-amt"><span class="ins-${_insTone(i.change_baht, true)}">${bd(i.change_baht)}</span> · ยอด ฿${fmtN(i.amount)}</span>` : (isRev ? '' : `<span class="ins-amt">฿${fmtN(i.amount)}</span>`);
+  const oth = !isRev && (i.others || []).length ? `<span class="ins-sub">ถัดไป ${i.others.map(o => `${esc(o.branch)} ${bd(o.change_baht)}`).join(' · ')}</span>` : '';
   const inner = `<span class="ins-lbl">${esc(i.label || '')}</span>
-    <span class="ins-big${isRev ? '' : ' ins-name'}">${big}</span>${isRev ? '' : `<span class="ins-amt">฿${fmtN(i.amount)}</span>`}
+    <span class="ins-big${isRev ? '' : ' ins-name'}">${big}</span>${chg}${oth}
     ${_insCmp('เทียบเดือนก่อน', i.delta)}${_insCmp('เทียบปีก่อน', i.delta_yoy)}
     <span class="ins-sub">${base}</span>${go ? '<span class="ins-go" aria-hidden="true">›</span>' : ''}`;
   return go
@@ -2238,7 +2251,7 @@ function renderInsightBox(box, data) {
   const chip = meta.period_th ? `<span class="ins-chip">${esc(meta.period_th)} · ${esc(basis)}</span>` : '';
   const help = uiQ('overall:insights', 'ข้อสังเกต',
     `<p><b>รายได้และสาขา</b>: ${meta.ranges ? `${esc(_insRange(meta.ranges.current))} เทียบ ${esc(_insRange(meta.ranges.previous))} (เดือนก่อน) และ ${esc(_insRange(meta.ranges.last_year))} (ปีก่อน)` : `${esc(meta.period_th || 'เดือนล่าสุด')} เทียบเดือนก่อนและปีก่อน`}${meta.mtd_day ? ' · เดือนที่ยังไม่จบเทียบจำนวนวันเท่ากัน' : ''} · รายได้ไม่รวม VAT · ไม่มีข้อมูลปีก่อน แสดง —</p>
-     <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · เติบโตเร็วสุด / ลดมากสุด = สาขาที่ยอดเปลี่ยนมากที่สุดเทียบเดือนก่อนของสาขานั้น · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
+     <p>แสดงเมื่อเปลี่ยนตั้งแต่ 1.5% ขึ้นไป · ยอดเพิ่มมากสุด / ยอดลดมากสุด = สาขาที่ยอดเปลี่ยนเป็นบาทมากที่สุดเทียบเดือนก่อนของสาขานั้น (บรรทัด "ถัดไป" = อันดับ 2–3) · แตะการ์ดเพื่อดูยอดขายรายวัน</p>
      ${series.length ? `<p><b>${esc(costWord)} % ของรายได้</b>: ${esc(costWord)}ของจานที่ขาย ÷ รายได้ของจานเดียวกัน · ตัวเลขใหญ่ = เดือนเดียวกับการ์ดด้านบน (เดือนที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด) เทียบจำนวนวันเท่ากันของเดือนก่อนและปีก่อน เป็นจุด · ไม่มีต้นทุนของช่วงฐาน แสดง —${data.cost_now && data.cost_now.reasons && Object.values(data.cost_now.reasons).length ? ' (' + esc(Object.values(data.cost_now.reasons).join(' · ')) + ')' : ''}</p><p>กราฟนับเฉพาะเดือนที่จบแล้ว · แท่งสีแดง = สูงขึ้นจากเดือนก่อน · สีเขียว = ลดลง · ตัวเลขบนแท่ง = เดือนล่าสุด สูงสุด และต่ำสุด · ดูทุกเดือนได้ที่ "ดูทุกเดือน"</p>` : ''}`);
   const head = `<div class="ins-head"><span class="ins-title">ข้อสังเกต</span>${chip}<span class="ins-sp"></span>${help}
     <button type="button" class="ins-x" aria-label="ปิดข้อสังเกต" onclick="this.closest('#anomalyBanner').classList.add('hidden')">✕</button></div>`;
@@ -2528,11 +2541,18 @@ async function loadBranchHeatmap() {
 }
 function _renderBranchHeatmap() {
   const wrap = document.getElementById('heatmapWrap');
-  const data = _heatData || [];
+  const data = (_heatData || []).filter(r => !getBranch() || r.branch === getBranch());   // DV2: follows the top bar's branch
   if (!wrap) return;
-  if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">No data.</p>'; return; }
+  if (!data.length) { wrap.innerHTML = '<p class="text-sm text-slate-400">ไม่มีข้อมูล</p>'; return; }
 
   const periods = [...new Set(data.map(r => r.period))].sort();
+  // DV2: a heat map of one or two columns repeats the branch sales table - with fewer than 3 periods it is not drawn; a finer grain is offered
+  if (periods.length < 3) {
+    const g = document.getElementById('heatmapGran');
+    const finer = g && g.value === 'monthly' ? 'weekly' : g && g.value === 'weekly' ? 'daily' : '';
+    wrap.innerHTML = `<p class="text-xs py-2" style="color:var(--text-muted)">ช่วงที่เลือกมี ${periods.length} ช่วง แผนภาพความร้อนแสดงเมื่อมีตั้งแต่ 3 ช่วงขึ้นไป${finer ? ` <button type="button" class="shm-showall" onclick="document.getElementById('heatmapGran').value='${finer}';loadBranchHeatmap()">ดู${finer === 'weekly' ? 'รายสัปดาห์' : 'รายวัน'}</button>` : ''}</p>`;
+    return;
+  }
   const map = {};
   data.forEach(r => { (map[r.branch] = map[r.branch] || {})[r.period] = r; });
   const rev = (br, p) => (map[br] && map[br][p] && map[br][p].revenue) || 0;

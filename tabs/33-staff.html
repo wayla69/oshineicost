@@ -14,7 +14,7 @@
   <!-- Abnormal-discount bills (drill-down) -->
   <div class="card p-5 mb-5">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
-      <h2 class="section-title mb-0">บิลส่วนลดสูงผิดปกติ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-staff-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-staff-mb1" data-title="บิลส่วนลดสูงผิดปกติ"><p>บิลที่ส่วนลดสูงกว่าปกติ (เกิน p95) จะถูกไฮไลต์ — ใช้ตรวจการกดส่วนลดผิดปกติ/ทุจริต</p></template>
+      <h2 class="section-title mb-0">บิลส่วนลดสูงผิดปกติ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-staff-mb1" title="คำอธิบาย">?</button></h2><template id="hlp-staff-mb1" data-title="บิลส่วนลดสูงผิดปกติ"><p>บิลที่ส่วนลดสูงที่สุดของช่วงนี้ เรียงตามส่วนลดเป็นบาท · บิลที่ส่วนลดสูงกว่าปกติ (เกิน p95) เป็นสีแดง · แตะแถวเพื่อดูเมนูในบิล · ดูทุกคอลัมน์ได้ที่ "ดูบิลทั้งหมด"</p></template>
       <button onclick="openDiscountBills({title:'บิลส่วนลดสูงสุด (ตามตัวกรองปัจจุบัน)'})"
               class="text-xs px-3 py-1.5 rounded-lg font-medium" style="background:#fef2f2;color:#b91c1c;border:1px solid #fecaca">ดูบิลทั้งหมด →</button>
     </div>
@@ -32,32 +32,7 @@
     </div>
   </div>
 
-  <div class="card p-5 overflow-x-auto mb-5">
-    <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
-      <h2 class="section-title mb-0">สรุปกิจกรรมแคชเชียร์ <span class="text-xs font-normal text-slate-400">· คลิกแถวเพื่อดูบิลส่วนลด</span></h2>
-      <div class="flex items-center gap-1 text-xs" style="background:var(--bg-subtle);border:1px solid var(--border);border-radius:var(--r-md);padding:3px">
-        <button id="staffGrpSplit" onclick="setStaffByBranch(true)"  class="subtab-btn active px-3 py-1">แยกสาขา</button>
-        <button id="staffGrpMerge" onclick="setStaffByBranch(false)" class="subtab-btn px-3 py-1">รวมทุกสาขา</button>
-      </div>
-    </div>
-    <table class="text-xs w-full" id="staffTable">
-      <thead>
-        <tr class="text-left border-b border-slate-200">
-          <th class="py-2 pr-3 font-semibold">อันดับ</th>
-          <th class="py-2 pr-3 font-semibold">แคชเชียร์</th>
-          <th class="py-2 pr-3 font-semibold">สาขา</th>
-          <th class="py-2 pr-3 text-right font-semibold">รายได้</th>
-          <th class="py-2 pr-3 text-right font-semibold">บิล</th>
-          <th class="py-2 pr-3 text-right font-semibold">ยอดบิลเฉลี่ย</th>
-          <th class="py-2 pr-3 text-right font-semibold">ลูกค้า</th>
-          <th class="py-2 pr-3 text-right font-semibold">บิลมีส่วนลด</th>
-          <th class="py-2 pr-3 text-right font-semibold">ส่วนลดรวม</th>
-          <th class="py-2 text-right font-semibold">% ส่วนลด</th>
-        </tr>
-      </thead>
-      <tbody id="staffBody"></tbody>
-    </table>
-  </div>
+  <!-- DV2: the 50-row cashier summary is gone - the cashier logins of Easy POS are shared, so a row per login names nobody -->
 </div>
 
 <!-- ══ Reusable discount-bills drill-down modal (Staff / Discounts / Report §9) ══ -->
