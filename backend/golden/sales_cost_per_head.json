@@ -4,11 +4,17 @@
    "branch": "BranchA",
    "cogs": 450.0,
    "cost_pct": 90.0,
+   "cost_pct_ly_pp": null,
+   "cost_pct_prev_pp": null,
    "cost_per_head": 112.5,
    "customers": 4,
-   "delta_pct": 0.0,
+   "delta_pct": null,
    "gp_per_head": 12.5,
-   "prev_cost_per_head": 112.5,
+   "ly_cost_pct": null,
+   "ly_cost_per_head": null,
+   "ly_delta_pct": null,
+   "prev_cost_pct": null,
+   "prev_cost_per_head": null,
    "rev_per_head": 125.0,
    "revenue": 500.0
   },
@@ -16,11 +22,17 @@
    "branch": "BranchB",
    "cogs": 450.0,
    "cost_pct": 90.0,
+   "cost_pct_ly_pp": null,
+   "cost_pct_prev_pp": null,
    "cost_per_head": 112.5,
    "customers": 4,
-   "delta_pct": 0.0,
+   "delta_pct": null,
    "gp_per_head": 12.5,
-   "prev_cost_per_head": 112.5,
+   "ly_cost_pct": null,
+   "ly_cost_per_head": null,
+   "ly_delta_pct": null,
+   "prev_cost_pct": null,
+   "prev_cost_per_head": null,
    "rev_per_head": 125.0,
    "revenue": 500.0
   }
@@ -33,18 +45,59 @@
  ],
  "focus": "2026-06-03",
  "gran": "day",
- "prev_range": [
-  "2026-06-02",
-  "2026-06-02"
+ "ly_range": [
+  "2025-06-04",
+  "2025-06-04"
  ],
+ "period": {
+  "anchor": "2026-06-03",
+  "complete": true,
+  "cur": [
+   "2026-06-03",
+   "2026-06-03"
+  ],
+  "days": 1,
+  "has_ly": false,
+  "has_prev": true,
+  "kind": "day",
+  "label_th": "3 มิ.ย. 2569",
+  "ly": [
+   "2025-06-04",
+   "2025-06-04"
+  ],
+  "ly_label_th": "4 มิ.ย. 2568",
+  "prev": [
+   "2026-05-27",
+   "2026-05-27"
+  ],
+  "prev_label_th": "27 พ.ค. 2569",
+  "reasons": {
+   "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569",
+   "prev": "ไม่มียอดขายในช่วงนี้"
+  }
+ },
+ "prev_range": [
+  "2026-05-27",
+  "2026-05-27"
+ ],
+ "reasons": {
+  "ly": "ข้อมูลเริ่ม 1 พ.ค. 2569",
+  "prev": "ไม่มียอดขายในช่วงนี้"
+ },
  "total": {
   "cogs": 900.0,
   "cost_pct": 90.0,
+  "cost_pct_ly_pp": null,
+  "cost_pct_prev_pp": null,
   "cost_per_head": 112.5,
   "customers": 8,
-  "delta_pct": 0.0,
+  "delta_pct": null,
   "gp_per_head": 12.5,
-  "prev_cost_per_head": 112.5,
+  "ly_cost_pct": null,
+  "ly_cost_per_head": null,
+  "ly_delta_pct": null,
+  "prev_cost_pct": null,
+  "prev_cost_per_head": null,
   "rev_per_head": 125.0,
   "revenue": 1000.0
  }

@@ -347,6 +347,34 @@ let _mce2SortCol = 'cost_pct', _mce2SortDir = -1;
 // and the action board never disagree about which dishes are red.
 const MCE_QUADRANT_PCT = 2;
 
+// PR-PP3 · the total cost of the dishes on the one period pattern. The dish table is month-grain (the month table): a finished
+// month compares with the whole month before and the month a year back, a year with the same closed months; the month still in
+// progress cannot be cut to date on a month table, so its comparison is "—" with the reason in "?" (as custtype, PR-PP2).
+async function _mceCompare(d) {
+  const host = document.getElementById('mce2Cmp'); if (!host) return;
+  const r = gPeriodResolve(); if (!r) { host.innerHTML = ''; return; }
+  const ym = x => x.slice(0, 7), back = (m, n) => { const y = +m.slice(0, 4), mo = +m.slice(5, 7) - n; const k = y * 12 + mo - 1; return `${Math.floor(k / 12)}-${String(k % 12 + 1).padStart(2, '0')}`; };
+  const kind = getPeriodKind();
+  let a = ym(r.cur[0]), b = ym(r.cur[1]);
+  if (!r.complete) b = back(b, 1);                            // a month table holds no to-date cut: closed months only
+  const first = (Array.isArray(window.allMonths) && allMonths[0]) || '';
+  const span = (x, y) => periodLabelTh(`${x}-01`, `${y}-${String(_prMlen(+y.slice(0, 4), +y.slice(5, 7))).padStart(2, '0')}`);
+  const note = 'ข้อมูลนี้เก็บเป็นรายเดือน เดือนที่ยังไม่จบจึงยังเทียบไม่ได้';
+  if (b < a) {
+    host.innerHTML = periodCmpHtml(null, null, null, { upGood: false, range: Object.assign({}, r, { reasons: { prev: note, ly: note } }) });
+    return;
+  }
+  const n = (+b.slice(0, 4) * 12 + +b.slice(5, 7)) - (+a.slice(0, 4) * 12 + +a.slice(5, 7)) + 1;
+  const pv = kind === 'year' ? [back(a, 12), back(b, 12)] : [back(a, n), back(b, n)], ly = [back(a, 12), back(b, 12)];
+  const q = (x, y) => { const u = new URLSearchParams({ limit: '10', month_from: x, month_to: y }); if (getBranch()) u.set('branch', getBranch());
+    return (first && x < first) ? Promise.resolve(null) : api(`${API}/api/buffet/menu-cost-efficiency?${u}`).catch(() => null); };
+  const [c, p, l] = await Promise.all([(a === ym(r.cur[0]) && b === ym(r.cur[1])) ? Promise.resolve(d) : q(a, b), q(pv[0], pv[1]), q(ly[0], ly[1])]);
+  const R = { kind, cur: [`${a}-01`, ''], prev: [`${pv[0]}-01`, ''], ly: [`${ly[0]}-01`, ''], complete: true,
+              label_th: span(a, b), prev_label_th: span(pv[0], pv[1]), ly_label_th: span(ly[0], ly[1]),
+              reasons: Object.assign({}, p ? {} : { prev: `ข้อมูลเริ่ม ${fmtMonth(first)}` }, l ? {} : { ly: `ข้อมูลปีก่อนเริ่ม ${fmtMonth(first)}` }) };
+  host.innerHTML = `<span class="text-xs" style="color:var(--text-secondary)">ต้นทุนรวม ${esc(R.label_th)}</span> ` +
+    periodCmpHtml(c ? c.total_cost : null, p ? p.total_cost : null, l ? l.total_cost : null, { upGood: false, range: R });
+}
 async function loadMCE() {
   const _fk = _filterKey();
   if (_tabLastKey.menuefficiency === _fk) return;
@@ -381,7 +409,9 @@ async function loadMCE() {
     ['Top 5 เมนู = % ต้นทุน', top5cost.toFixed(0) + '%',   '#f59e0b'],
     ['เมนูเสิร์ฟเยอะ+แพง',  hotCount + ' เมนู',         '#dc2626'],
     ['ต้นทุน/จาน เฉลี่ย',   fmt(avgCps),                   '#7a66b8'],
-  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-secondary)">${l}</span></span>`).join('');
+  ].map(([l, v, c]) => `<span class="px-3 py-1.5 rounded-lg text-xs" style="background:${c}15;color:${textInk(c)}"><b>${v}</b> <span style="color:var(--text-secondary)">${l}</span></span>`).join('')
+    + `<span id="mce2Cmp" class="pcmp-wrap"></span>`;
+  _mceCompare(d);
 
   // Quadrant scatter
   window._mce2Data = d.items;

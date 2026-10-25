@@ -15,10 +15,11 @@
     <label class="text-xs" style="color:var(--text-muted)">สาขา</label>
     <select id="ipBranch" data-branch-picker onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);min-width:170px"></select>
 
-    <label class="text-xs" style="color:var(--text-muted)">ช่วง</label>
+    <!-- PR-PP3: the period is the top bar's (สัปดาห์ · เดือน · ปี · กำหนดเอง); the range fields follow it (hidden) -->
+    <span class="hidden">
     <input type="date" id="ipFrom" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
-    <span class="text-xs" style="color:var(--text-muted)">→</span>
     <input type="date" id="ipTo" onchange="loadIngPurchase(true)" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:5px 8px;font-size:12.5px;background:var(--bg-input);color:var(--text-primary)">
+    </span>
 
     <span class="ml-auto flex flex-wrap items-center gap-2">
       <label class="text-xs" style="color:var(--text-muted)">จำนวนสัปดาห์ในแม่แบบ</label>
