@@ -74,11 +74,12 @@ test('ร้านของฉัน on a phone · เรื่องที่�
   await expect(chip).toContainText('เดือน');
   await chip.click();
   await expect(page.locator('#phPeriodSheet')).toBeVisible();
-  const n0 = urls.length;
+  const weekReq = page.waitForRequest(r => r.url().includes('/api/franchise/decide?kind=week'), { timeout: 60_000 });
   await page.locator('#phPeriodSheet [data-k="week"]').click();
   await page.locator('#phPeriodSheet .php-done').click();
+  await weekReq;                                    // the week reloads เรื่องที่ควรดู with kind=week
   await page.waitForFunction(() => /สัปดาห์/.test(document.getElementById('frcPeriodChip')?.innerText || ''), null, { timeout: 60_000 });
-  expect(urls.slice(n0).some(u => u.includes('/api/franchise/decide?kind=week'))).toBe(true);
+  await page.waitForFunction(() => { const b = document.getElementById('frcDecide'); return b && !/กำลังโหลด/.test(b.innerText); }, null, { timeout: 90_000 });
   // the page's text floor: nothing under 12 px in the decide cards
   const small = await page.evaluate(() => [...document.querySelectorAll('#frcDecide *')].filter(e => e.childNodes.length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())
     && parseFloat(getComputedStyle(e).fontSize) < 12).map(e => e.textContent.trim().slice(0, 30)));
