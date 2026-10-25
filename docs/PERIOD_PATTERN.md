@@ -149,6 +149,7 @@ and the chip's tooltip, so "—" is never bare.
 | Endpoint | Period | Comparisons |
 |---|---|---|
 | `/api/period/cost?kind=&pick=&date_from=&date_to=&by_branch=1` (new; cost.analysis / profit.pnl) | `windows` + `period_cost.compare` | cur / prev / ly + `change.prev` / `change.ly` + `reasons`; per branch |
+| `/api/cost/ingredient-groups?kind=&pick=&date_from=&date_to=&group=&branch=` (cost.analysis / profit.pnl) | `windows`; the period_cost plan (a part month before the day table: no figure + reason) | per branch and chain × group: cur figures, `prev` / `ly`, `change.prev` / `change.ly` (%), `cause.prev` / `cause.ly` = {total, customers, plates_per_head, cost_per_plate, main} in baht |
 | `/api/sales/cost-per-head?gran=day\|week\|month\|year&date=` | `windows` (was full calendar bounds, the day still trading in the focus) | `prev_*` and new `ly_*` per branch and total; `period`, `reasons`; cost unknown before the day table = None |
 | `/api/reports/pnl-bill` (+ `-drill`) | `windows` on the per-bill table's window (was full bounds) | `summary_prev` / `summary_ly` where the rolling per-bill window holds them, else None + reason |
 | `/api/pnl/monthly` | the month in progress: `mom_basis = 'to_date'` (GP to date vs the same days of last month, `period`, `gp_ly_pct`); the others `'full'` | was a part month's GP against a whole month's |
@@ -173,6 +174,7 @@ Cost pages (all on the top bar, no page-level period control; the old pickers ar
 | ต้นทุน BoM (bomcost) | สัปดาห์ · เดือน · ปี · กำหนดเอง | KPI chips; branch boxes on the same days |
 | P&L (pnl), P&L รายสาขา (pnlbranch) | เดือน · ปี · กำหนดเอง | tiles = the bar's period with chips; the month select is hidden |
 | Top 60 ต้นทุน/หัว (costheadtop60) | เดือน | month-grain report; no period comparison (branch vs chain) |
+| High Value Product Monitor (hvmonitor) | สัปดาห์ · เดือน · ปี · กำหนดเอง | `/api/cost/ingredient-groups` (+ `/menus`): 8 ingredient groups (backend/ingredient_groups.py) per branch on `periods.windows` + the period_cost month / day plan; changes vs เทียบช่วงก่อน in %, the cost change split ลูกค้า · กินต่อหัว · ต้นทุน/จาน (LMDI, baht); prev / ly in the sheet |
 | ต้นทุนครบ (coverage) | เดือน · ปี | plate coverage with chips (จุด) |
 | ประสิทธิภาพต้นทุนเมนู (menuefficiency) | เดือน · ปี | month-grain: the total cost vs the month before / a year back over closed months; the month in progress "—" |
 | ยอดซื้อวัตถุดิบ (ingpurchase) | สัปดาห์ · เดือน · ปี · กำหนดเอง | weekly import; chips on purchases, sales, % (จุด) |

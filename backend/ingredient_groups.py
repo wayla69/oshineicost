@@ -271,26 +271,37 @@ def compute(con, w: Dict, branch: Optional[str] = None, group: Optional[str] = N
             "mixed_menus": mixed}
 
 
-def menus(con, w: Dict, branch: str, slug: str, group: Optional[str] = None) -> Dict:
-    """The dishes of group `slug` at one branch on the current window (and their prev plates): the drill of a row."""
-    floor, cur, prev, _ly, reasons = _windows_data(con, dict(w, has_ly=False), branch, group)
+def menus(con, w: Dict, branch: Optional[str], slug: str, group: Optional[str] = None) -> Dict:
+    """The dishes of group `slug` at one branch (or every branch in scope when `branch` is empty) on the current window, with
+    their plates a period earlier: the drill of a row. `mixed` = the dish also counts in another group (at its full cost)."""
+    floor, cur, prev, _ly, reasons = _windows_data(con, dict(w, has_ly=False), branch or None, group)
     groups = sku_groups(con)
-    ids = [sid for sid, g in groups.items() if slug in g]
+    ids = {sid for sid, g in groups.items() if slug in g}
+
+    def by_dish(data):
+        acc: Dict[int, List[float]] = {}
+        for (br, sid), v in (data or {}).get("dish", {}).items():
+            if sid in ids and (not branch or br == branch):
+                a = acc.setdefault(sid, [0.0, 0.0, 0.0])
+                for i in range(3):
+                    a[i] += v[i]
+        return acc
+    cd, pd = by_dish(cur), by_dish(prev)
+    keys = sorted(set(cd) | set(pd))
     info = {r[0]: (r[1], r[2]) for r in con.execute(
-        f"SELECT sku_id, sku_code, description FROM skus WHERE sku_id IN ({','.join('?' * len(ids)) or 'NULL'})", ids)}
+        f"SELECT sku_id, sku_code, description FROM skus WHERE sku_id IN ({','.join('?' * len(keys)) or 'NULL'})", keys)}
     out = []
-    for sid in ids:
-        c = (cur or {}).get("dish", {}).get((branch, sid))
-        p = (prev or {}).get("dish", {}).get((branch, sid))
-        if not c and not p:
+    for sid in keys:
+        q, cost, costed = cd.get(sid, (0.0, 0.0, 0.0))
+        p = pd.get(sid)
+        if not q and not cost and not (p and p[0]):
             continue
-        q, cost, costed = c or (0.0, 0.0, 0.0)
         code, desc = info.get(sid, ("", ""))
         out.append({"sku_code": code, "name": desc, "plates": round(q, 1), "cost": round(cost, 2),
-                    "cost_per_plate": _r(cost / costed) if costed else None, "uncosted": bool(q and costed < q),
+                    "cost_per_plate": _r(cost / costed) if costed else None, "uncosted_plates": round(max(q - costed, 0.0), 1),
                     "prev_plates": round(p[0], 1) if p else None, "mixed": len(groups.get(sid, ())) > 1,
                     "groups": groups.get(sid, [])})
     out.sort(key=lambda m: (-m["cost"], -m["plates"]))
     per = P.public(w) or {}
-    return {"period": per, "branch": branch, "slug": slug, "label": LABELS.get(slug, slug), "menus": out,
+    return {"period": per, "branch": branch or None, "slug": slug, "label": LABELS.get(slug, slug), "menus": out,
             "reasons": {k: v for k, v in reasons.items() if v}, "cost_floor": floor}

@@ -324,7 +324,7 @@ def ingredient_groups_cost(kind: str = Query("month"), pick: Optional[str] = Que
 
 @router.get("/api/cost/ingredient-groups/menus")
 @ttl_cache
-def ingredient_groups_menus(branch: str = Query(...), slug: str = Query(...), kind: str = Query("month"),
+def ingredient_groups_menus(branch: Optional[str] = Query(None), slug: str = Query(...), kind: str = Query("month"),
                             pick: Optional[str] = Query(None), date_from: Optional[str] = Query(None),
                             date_to: Optional[str] = Query(None), group: Optional[str] = Query(None)):
     """The dishes of one group at one branch on the current window: plates, cost, cost / plate, prev plates; `mixed` =

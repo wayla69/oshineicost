@@ -9,11 +9,11 @@ _SLICES = ["01-core.js", "02-mgt-report.js", "03-tabs-main.js", "04-report-cost.
            "09-analysis-tabs.js", "09b-cost-pnl.js", "09c-mobile.js", "09d-bom-tools.js",
            "09e-menu-compare-bom.js", "10-ordering.js", "11-feedback.js", "12-checklist.js",
            "13-bom-center.js", "14-branch.js", "15-orderhub.js", "16-supplyhome.js", "17-franchise.js", "18-launcher.js",
-           "19-fmsg.js"]
+           "19-fmsg.js", "20-hvmonitor.js"]
 
 
 # 2026-10-08: five slices load eagerly (the login, the boot, the phone summary); the other
-# eighteen are inert data-lazy tags (PR-F4: + 19-fmsg.js) that ensureSlicesLoaded() (js/01-core.js) turns into
+# nineteen are inert data-lazy tags (PR-F4: + 19-fmsg.js; + 20-hvmonitor.js, High Value Product Monitor) that ensureSlicesLoaded() (js/01-core.js) turns into
 # scripts before the desktop shell boots — a phone on the summary never parses them.
 _EAGER = {"01-core.js", "03-tabs-main.js", "06-features.js", "09b-cost-pnl.js", "09c-mobile.js"}
 
