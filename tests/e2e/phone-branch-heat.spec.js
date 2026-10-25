@@ -73,7 +73,7 @@ async function open(browser, opts, { tab = 'overall', mode = 'fit', scheme = 'li
 
 async function shot(page, name, sel) {
   if (!SHOTS) return;
-  if (sel) { await page.locator(sel).first().scrollIntoViewIfNeeded(); await page.locator(sel).first().screenshot({ path: `${SHOTS}/${name}.png` }); }
+  if (sel) { await page.locator(sel).first().evaluate(e => e.scrollIntoView({ block: 'start' })); await page.waitForTimeout(300); await page.screenshot({ path: `${SHOTS}/${name}.png` }); }
   else await page.screenshot({ path: `${SHOTS}/${name}.png`, fullPage: false });
 }
 
@@ -185,6 +185,11 @@ test('desktop · no branch chip; the top bar keeps its branch select', async ({ 
   const { ctx, page, errors } = await open(browser, DESK);
   expect(await page.locator('#gpBranchChip:visible').count()).toBe(0);
   await expect(page.locator('select#selBranch')).toBeVisible();
+  // the heat map's cut weeks: Wk40 starts before 1 Oct, Wk43 ends after the last day with data (19 Oct) - both kept out of the normal
+  const cut = await page.evaluate(() => { const keep = window.__dataLastDate; window.__dataLastDate = '2026-10-19';
+    const s = [...heatPartialWeeks(['2026-W40', '2026-W41', '2026-W42', '2026-W43'], { from: '2026-10-01', to: '2026-10-31' })];
+    window.__dataLastDate = keep; return s; });
+  expect(cut).toEqual([0, 3]);
   expect(errors).toEqual([]);
   await ctx.close();
 });
@@ -198,7 +203,7 @@ for (const [label, opts, mode] of HEAT) {
       const { ctx, page, errors } = await open(browser, opts, { mode: mode || 'fit', scheme });
       if (LIVE) {                         // the server's own data: the weeks of the top bar's month (the owner's รายสัปดาห์)
         await page.locator('#heatmapGran').selectOption('weekly');
-        await page.waitForFunction(() => !!document.querySelector('#heatmapTable th') && /\d/.test(document.querySelector('#heatmapTable thead')?.textContent || ''), null, { timeout: 90_000 });
+        await page.waitForFunction(() => !!document.querySelector('#heatmapTable th') && /Wk/.test(document.querySelector('#heatmapTable thead')?.textContent || ''), null, { timeout: 90_000 });
         await page.waitForTimeout(1500);
       }
       for (const hm of ['value', 'vsnorm']) {
