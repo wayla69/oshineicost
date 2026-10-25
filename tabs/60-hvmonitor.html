@@ -1,6 +1,6 @@
 <div id="tab-hvmonitor" style="display:none">
   <style>
-    /* High Value Product Monitor (owner 2026-10-25): js/20-hvmonitor.js. Compact chips like the menu-spike track (32 px; 36 px on a phone,
+    /* High Value Product Monitor (owner 2026-10-25; DV4 two views: บาท | จำนวนจาน): js/20-hvmonitor.js. Compact chips like the menu-spike track (32 px; 36 px on a phone,
        44 px to tap through an ::after, never a bigger control); figures 14 px tabular, the change under them 12 px; the first column sticks. */
     .hvm-head { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 10px; }
     .hvm-ctl { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
@@ -37,12 +37,40 @@
     .hvm-cw { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
     #tab-hvmonitor .hvm-stick { position: sticky; left: 0; z-index: 1; background: var(--bg-card); }
     #tab-hvmonitor .hvm-chain .hvm-stick { background: var(--bg-subtle); }
-    #hvmMatrix tbody td.hvm-h1 { background: color-mix(in srgb, var(--bad-ink) 8%, var(--bg-card)); }
-    #hvmMatrix tbody td.hvm-h2 { background: color-mix(in srgb, var(--bad-ink) 15%, var(--bg-card)); }
-    #hvmMatrix tbody td.hvm-h3 { background: color-mix(in srgb, var(--bad-ink) 24%, var(--bg-card)); }
-    #hvmMatrix tbody td.hvm-h3 .hvm-v { color: var(--bad-ink); font-weight: 800; }
-    body.dark #hvmMatrix tbody td.hvm-h3 .hvm-v { color: var(--text-primary); }   /* the red ink on the red tint is below 4.5:1 in dark: the tint carries it */
-    #hvmMatrix tbody td.hvm-g1 { background: color-mix(in srgb, var(--good-ink) 10%, var(--bg-card)); }
+    /* DV4 · the view toggle (บาท | จำนวนจาน, cost roles), the answer line, สาขาที่ดัน, ดูทั้งหมด, the plates view (moved from the menu-spike card) */
+    .hvm-view { display: inline-flex; align-items: stretch; box-sizing: border-box; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--r-md); padding: 2px; gap: 2px; }
+    .hvm-view[hidden] { display: none; }
+    .hvm-view .gran-btn { position: relative; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box; height: 28px; min-height: 0; padding: 0 14px; font-size: 13px; font-weight: 600; line-height: 1; border-left: 0; }
+    .hvm-ans { margin: 0 0 12px; padding: 10px 12px; border: 1px solid var(--border); border-left: 4px solid var(--accent); border-radius: var(--r-md); background: var(--bg-subtle); }
+    .hvm-ans-row + .hvm-ans-row { margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--border); }
+    .hvm-ans-l { font-size: 15px; line-height: 1.35; color: var(--text-primary); }
+    .hvm-ans-k { font-weight: 700; }
+    .hvm-ans-v { font-size: 20px; font-weight: 800; font-variant-numeric: tabular-nums; }
+    .hvm-ans-2 .hvm-ans-v { font-size: 16px; }
+    .hvm-ans-pct { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .hvm-ans-colon { font-weight: 700; }
+    .hvm-ans-parts { font-size: 14px; font-weight: 700; line-height: 1.5; font-variant-numeric: tabular-nums; }
+    .hvm-part { white-space: nowrap; }
+    .hvm-dot { color: var(--text-secondary); font-weight: 400; }
+    .hvm-ans-s, .hvm-ans-vs { font-size: 12px; line-height: 1.4; color: var(--text-secondary); }
+    .hvm-ans-vs { margin-top: 6px; }
+    /* DV5: on a phone the answer strip above the page carries the answer (pageAnswer('hvmonitor', ...)): the box would repeat it */
+    body.ph-on #tab-hvmonitor:has(> .ph-ans) #hvmAnswer, body.ph-on .ph-ans[data-tab="hvmonitor"] + #tab-hvmonitor #hvmAnswer { display: none; }
+    .hvm-push { font-size: 12px; font-weight: 400; line-height: 1.4; color: var(--text-secondary); margin-top: 2px; white-space: normal; overflow-wrap: anywhere; max-width: 320px; }
+    .hvm-tbl .hvm-chg .hvm-v { font-weight: 800; }
+    .hvm-unit { font-weight: 500; color: var(--text-secondary); }
+    .hvm-tbl .hvm-cum { font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+    .hvm-more { margin: 8px 0 0; border: 1px solid var(--border); border-radius: var(--r-md); padding: 4px 12px; font-size: 13px; font-weight: 600; background: var(--bg-input); color: var(--text-primary); cursor: pointer; position: relative; }
+    .hvp-wk { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; margin: 0 0 10px; }
+    .hvp-wk:empty { display: none; }
+    .hvp-wg { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+    .hvp-wl { font-size: 13px; font-weight: 600; color: var(--text-secondary); white-space: nowrap; }
+    .hvp-sel { box-sizing: border-box; height: 32px; min-height: 0; padding: 0 6px; font-size: 13px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-input); color: var(--text-primary); max-width: 100%; min-width: 0; }
+    .hvp-vs { font-size: 12px; color: var(--text-secondary); margin: 0 0 6px; }
+    .hvp-cause { white-space: nowrap; }
+    .hvp-part { font-variant-numeric: tabular-nums; }
+    .hvp-cw { font-size: 12px; color: var(--text-secondary); white-space: nowrap; }
+    .hvp-unit { font-weight: 400; }
     /* the sheet: the in-app dialog (uiHelp) anchored to the bottom */
     .ui-help-back.hvm-sheet { align-items: flex-end; padding: 0; }
     .ui-help-back.hvm-sheet .ui-help-box { max-width: 760px; max-height: 86vh; border-radius: 16px 16px 0 0; }
@@ -79,16 +107,33 @@
       body.ph-on #tab-hvmonitor .ph-cl-fv { font-size: 17px; }
       body.ph-on #tab-hvmonitor .ph-cl-fs { font-size: 13px; }
       .hvm-d, .hvm-d .text-xs { font-size: 13px; }
+      .hvm-view { display: grid; grid-template-columns: 1fr 1fr; width: 100%; margin-top: 12px; }
+      .hvm-view .gran-btn { height: 32px; }
+      body.ph-fit .hvm-view { margin-top: 40px; }   /* the frame is scaled ~0.46: the "?" above keeps its 44 px tap area */
+      body.ph-on .hvm-view .gran-btn { min-height: 0 !important; min-width: 0; }
+      body.ph-on .hvm-view .gran-btn::after, body.ph-on .hvm-more::after { content: ''; position: absolute; left: 0; right: 0; top: -7px; bottom: -7px; }
+      .hvm-ans-v { font-size: 22px; }
+      .hvm-ans-2 .hvm-ans-v { font-size: 17px; }
+      .hvm-ans-parts { font-size: 15px; }
+      .hvm-ans-s, .hvm-ans-vs { font-size: 13px; }
+      .hvp-wk { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 8px; align-items: center; margin-bottom: 14px; }
+      .hvp-wg { display: contents; }
+      .hvp-sel { width: 100%; height: 36px; font-size: 14px; }
+      body.ph-on:not(.ph-fit) .hvp-sel, body.ph-on:not(.ph-fit) .hvp-sel:hover, body.ph-on:not(.ph-fit) .hvp-sel:focus { height: 44px; min-height: 44px !important; }
+      .hvm-more { height: 32px; min-height: 0; }
     }
   </style>
-  <div class="card p-5 mb-5" data-needs="/api/cost/ingredient-groups">
+  <div class="card p-5 mb-5" data-needs="/api/cost/ingredient-groups,/api/sales/ingredient-groups-plates">
     <div class="hvm-head">
-      <h2 class="section-title mb-0">ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา <span id="hvmRangeQ"></span> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-hvmonitor" title="คำอธิบาย">?</button></h2><template id="hlp-hvmonitor" data-title="High Value Product Monitor"><p><b>ช่วงเวลา</b> · ตามแถบด้านบน (สัปดาห์ · เดือน · ปี · กำหนดเอง) · ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบจำนวนวันเท่ากันของช่วงก่อน · ช่วงที่เทียบดูได้ที่ปุ่ม ? ข้างหัวข้อ · ไม่มีข้อมูลฐานแสดง —</p><p><b>กลุ่มวัตถุดิบ</b> · นับจากชื่อเมนู: แซลมอน (แซลมอน, แซลม่อน) · ทูน่า (ทูน่า, มากุโระ, โทโร่) · ฮามาจิ · กุ้งหวาน (กุ้งหวาน, อามะเอบิ, กุ้งแดงอาร์เจนติน่า, กุ้งอาร์เจนติน่า) · หอยเชลล์ (หอยเชลล์, โฮตาเตะ) · ปลาไหล (ปลาไหล, อูนางิ, อูนากิ) · หอยนางรม · เนื้อ (เนื้อ, วากิว, ลิ้นวัว ไม่รวมปลาเนื้อขาว เนื้อปู เนื้อปลา) · ไม่นับแพ็กเกจบุฟเฟ่ต์ · เมนูที่ชื่อตรงหลายกลุ่ม (เช่น ซาชิมิรวม) นับในทุกกลุ่มที่ตรงด้วยต้นทุนเต็มจาน และมีป้าย <b>หลายกลุ่ม</b> ในรายการเมนู</p><p><b>ต้นทุน/หัว</b> = ต้นทุนของกลุ่ม ÷ ลูกค้าทั้งหมดของสาขา · <b>จาน/หัว</b> = จานของกลุ่ม ÷ ลูกค้า · <b>ต้นทุน/จาน</b> = ต้นทุน ÷ จานที่มีต้นทุน · <b>สัดส่วนในต้นทุนอาหาร</b> = ต้นทุนของกลุ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขา · ต้นทุนต่อจานใช้ต้นทุนเดียวกับ P&amp;L และ GP (รายการต้นทุนต่อจานของเดือนนั้น) · เมนูที่ไม่มีต้นทุนนับจานแต่ไม่นับต้นทุน (ดูจำนวนในรายละเอียดของแถว)</p><p><b>ตัวแดงหนา</b> · ต้นทุน/หัวสูงกว่าทั้งเครือตั้งแต่ 20% · ▲ = เพิ่มขึ้น (ต้นทุนสูงขึ้นเป็นสีแดง) · มุมมอง <b>ทั้งหมด</b> แรเงาตามอัตราส่วนกับทั้งเครือของคอลัมน์นั้น สีแดงเข้มขึ้นเมื่อสูงกว่า สีเขียวเมื่อต่ำกว่าตั้งแต่ 10%</p><p><b>สาเหตุที่เปลี่ยน</b> · ต้นทุนของกลุ่ม = ลูกค้า × จานต่อหัว × ต้นทุนต่อจาน จึงแยกต้นทุนที่เปลี่ยนเทียบช่วงก่อนเป็นสามส่วนเป็นบาท (ลูกค้า · กินต่อหัว · ต้นทุน/จาน) ที่รวมกันเท่ากับส่วนที่เปลี่ยนพอดี ด้วยวิธีลอการิทึม (LMDI) · ในการแยกนี้นับเฉพาะจานที่มีต้นทุน · <b>สาเหตุหลัก</b> = ส่วนที่มีค่ามากที่สุด ส่วนที่เพิ่มมากที่สุดเป็นตัวแดง · ในมุมมองทั้งหมดแสดงเป็นคำสั้น ลูกค้า · กิน · ราคา</p><p>แตะแถวเพื่อดูทุกตัวเลข ช่วงนี้ · ช่วงก่อน · ปีก่อน และเมนูของกลุ่มที่สาขานั้น · CSV = ตารางที่แสดงอยู่</p></template>
+      <h2 class="section-title mb-0"><span id="hvmTitle">ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา</span> <span id="hvmRangeQ"></span> <button type="button" id="hvmHelpQ" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-hvmonitor" title="คำอธิบาย">?</button></h2><template id="hlp-hvmonitor" data-title="High Value Product Monitor · บาท"><p><b>ช่วงเวลาและสาขา</b> · ตามแถบด้านบน (สัปดาห์ · เดือน · ปี · กำหนดเอง และสาขาที่เลือก) · ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบจำนวนวันเท่ากันของช่วงก่อน · ช่วงที่เทียบดูได้ที่ปุ่ม ? ข้างหัวข้อ · ไม่มีข้อมูลฐานแสดง —</p><p><b>บรรทัดคำตอบ</b> · ต้นทุนของวัตถุดิบที่เปลี่ยนเทียบช่วงก่อนเป็นบาท และแยกเป็นสามส่วนที่รวมกันเท่ากับส่วนที่เปลี่ยนพอดี: <b>ราคา</b> (ต้นทุนต่อจาน) · <b>กิน</b> (จานต่อหัว) · <b>ลูกค้า</b> (จำนวนลูกค้า) · เมื่อสาเหตุหลักเป็นราคาและต้นทุนต่อจานขึ้นที่หลายสาขาพร้อมกัน แสดงจำนวนสาขา (เป็นเรื่องราคาซื้อหรือรายการราคารายเดือน ไม่ใช่เรื่องการตักเสิร์ฟของสาขา) · มุมมองทั้งหมดแสดงสองวัตถุดิบที่เปลี่ยนมากที่สุด</p><p><b>ทั้งหมด</b> · หนึ่งแถวต่อวัตถุดิบ เรียงตามบาทที่เปลี่ยน (ที่เพิ่มขึ้นก่อน) · <b>สาขาที่ดัน</b> = สามสาขาที่เปลี่ยนมากที่สุดในทิศเดียวกับทั้งเครือ · <b>ต้นทุน</b> = ต้นทุนรวมของวัตถุดิบในช่วงนี้ · แตะแถวเพื่อดูรายสาขาของวัตถุดิบนั้น</p><p><b>วัตถุดิบเดียว</b> · หนึ่งแถวต่อสาขา เรียงตามบาทที่เปลี่ยน · คอลัมน์ <b>เปลี่ยน</b> = บาทที่เปลี่ยนและสาเหตุหลักใต้ตัวเลข · <b>สะสม</b> = ส่วนที่เพิ่มขึ้นสะสมจากแถวบนลงล่างเทียบกับส่วนที่เพิ่มขึ้นทั้งหมด (อ่านถึงประมาณ 80% ก็พอ) · สาขาที่เปลี่ยนน้อยกว่า ฿1,000 อยู่ใน <b>ดูทั้งหมด</b> · <b>ต้นทุน/หัว</b> = ต้นทุนของกลุ่ม ÷ ลูกค้าทั้งหมดของสาขา · <b>จาน/หัว</b> = จานของกลุ่ม ÷ ลูกค้า · <b>ต้นทุน/จาน</b> = ต้นทุน ÷ จานที่มีต้นทุน · <b>สัดส่วนในต้นทุนอาหาร</b> = ต้นทุนของกลุ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขา · ต้นทุนต่อจานใช้ต้นทุนเดียวกับ P&amp;L และ GP (รายการต้นทุนต่อจานของเดือนนั้น) · เมนูที่ไม่มีต้นทุนนับจานแต่ไม่นับต้นทุน</p><p><b>กลุ่มวัตถุดิบ</b> · นับจากชื่อเมนู: แซลมอน (แซลมอน, แซลม่อน) · ทูน่า (ทูน่า, มากุโระ, โทโร่) · ฮามาจิ · กุ้งหวาน (กุ้งหวาน, อามะเอบิ, กุ้งแดงอาร์เจนติน่า, กุ้งอาร์เจนติน่า) · หอยเชลล์ (หอยเชลล์, โฮตาเตะ) · ปลาไหล (ปลาไหล, อูนางิ, อูนากิ) · หอยนางรม · เนื้อ (เนื้อ, วากิว, ลิ้นวัว ไม่รวมปลาเนื้อขาว เนื้อปู เนื้อปลา) · ไม่นับแพ็กเกจบุฟเฟ่ต์ · เมนูที่ชื่อตรงหลายกลุ่ม (เช่น ซาชิมิรวม) นับในทุกกลุ่มที่ตรงด้วยต้นทุนเต็มจาน และมีป้าย <b>หลายกลุ่ม</b> ในรายการเมนู</p><p><b>สาเหตุที่เปลี่ยน</b> · ต้นทุนของกลุ่ม = ลูกค้า × จานต่อหัว × ต้นทุนต่อจาน จึงแยกได้ด้วยวิธีลอการิทึม (LMDI) โดยนับเฉพาะจานที่มีต้นทุน · <b>สาเหตุหลัก</b> = ส่วนที่มีค่ามากที่สุด · ต้นทุนเพิ่มเป็นสีแดง ลดเป็นสีเขียว ส่วนของลูกค้าเป็นสีเทา</p><p>แตะแถวของสาขาเพื่อดูทุกตัวเลข ช่วงนี้ · ช่วงก่อน · ปีก่อน และเมนูของกลุ่มที่สาขานั้น · <b>จำนวนจาน</b> = มุมมองเดียวกันเป็นจำนวนจาน ไม่มีจำนวนเงิน · CSV = ตารางที่แสดงอยู่ (ทั้งหมด = ทุกสาขาคูณทุกวัตถุดิบ)</p></template><template id="hlp-hvmonitor-plates" data-title="วัตถุดิบมูลค่าสูง · จำนวนจาน"><p><b>สัปดาห์ · เทียบ</b> · ค่าเริ่มต้นเป็นสัปดาห์ล่าสุดเทียบสัปดาห์ก่อน (จันทร์–อาทิตย์ เลขสัปดาห์ W1–W53 ของปี) และเลือกเทียบกับสัปดาห์ใดก็ได้ ก่อนหรือหลังก็ได้ · สัปดาห์ที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบกับวันเดียวกันของอีกสัปดาห์ (เช่น จ.–ศ. เทียบ จ.–ศ.) · <b>ตามแถบด้านบน</b> = ใช้ช่วงเวลาของแถบด้านบนและเทียบกับช่วงก่อนจำนวนวันเท่ากัน · เมื่อเปลี่ยนช่วงเวลาที่แถบด้านบน มุมมองนี้ใช้ช่วงของแถบด้านบน · สาขาตามแถบด้านบนเสมอ · เครื่องนี้จำค่าที่เลือกไว้</p><p><b>เดิม</b> · ตัวเลขของช่วงที่เทียบ แสดงต่อจาก ▲▼ ใต้ตัวเลขทุกช่อง · เมื่อสัปดาห์ที่เทียบอยู่หลังสัปดาห์ที่เลือก แสดงเป็น <b>เทียบ</b></p><p><b>กลุ่มวัตถุดิบ</b> · กลุ่มเดียวกับมุมมองบาท นับจากชื่อเมนู: แซลมอน (แซลมอน, แซลม่อน) · ทูน่า (ทูน่า, มากุโระ, โทโร่) · ฮามาจิ · กุ้งหวาน (กุ้งหวาน, อามะเอบิ, กุ้งแดงอาร์เจนติน่า, กุ้งอาร์เจนติน่า) · หอยเชลล์ (หอยเชลล์, โฮตาเตะ) · ปลาไหล (ปลาไหล, อูนางิ, อูนากิ) · หอยนางรม · เนื้อ (เนื้อ, วากิว, ลิ้นวัว ไม่รวมปลาเนื้อขาว เนื้อปู เนื้อปลา) · ไม่นับแพ็กเกจบุฟเฟ่ต์ · เมนูที่ชื่อตรงหลายกลุ่ม (เช่น ซาชิมิรวม) นับในทุกกลุ่มที่ตรงด้วยต้นทุนเต็มจาน และมีป้าย <b>หลายกลุ่ม</b> ในรายการเมนู</p><p><b>จานที่ออก</b> = จำนวนจานของเมนูในกลุ่ม · <b>จาน/หัว</b> = จานที่ออก ÷ ลูกค้าทั้งหมดของสาขา · <b>ลูกค้า</b> = ลูกค้าทั้งหมดของสาขาในช่วงเดียวกัน · ▲▼ = เปลี่ยนเทียบช่วงที่เทียบ (จาน/หัวเพิ่มขึ้นเป็นสีแดง ลูกค้าเพิ่มขึ้นเป็นสีเขียว)</p><p><b>สาเหตุที่เปลี่ยน</b> · จานที่ออก = ลูกค้า × จานต่อหัว จึงแยกจานที่เปลี่ยนเป็นสองส่วน (ลูกค้า · กินต่อหัว) ที่รวมกันเท่ากับจานที่เปลี่ยนพอดี ด้วยวิธีลอการิทึม (LMDI) · <b>สาเหตุหลัก</b> = ส่วนที่มีค่ามากกว่า · คอลัมน์ <b>จากกินต่อหัว</b> = จานที่เปลี่ยนเพราะกินต่อหัวเปลี่ยน (เพิ่มขึ้นเป็นสีแดง) บรรทัดล่าง = ส่วนของลูกค้าและจานที่เปลี่ยนรวม · สาขาเรียงตามคอลัมน์นี้ (จานส่วนเกินก่อน) · <b>สะสม</b> = จานส่วนเกินสะสมจากแถวบนลงล่าง · สาขาที่กินต่อหัวเปลี่ยนน้อยกว่า 20 จานอยู่ใน <b>ดูทั้งหมด</b> · ในมุมมอง <b>ทั้งหมด</b> แสดงเป็นคำสั้น ลูกค้า หรือ กิน</p><p>มุมมองนี้แสดงเฉพาะจำนวนจาน ไม่มีจำนวนเงิน · CSV = ทุกสาขาคูณทุกวัตถุดิบของช่วงที่แสดง</p></template>
+      <div id="hvmView" class="hvm-view" role="group" aria-label="มุมมอง" hidden></div>
       <div class="hvm-ctl ph-tz-unit">
         <div class="hvm-chips-sc"><div id="hvmChips" class="hvm-chips" role="group" aria-label="วัตถุดิบ"></div></div>
         <button type="button" onclick="hvmExport()" class="hvm-csv">CSV</button>
       </div>
     </div>
+    <div id="hvpWeeks"></div>
+    <div id="hvmAnswer"></div>
     <div id="hvmBody"></div>
   </div>
 </div>

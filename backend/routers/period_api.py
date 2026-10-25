@@ -330,16 +330,25 @@ _SPIKE_KIND = {"day": "day", "week": "week", "mtd": "month", "month": "month", "
 def ingredient_groups_plates(period: str = Query("day"), date: Optional[str] = Query(None),
                              date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                              base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None),
-                             branch: Optional[str] = Query(None), group: Optional[str] = Query(None)):
-    """วัตถุดิบมูลค่าสูง · จำนวนจาน (owner 2026-10-25): the plates of the 8 ingredient groups (backend/ingredient_groups.py - the same
-    dishes as /api/cost/ingredient-groups) per branch and the chain, plates per head, customers, and why the plates moved (ลูกค้า ·
-    กินต่อหัว, LMDI, in plates). The menu-spike card's period: period = day | week | mtd | range (date = the focus day; date_from /
-    date_to for range), compared with the period before to date (periods.windows) or with base_from / base_to (the card's เทียบกับ).
-    No cost is read or returned, so it has the menu-spike card's gate (auth.MODULE_RULES), not a cost one."""
+                             branch: Optional[str] = Query(None), group: Optional[str] = Query(None),
+                             kind: Optional[str] = Query(None), pick: Optional[str] = Query(None)):
+    """วัตถุดิบมูลค่าสูง · จำนวนจาน (owner 2026-10-25; DV4: the จำนวนจาน view of High Value Product Monitor): the plates of the 8
+    ingredient groups (backend/ingredient_groups.py - the same dishes as /api/cost/ingredient-groups) per branch and the chain, plates
+    per head, customers, and why the plates moved (ลูกค้า · กินต่อหัว, LMDI, in plates). Two ways to name the period:
+      kind (+ pick / date_from / date_to) = the top bar's period, the same windows as /api/cost/ingredient-groups (DV4: the page follows
+      the top bar), compared with its period before to date;
+      period = day | week | mtd | range (date = the focus day; date_from / date_to for range) = the week pair (W vs W) with base_from /
+      base_to, or the period before to date (periods.windows).
+    No cost is read or returned, so it has a plates gate (auth.MODULE_RULES), not a cost one."""
     import ingredient_groups as IG
-    k = _SPIKE_KIND.get(period)
-    if not k:
-        raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
+    if kind:
+        if P.kind_of(kind, "") not in _KINDS:
+            raise HTTPException(400, "ช่วงเวลาไม่ถูกต้อง")
+        k, date = kind, pick
+    else:
+        k = _SPIKE_KIND.get(period)
+        if not k:
+            raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
     if k == "range" and not (date_from and date_to):
         raise HTTPException(400, "ช่วงที่กำหนดเองต้องระบุทั้งวันเริ่มต้น (date_from) และวันสิ้นสุด (date_to)")
     where, params = _scope(branch, group)

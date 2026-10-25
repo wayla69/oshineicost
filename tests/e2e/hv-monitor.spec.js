@@ -1,8 +1,9 @@
 // @ts-check
 // Owner 2026-10-25 · High Value Product Monitor (tab hvmonitor): the cost per head of 8 key ingredients at every branch.
 //   * 9 compact chips (ทั้งหมด + 8 groups), one period control on the page (the top bar);
-//   * one group: the comparison table, chain row on top (bold), sortable, สาเหตุที่เปลี่ยน with สาเหตุหลัก + the total + three parts;
-//   * ทั้งหมด: the branch x group matrix (heat, cause word, sticky first column);
+//   * DV4 (phone table review 2026-10-25): the answer line first (the change in baht split ราคา · กิน · ลูกค้า);
+//   * one group: the comparison table, chain row on top (bold), sorted by the change in baht, the change + its main cause in column 2, สะสม;
+//   * ทั้งหมด: one table of the 8 ingredients in baht (change, main cause, cost, share of food cost, สาขาที่ดัน), sorted by the change;
 //   * a row opens the sheet with now / prev / ly and the menus; desktop, 390 แตะง่าย (cards) and พอดีจอ (the table), light / dark; no console error.
 // The answer is mocked so the case exists whatever the fixture holds (HVM_LIVE=1 reads the server's own data instead).
 const { test, expect } = require('@playwright/test');
@@ -75,7 +76,7 @@ async function open(browser, opts, mode, scheme, slug) {
     await page.waitForFunction(() => typeof switchTab === 'function', null, { timeout: 60_000 });
     await page.evaluate(() => switchTab('hvmonitor'));
   }
-  await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmMatrix'), null, { timeout: 60_000 });
+  await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll'), null, { timeout: 60_000 });
   await page.waitForTimeout(700);                 // the fit frame / the cards settle
   return { ctx, page, errors };
 }
@@ -93,7 +94,7 @@ const CASES = [
 
 for (const [name, opts, mode] of CASES) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    test(`hvmonitor · ${name} · ${scheme}: one group, matrix, sheet`, async ({ browser }) => {
+    test(`hvmonitor · ${name} · ${scheme}: answer line, one group, ทั้งหมด, sheet`, async ({ browser }) => {
       const { ctx, page, errors } = await open(browser, opts, mode, scheme, 'salmon');
       const tag = `${name.replace(/\s+/g, '_')}_${scheme}`;
       // one period control: the top bar; the page draws no period bar of its own
@@ -105,21 +106,43 @@ for (const [name, opts, mode] of CASES) {
       const t = await page.evaluate(() => {
         const tb = document.getElementById('hvmTable');
         const first = tb && tb.tBodies[0].rows[0];
-        const cause = first && first.cells[6];
+        const chg = first && first.cells[1];
+        const ls = chg ? [...chg.querySelectorAll('[data-ph-line]')].map(e => e.textContent.trim()) : [];
+        const tot = r => { const v = r.cells[1].querySelector('.hvm-v').textContent.trim(); const n = Number(v.replace(/[^\d.]/g, '')) * (/M/.test(v) ? 1e6 : /K/.test(v) ? 1e3 : 1); return v.startsWith('−') ? -n : n; };
+        const br = tb ? [...tb.tBodies[0].rows].slice(1).filter(r => !r.hidden).map(tot) : [];
+        const ans = document.getElementById('hvmAnswer');
         return { rows: tb ? tb.tBodies[0].rows.length : 0, chain: first ? first.cells[0].textContent.trim() : '', chainBold: first ? getComputedStyle(first.cells[0]).fontWeight : '',
-          heads: tb ? [...tb.tHead.rows[0].cells].map(c => c.textContent.replace(/[↑↓]/g, '').trim()) : [],
-          causeLines: cause ? cause.querySelectorAll('.hvm-cause-part').length : 0, main: cause && cause.querySelector('.hvm-cause-main') ? cause.querySelector('.hvm-cause-main').textContent : '' };
+          heads: tb ? [...tb.tHead.rows[0].cells].map(c => c.textContent.replace(/[↑↓]/g, '').trim()) : [], ls, sorted: br.every((v, i) => !i || br[i - 1] >= v),
+          ans: ans ? ans.textContent.replace(/\s+/g, ' ').trim() : '', ansTop: ans ? ans.getBoundingClientRect().top : 9999, ansShown: !!ans && ans.getClientRects().length > 0,
+          strip: [...document.querySelectorAll('.ph-ans[data-tab="hvmonitor"] .ph-ans-i')].map(li => li.textContent.replace(/\s+/g, ' ').trim()),
+          tblTop: (/** @type {HTMLElement} */ (document.querySelector('#tab-hvmonitor .ph-cl')) || tb || document.body).getBoundingClientRect().top };   // touch: the cards replace the table
       });
       expect(t.rows).toBeGreaterThan(1);
       expect(t.chain).toBe('ทั้งเครือ');
       expect(Number(t.chainBold)).toBeGreaterThanOrEqual(700);
-      expect(t.heads).toEqual(['สาขา', 'ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน', 'สัดส่วนในต้นทุนอาหาร', 'ต้นทุนอาหาร/หัว', 'สาเหตุที่เปลี่ยน']);
-      expect(t.causeLines).toBe(3);
-      expect(t.main).toMatch(/^สาเหตุหลัก: /);
+      expect(t.heads).toEqual(['สาขา', 'เปลี่ยน', 'สะสม', 'ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน', 'สัดส่วนในต้นทุนอาหาร']);
+      expect(t.ls[0], 'column 2 = the change in baht').toMatch(/^[+−±]฿/);
+      expect(t.ls[1], 'its main cause under it').toMatch(/^(ราคา|กิน|ลูกค้า) [+−±]฿/);
+      expect(t.sorted, 'the branches by the change in baht').toBe(true);
+      // the answer line: the ingredient, the change in baht and its three causes, above the table
+      expect(t.ans).toMatch(/^แซลมอน [+−]฿[\d.]+[KM]? \([+−]\d+\.\d%\):/);
+      expect(t.ans).toMatch(/ราคา [+−±]฿[\d.]+[KM]? · กิน [+−±]฿[\d.]+[KM]? · ลูกค้า [+−±]฿[\d.]+[KM]?/);
+      expect(t.ans).toContain('1–19 ต.ค. 2569 เทียบ 1–19 ก.ย. 2569');
+      if (opts.isMobile) {
+        // a phone: the DV5 answer strip carries it (3 lines: the change and its causes, the branch, the trend); the box does not repeat it
+        expect(t.strip.length).toBe(3);
+        expect(t.strip[0]).toMatch(/^ทั้งเครือ · ต้นทุนที่เปลี่ยน\s*แซลมอน [+−]฿[\d.]+[KM]?\s*ราคา [+−±]฿[\d.]+[KM]? · กิน [+−±]฿[\d.]+[KM]? · ลูกค้า/);
+        expect(t.strip[2]).toMatch(/^ต้นทุนอาหาร\/หัว/);
+        expect(t.ansShown).toBe(false);
+      } else {
+        expect(t.strip).toEqual([]);
+        expect(t.ansShown).toBe(true);
+        expect(t.ansTop).toBeLessThan(t.tblTop);
+      }
       if (mode === 'touch') {
         await expect(page.locator('#tab-hvmonitor .ph-cl-card').first()).toBeVisible();
         const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
-        expect(figs).toEqual(['ต้นทุน/หัว', 'จาน/หัว', 'ต้นทุน/จาน']);
+        expect(figs).toEqual(['เปลี่ยน', 'สะสม', 'ต้นทุน/หัว']);
       } else {
         await expect(page.locator('#hvmTable')).toBeVisible();
         // text >= 12 px at 100 % (พอดีจอ shows the desktop layout zoomed to the screen; a double tap shows it at 100 %)
@@ -128,10 +151,11 @@ for (const [name, opts, mode] of CASES) {
         expect(small).toBe(0);
       }
       await shot(page, `hvm_salmon_${tag}`);
-      // sort: tap ต้นทุน/จาน twice flips the order
+      // sorted by เปลี่ยน; a tap on ต้นทุน/จาน sorts by it
       if (mode !== 'touch') {
-        await page.locator('#hvmTable th button', { hasText: 'สาเหตุที่เปลี่ยน' }).click();
-        await expect(page.locator('#hvmTable th[aria-sort="descending"]')).toContainText('สาเหตุที่เปลี่ยน');
+        await expect(page.locator('#hvmTable th[aria-sort="descending"]')).toContainText('เปลี่ยน');
+        await page.locator('#hvmTable th button', { hasText: 'ต้นทุน/จาน' }).click();
+        await expect(page.locator('#hvmTable th[aria-sort="descending"]')).toContainText('ต้นทุน/จาน');
       }
       // the sheet of a row: now / prev / ly and the menus
       if (mode === 'touch') {
@@ -150,25 +174,38 @@ for (const [name, opts, mode] of CASES) {
       await shot(page, `hvm_sheet_${tag}`);
       await page.keyboard.press('Escape');
       await expect(sheet).toHaveCount(0);
-      // ทั้งหมด: the matrix
+      // ทั้งหมด: one row per ingredient in baht, sorted by the change, สาขาที่ดัน under the name
       await page.locator('#hvmChips .gran-btn[data-g="all"]').click();
-      await page.waitForFunction(() => !!document.getElementById('hvmMatrix'));
+      await page.waitForFunction(() => !!document.getElementById('hvmAll'));
       const mx = await page.evaluate(() => {
-        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvmMatrix'));
+        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvmAll'));
         const th = [...tb.tHead.rows[0].cells].map(c => c.textContent.replace(/[↑↓]/g, '').trim());
-        const stick = getComputedStyle(tb.tBodies[0].rows[1].cells[0]).position;
-        return { th, stick, words: tb.querySelectorAll('.hvm-cw').length };
+        const rows = [...tb.tBodies[0].rows];
+        const v = r => { const s = r.cells[1].querySelector('.hvm-v').textContent.trim(); const n = Number(s.replace(/[^\d.]/g, '')) * (/M/.test(s) ? 1e6 : /K/.test(s) ? 1e3 : 1); return s.startsWith('−') ? -n : n; };
+        const vs = rows.map(v), up = vs.filter(x => x > 0), dn = vs.filter(x => x <= 0);
+        return { th, n: rows.length, push: tb.querySelectorAll('.hvm-push').length,
+          order: vs.slice(0, up.length).every(x => x > 0) && up.every((x, i) => !i || up[i - 1] >= x) && dn.every((x, i) => !i || Math.abs(dn[i - 1]) >= Math.abs(x)),
+          ans: document.getElementById('hvmAnswer').querySelectorAll('.hvm-ans-row').length,
+          strip: [...document.querySelectorAll('.ph-ans[data-tab="hvmonitor"] .ph-ans-k')].map(k => k.textContent.trim()) };
       });
-      expect(mx.th).toEqual(['สาขา', 'แซลมอน', 'ทูน่า', 'ฮามาจิ', 'กุ้งหวาน', 'หอยเชลล์', 'ปลาไหล', 'หอยนางรม', 'เนื้อ', 'ต้นทุนอาหาร/หัว']);
-      expect(mx.stick).toBe('sticky');
-      expect(mx.words).toBeGreaterThan(0);
-      // contrast >= 4.5:1 for the figures on a heat tint and the cause lines (light and dark)
+      expect(mx.th).toEqual(['วัตถุดิบ', 'เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน', 'สัดส่วนในต้นทุนอาหาร']);
+      expect(mx.n).toBe(8);
+      expect(mx.order, 'increases first, then decreases, each by size').toBe(true);
+      expect(mx.push, 'สาขาที่ดัน under each ingredient').toBeGreaterThan(0);
+      expect(mx.ans, 'ทั้งหมด: the two largest items').toBe(2);
+      if (opts.isMobile) await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.ph-ans[data-tab="hvmonitor"] .ph-ans-k')].map(k => k.textContent.trim())))
+        .toEqual(['ของแพงที่เปลี่ยนมากสุด', 'อันดับถัดไป', 'ต้นทุนอาหาร/หัว']);
+      if (mode === 'touch') {
+        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
+        expect(figs).toEqual(['เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน']);
+      }
+      // contrast >= 4.5:1 for the figures, the cause lines and สาขาที่ดัน (light and dark)
       const worst = await page.evaluate(() => {
         const rgb = s => { const m = String(s).match(/color\(srgb ([\d.]+) ([\d.]+) ([\d.]+)/); if (m) return [+m[1] * 255, +m[2] * 255, +m[3] * 255];
           const n = String(s).match(/[\d.]+/g) || ['0', '0', '0', '0']; return [+n[0], +n[1], +n[2], n[3] == null ? 1 : +n[3]]; };
         const lum = c => { const f = v => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c[0]) + 0.7152 * f(c[1]) + 0.0722 * f(c[2]); };
         const bgOf = el => { for (let e = el; e; e = e.parentElement) { const c = rgb(getComputedStyle(e).backgroundColor); if (c.length < 4 || c[3] >= 0.5) return c; } return [255, 255, 255]; };
-        const els = [...document.querySelectorAll('#hvmMatrix td[class*="hvm-h"] .hvm-v, #hvmMatrix td[class*="hvm-g"] .hvm-v, #hvmMatrix .hvm-cw')];
+        const els = [...document.querySelectorAll('#hvmAll .hvm-v, #hvmAll .hvm-d span, #hvmAll .hvm-push, #hvmAnswer .hvm-part, #hvmAnswer .hvm-ans-v, #hvmAnswer .hvm-ans-s')].filter(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
         const r = els.map(e => { const a = lum(rgb(getComputedStyle(e).color)), b = lum(bgOf(e));
           return { k: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05), d: `${e.className} ${getComputedStyle(e).color} on ${bgOf(e).join(',')}` }; });
         return r.sort((x, y) => x.k - y.k)[0] || { k: 99, d: '' };
@@ -176,7 +213,12 @@ for (const [name, opts, mode] of CASES) {
       expect(worst.k, worst.d).toBeGreaterThanOrEqual(4.5);
       await page.waitForTimeout(400);
       await shot(page, `hvm_all_${tag}`);
-      // a group chip switches back
+      // a row opens its ingredient; a group chip switches too
+      if (mode !== 'touch') {
+        await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#hvmAll tbody tr[data-slug="beef"] td')).click());
+        if (opts.isMobile && await page.locator('#msSheet .ph-rs-act button', { hasText: 'เปิดรายละเอียด' }).count()) await page.locator('#msSheet .ph-rs-act button', { hasText: 'เปิดรายละเอียด' }).click();
+        await expect(page.locator('#hvmChips .gran-btn.gran-active')).toHaveText('เนื้อ');
+      }
       await page.locator('#hvmChips .gran-btn[data-g="tuna"]').click();
       await page.waitForFunction(() => !!document.getElementById('hvmTable'));
       await expect(page.locator('#hvmChips .gran-btn.gran-active')).toHaveText('ทูน่า');

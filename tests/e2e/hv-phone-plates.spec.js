@@ -3,9 +3,9 @@
 //   1. "ทำให้เลือกช่วงเวลาได้ด้วยนะครับ" - on a phone the range chip by the title is ONE line ("1–19 ต.ค. 69 ▾") and opens a bottom sheet that
 //      holds the top bar's own period control (#gPeriod moved in): changing the kind there reloads the page (HVM, ยอดขายรายวัน, ต้นทุน/หัว);
 //      the HVM group chips (+ CSV) wrap into a 5-column grid, 5 + 5 (32 px drawn, 44 px to tap; owner 2026-10-25: "ไม่ต้องเลื่อน");
-//   2. "เอาไปโชว์ในเมนูยอดขาย ต่อท้าย เมนูใหม่ แต่โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน และให้เลือกช่วงเวลาได้" - ยอดขายรายวัน · the menu-spike
-//      card has วัตถุดิบมูลค่าสูง · จำนวนจาน right after เมนูใหม่: the 8 groups (+ ทั้งหมด), plates only, on the card's own period; desktop and
-//      390 both modes, light / dark; marketing sees it and no baht.
+//   2. "เอาไปโชว์ในเมนูยอดขาย ต่อท้าย เมนูใหม่ แต่โชว์เป็นจำนวนจานที่ออก ไม่ต้องจำนวนเงิน และให้เลือกช่วงเวลาได้" - วัตถุดิบมูลค่าสูง · จำนวนจาน:
+//      DV3 took it off the menu-spike card; DV4 made it the จำนวนจาน view of High Value Product Monitor: the 8 groups (+ ทั้งหมด), plates only,
+//      on the top bar's period (or a week pair) and branch; desktop and 390 both modes, light / dark; marketing sees it (no toggle) and no baht.
 // The answers are mocked so the cases exist whatever the fixture holds (HVP_LIVE=1 reads the server's own data instead).
 const { test, expect } = require('@playwright/test');
 
@@ -68,16 +68,17 @@ async function login(ctx, user) {
   return false;
 }
 
-async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user = '' }) {
+async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user = '', view = 'baht' }) {
   const ctx = await browser.newContext({ ...opts, colorScheme: scheme });
   const real = await login(ctx, user);
-  await ctx.addInitScript(([m, t, d]) => {
+  await ctx.addInitScript(([m, t, d, v]) => {
     try {
       localStorage.setItem('oshinei_phmode', JSON.stringify({ [t]: m })); localStorage.setItem('oshinei_dark', d ? '1' : '0');
       localStorage.setItem('oshinei_spike_period', JSON.stringify({ m: 'mtd', f: '', t: '' })); localStorage.setItem('oshinei_sphv_slug', 'salmon');
       localStorage.setItem('oshinei_hvm_slug', 'salmon'); localStorage.setItem('oshinei_gperiod', JSON.stringify({ kind: 'month', pick: '', from: '', to: '' }));
+      localStorage.setItem('oshinei_hvm_view', v); localStorage.setItem('oshinei_hvp_weeks', JSON.stringify({ follow: 1 }));   // the plates view on the top bar's period
     } catch (e) { /* none */ }
-  }, [mode, tab, scheme === 'dark']);
+  }, [mode, tab, scheme === 'dark', view]);
   if (user === 'marketing' && !real) {            // no marketing account on this server: the client sees the marketing role (the server's gate is in pytest)
     await ctx.route('**/api/auth/me', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, authenticated: true,
       username: 'mkt-e2e', role: 'marketing', display_name: 'การตลาด', names: {}, write_gated: false,
@@ -103,7 +104,7 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user =
     await page.evaluate(t => switchTab(t), tab);
   }
   if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
-  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmMatrix'), null, { timeout: 60_000 });
+  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 });
   await page.waitForFunction(() => { const c = document.getElementById('gpRangeChip'); return !!c && !c.hidden; }, null, { timeout: 60_000 }).catch(() => {});
   await page.waitForTimeout(900);
   return { ctx, page, errors, urls };
@@ -226,112 +227,124 @@ for (const mode of ['touch', 'fit']) {
   });
 }
 
-// ── 2 · ยอดขายรายวัน: วัตถุดิบมูลค่าสูง · จำนวนจาน right after เมนูใหม่ ──
+// ── 2 · High Value Product Monitor · จำนวนจาน (DV4: moved here from the menu-spike card) ──
 const CASES = [['desktop', DESK, 'fit'], ['390 แตะง่าย', PHONE, 'touch'], ['390 พอดีจอ', PHONE, 'fit']];
+const NOBAHT = () => /฿|บาท/.test(['hvmBody', 'hvmAnswer'].map(i => (document.getElementById(i) || {}).textContent || '').join(' '));
 for (const [name, opts, mode] of CASES) {
   for (const scheme of /** @type {const} */ (['light', 'dark'])) {
-    // DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
-    // and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
-    test.skip(`dailysales · ${name} · ${scheme}: the plates section after เมนูใหม่, one group and ทั้งหมด`, async ({ browser }) => {
+    test(`hvmonitor · จำนวนจาน · ${name} · ${scheme}: one group and ทั้งหมด, plates only, the top bar's period`, async ({ browser }) => {
       test.setTimeout(120_000);
-      const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'dailysales', mode, scheme });
+      const { ctx, page, errors, urls } = await open(browser, opts, { tab: 'hvmonitor', mode, scheme, view: 'plates' });
       const tag = `${name.replace(/\s+/g, '_')}_${scheme}`;
-      const order = await page.evaluate(() => [...document.querySelectorAll('#dsSpike > .sp-sec')].map(s => [...s.classList].find(c => c.startsWith('sp-sec-'))));
-      expect(order).toEqual(['sp-sec-old', 'sp-sec-new', 'sp-sec-hv', 'sp-sec-plates']);
-      // the card's own period: the section asks for what the card asks for
+      // the toggle: บาท | จำนวนจาน, จำนวนจาน on; the title and its help follow the view
+      await expect(page.locator('#hvmView .gran-btn.gran-active')).toHaveText('จำนวนจาน');
+      await expect(page.locator('#hvmTitle')).toHaveText('วัตถุดิบมูลค่าสูง · จำนวนจาน');
+      expect(await page.locator('#hvmHelpQ').getAttribute('data-help')).toBe('hlp-hvmonitor-plates');
+      // ตามแถบด้านบน: the section asks for the top bar's period (kind / pick), no week pair
       const hvU = new URL(urls.filter(u => u.includes('ingredient-groups-plates')).pop() || 'http://x/');
-      const spU = new URL(urls.filter(u => u.includes('/menu-spike?')).pop() || 'http://x/');
-      expect(hvU.searchParams.get('period')).toBe(spU.searchParams.get('period') || 'day');
-      const chips = page.locator('#spikeHvChips .gran-btn');
+      expect(hvU.searchParams.get('kind')).toBe('month');
+      expect(hvU.searchParams.get('base_from')).toBeNull();
+      expect(urls.filter(u => /\/api\/cost\/ingredient-groups\?/.test(u)), 'the plates view reads no cost').toEqual([]);
+      const chips = page.locator('#hvmChips .gran-btn');
       await expect(chips).toHaveCount(9);
       expect((await chips.first().boundingBox() || { height: 99 }).height).toBeLessThanOrEqual(34);
-      await page.locator('#spikeHvSec').scrollIntoViewIfNeeded();
-      if (opts.isMobile) {                                    // 5 + 4 (owner 2026-10-25: no sideways scroll), 44 px to tap (an ::after into the row gap)
+      if (opts.isMobile) {                                    // 5 + 5 with CSV (owner 2026-10-25: no sideways scroll), 44 px to tap; the toggle too
         const c = await page.evaluate(() => {
-          const bs = [...document.querySelectorAll('#spikeHvChips .gran-btn')], b = bs[2];
+          const bs = [...document.querySelectorAll('#hvmChips .gran-btn')], b = bs[2];
           b.scrollIntoView({ block: 'center' });
-          const r = b.getBoundingClientRect(), cx = r.left + r.width / 2, cy = r.top + r.height / 2;
-          const hit = dy => { const e = document.elementFromPoint(cx, cy + dy); return !!e && e.closest('.gran-btn') === b ? '' : `${dy}:${e ? e.tagName + '.' + e.className : 'none'}`; };
-          return { rows: new Set(bs.map(x => Math.round(x.getBoundingClientRect().top))).size, miss: [hit(-21), hit(21)].filter(Boolean).join(' | '),
+          const hit = (el, dy) => { const r = el.getBoundingClientRect(), e = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2 + dy);
+            return !!e && e.closest('.gran-btn') === el ? '' : `${dy}:${e ? e.tagName + '.' + e.className : 'none'}`; };
+          const v = document.querySelector('#hvmView .gran-btn');
+          return { rows: new Set(bs.map(x => Math.round(x.getBoundingClientRect().top))).size, miss: [hit(b, -21), hit(b, 21), hit(v, -21), hit(v, 21)].filter(Boolean).join(' | '),
             sw: document.documentElement.scrollWidth };
         });
         expect(c.rows, 'two rows').toBe(2);
-        expect(c.miss, 'a chip is 44 px to tap').toBe('');
+        if (mode === 'touch') expect(c.miss, 'a chip is 44 px to tap').toBe('');
         expect(c.sw).toBeLessThanOrEqual(390);
       }
-      if (mode === 'touch' && opts.isMobile) {
-        await expect(page.locator('#spikeHvSec .ph-cl-card').first()).toBeVisible();
-        const figs = await page.locator('#spikeHvSec .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
-        expect(figs).toEqual(['จานที่ออก', 'จาน/หัว', 'ลูกค้า']);
+      // the answer line in plates: the group, its plates and the two causes (a phone: the DV5 strip, the box hides)
+      const ans = (await page.locator('#hvmAnswer').textContent() || '').replace(/\s+/g, ' ').trim();
+      expect(ans).toMatch(/^แซลมอน [\d,]+ จาน \([▲▼]?\d+\.\d%\):\s?ลูกค้า [+−±][\d,]+ จาน · กิน [+−±][\d,]+ จาน/);
+      const strip = await page.evaluate(() => [...document.querySelectorAll('.ph-ans[data-tab="hvmonitor"] .ph-ans-k')].map(k => k.textContent.trim()));
+      if (opts.isMobile) {
+        expect(strip).toEqual(['แซลมอน · จานที่ออก', 'กินต่อหัวเพิ่มมากสุด', 'จาน/หัว']);
+        await expect(page.locator('#hvmAnswer')).toBeHidden();
       } else {
-        await expect(page.locator('#spikeHvTable')).toBeVisible();
+        expect(strip).toEqual([]);
+        await expect(page.locator('#hvmAnswer')).toBeVisible();
+      }
+      if (mode === 'touch' && opts.isMobile) {
+        await expect(page.locator('#tab-hvmonitor .ph-cl-card').first()).toBeVisible();
+        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
+        expect(figs).toEqual(['จากกินต่อหัว', 'จาน/หัว', 'จานที่ออก']);
+      } else {
+        await expect(page.locator('#hvpTable')).toBeVisible();
       }
       const t = await page.evaluate(() => {
-        const tb = /** @type {HTMLTableElement} */ (document.getElementById('spikeHvTable'));
-        const first = tb.tBodies[0].rows[0], cause = first.cells[4];
+        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvpTable'));
+        const first = tb.tBodies[0].rows[0], cause = first.cells[1];
+        const eat = r => { const v = r.cells[1].querySelector('.hvm-v').textContent.trim(); const n = Number(v.replace(/[^\d.]/g, '')); return v.startsWith('−') ? -n : n; };
+        const br = [...tb.tBodies[0].rows].slice(1).filter(r => !r.hidden).map(eat);
         return { heads: [...tb.tHead.rows[0].cells].map(c => c.textContent.trim()), chain: first.cells[0].textContent.trim(),
-          parts: cause.querySelectorAll('.sp-hv-part').length, main: (cause.querySelector('.sp-hv-main') || {}).textContent || '',
-          baht: /฿|บาท/.test(document.getElementById('spikeHvSec').textContent) };
+          lines: [...cause.querySelectorAll('[data-ph-line]')].map(e => e.textContent.trim()), sorted: br.every((v, i) => !i || br[i - 1] >= v) };
       });
-      expect(t.heads).toEqual(['สาขา', 'จานที่ออก', 'จาน/หัว', 'ลูกค้า', 'สาเหตุที่เปลี่ยน']);
+      expect(t.heads).toEqual(['สาขา', 'จากกินต่อหัว', 'สะสม', 'จานที่ออก', 'จาน/หัว', 'ลูกค้า']);
       if (!LIVE) expect(t.chain).toBe('ทั้งเครือ');
-      expect(t.parts, 'ลูกค้า · กินต่อหัว, one part per line').toBe(2);
-      expect(t.main).toMatch(/^สาเหตุหลัก: (ลูกค้า|กินต่อหัว|—)$/);
-      expect(t.baht, 'plates only').toBe(false);
+      expect(t.lines[0], 'the plates from eating, column 2').toMatch(/^[+−±][\d,]+$/);
+      expect(t.lines[1]).toMatch(/^ลูกค้า [+−±][\d,]+ · รวม [+−±][\d,]+/);
+      expect(t.sorted, 'the branches by the plates from eating more').toBe(true);
+      expect(await page.evaluate(NOBAHT), 'plates only').toBe(false);
       if (mode !== 'touch' || !opts.isMobile) {
         // text >= 12 px at 100 % (พอดีจอ shows the desktop layout zoomed; a double tap shows it at 100 %)
-        const small = await page.evaluate(() => [...document.querySelectorAll('#spikeHvTable td, #spikeHvTable td *')]
+        const small = await page.evaluate(() => [...document.querySelectorAll('#hvpTable td, #hvpTable td *')]
           .filter(e => e.textContent.trim() && e.getClientRects().length).map(e => parseFloat(getComputedStyle(e).fontSize)).filter(px => px < 12).length);
         expect(small).toBe(0);
-        const w = await page.evaluate(WORST, '#spikeHvTable .sp-hv-d, #spikeHvTable .sp-hv-part, #spikeHvTable .sp-hv-main, #spikeHvTable .sp-v');
+        const w = await page.evaluate(WORST, opts.isMobile ? '#hvpTable .hvm-d, #hvpTable .hvp-part, #hvpTable .hvm-v' : '#hvpTable .hvm-d, #hvpTable .hvp-part, #hvpTable .hvm-v, #hvmAnswer .hvm-part, #hvmAnswer .hvm-ans-s');
         expect(w.k, w.d).toBeGreaterThanOrEqual(4.5);
       }
-      await page.locator('#spikeHvSec .sp-h').scrollIntoViewIfNeeded();
-      await shot(page, `ds_hv_salmon_${tag}`);
+      await shot(page, `hvp_salmon_${tag}`);
       // ทั้งหมด: branches x groups, plates / head with the change and the cause word
-      await page.locator('#spikeHvChips .gran-btn[data-g="all"]').click();
-      await page.waitForFunction(() => !!document.getElementById('spikeHvMatrix'));
+      await page.locator('#hvmChips .gran-btn[data-g="all"]').click();
+      await page.waitForFunction(() => !!document.getElementById('hvpMatrix'));
       const mx = await page.evaluate(() => {
-        const tb = /** @type {HTMLTableElement} */ (document.getElementById('spikeHvMatrix'));
-        return { th: [...tb.tHead.rows[0].cells].map(c => c.textContent.replace(/\(จาน\/หัว\)/, '').trim()), words: tb.querySelectorAll('.sp-hv-cw').length,
-          baht: /฿|บาท/.test(tb.textContent) };
+        const tb = /** @type {HTMLTableElement} */ (document.getElementById('hvpMatrix'));
+        return { th: [...tb.tHead.rows[0].cells].map(c => c.textContent.replace(/\(จาน\/หัว\)/, '').trim()), words: tb.querySelectorAll('.hvp-cw').length };
       });
       expect(mx.th).toEqual(['สาขา', 'แซลมอน', 'ทูน่า', 'ฮามาจิ', 'กุ้งหวาน', 'หอยเชลล์', 'ปลาไหล', 'หอยนางรม', 'เนื้อ', 'ลูกค้า']);
       expect(mx.words).toBeGreaterThan(0);
-      expect(mx.baht).toBe(false);
+      expect(await page.evaluate(NOBAHT)).toBe(false);
       if (mode !== 'touch' || !opts.isMobile) {
-        const w = await page.evaluate(WORST, '#spikeHvMatrix .sp-hv-d, #spikeHvMatrix .sp-hv-cw, #spikeHvMatrix .sp-v');
+        const w = await page.evaluate(WORST, '#hvpMatrix .hvm-d, #hvpMatrix .hvp-cw, #hvpMatrix .hvm-v');
         expect(w.k, w.d).toBeGreaterThanOrEqual(4.5);
       }
-      await page.locator('#spikeHvSec .sp-h').scrollIntoViewIfNeeded();
       await page.waitForTimeout(400);
-      await shot(page, `ds_hv_all_${tag}`);
-      // the card's period chips move the section too
+      await shot(page, `hvp_all_${tag}`);
+      // the top bar's period moves the view (it follows the bar)
       const n0 = urls.length;
-      await page.locator('#spikeModes .gran-btn[data-m="week"]').click();
-      await expect.poll(() => urls.slice(n0).some(u => u.includes('ingredient-groups-plates') && new URL(u).searchParams.get('period') === 'week'), { timeout: 30_000 }).toBe(true);
-      await page.locator('#spikeHvChips .gran-btn[data-g="salmon"]').click();
-      await expect(page.locator('#spikeHvChips .gran-btn.gran-active')).toHaveText('แซลมอน');
+      await page.evaluate(() => gPeriodSet({ kind: 'week' }));
+      await expect.poll(() => urls.slice(n0).some(u => u.includes('ingredient-groups-plates') && new URL(u).searchParams.get('kind') === 'week'), { timeout: 30_000 }).toBe(true);
+      await page.locator('#hvmChips .gran-btn[data-g="salmon"]').click();
+      await expect(page.locator('#hvmChips .gran-btn.gran-active')).toHaveText('แซลมอน');
+      // back to บาท: the cost view and its answer line
+      await page.locator('#hvmView .gran-btn[data-v="baht"]').click();
+      await page.waitForFunction(() => !!document.getElementById('hvmTable'));
+      await expect(page.locator('#hvmTitle')).toHaveText('ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา');
       expect(errors).toEqual([]);
       await ctx.close();
     });
   }
 }
 
-// DV3 (2026-10-25): the plates section (วัตถุดิบมูลค่าสูง · จำนวนจาน) left the menu-spike card; DV4 brings it into High Value Product Monitor
-// and re-enables these cases there. Skipped until then; the endpoint /api/sales/ingredient-groups-plates is unchanged.
-test.skip('marketing: the plates section is there, no baht anywhere on the card, no cost request', async ({ browser }) => {
+test('marketing: High Value Product Monitor opens on จำนวนจาน only - no toggle, no baht, no cost request', async ({ browser }) => {
   test.setTimeout(120_000);
-  const { ctx, page, errors, urls } = await open(browser, DESK, { tab: 'dailysales', user: 'marketing' });
+  const { ctx, page, errors, urls } = await open(browser, DESK, { tab: 'hvmonitor', user: 'marketing', view: 'baht' });
   expect(await page.evaluate(() => window.AUTH && window.AUTH.role)).toBe('marketing');
-  await expect(page.locator('#spikeHvSec #spikeHvTable')).toBeVisible();
-  const txt = await page.locator('#spikeHvSec').textContent();
-  expect(/฿|บาท|ต้นทุน/.test(txt || '')).toBe(false);
-  // the rest of the card has no cost either (a tier label such as ฿789 is a price, not a cost)
-  expect(await page.locator('#dsSpike .sp-cost-td, #spikeCost, #spikeNewCostChip').count()).toBe(0);
+  expect(await page.evaluate(() => tabAllowed('hvmonitor'))).toBe(true);
+  await expect(page.locator('#hvpTable')).toBeVisible();
+  await expect(page.locator('#hvmView')).toBeHidden();                        // a stored บาท never reaches a role without cost
+  expect(await page.evaluate(NOBAHT)).toBe(false);
   expect(urls.filter(u => /\/api\/cost\//.test(u))).toEqual([]);
-  await page.locator('#spikeHvSec').scrollIntoViewIfNeeded();
-  await shot(page, 'ds_hv_marketing_desktop');
+  await shot(page, 'hvp_marketing_desktop');
   expect(errors).toEqual([]);
   await ctx.close();
 });
