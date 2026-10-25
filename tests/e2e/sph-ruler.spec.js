@@ -102,7 +102,17 @@ for (const [name, opts, mode, scheme] of CASES) {
     if (SHOTS) await page.locator('#sphRuler').locator('xpath=..').screenshot({ path: `${SHOTS}/after-${name.replace(/\s+/g, '-')}.png` });
     if (name === 'แตะง่าย 320') {
       // the collision guard: a card too narrow for five labels keeps P25 · มัธยฐาน · P75; P10/P90 keep the tick and the tooltip
-      await page.evaluate(() => { /** @type {HTMLElement} */ (document.getElementById('sphRuler')).style.width = '220px'; });
+      // The width is taken from the labels' own widths (fonts differ between Windows and the Linux CI runner): just wide enough for
+      // P25 · มัธยฐาน · P75 side by side (25 % apart), which is far too narrow for P10/P25 (15 % apart) - so the guard must fire.
+      const narrow = await page.evaluate(() => {
+        const ruler = /** @type {HTMLElement} */ (document.getElementById('sphRuler'));
+        const w = Object.fromEntries([...ruler.querySelectorAll('.sph-mk')].map(m => [m.getAttribute('data-at'), /** @type {HTMLElement} */ (m.querySelector('.sph-lbl')).getBoundingClientRect().width]));
+        const need = Math.max((w[25] + w[50]) / 2 + 8, (w[50] + w[75]) / 2 + 8) / 0.25;
+        const clash = (w[10] + w[25]) / 2 + 4 > 0.15 * need;
+        ruler.style.width = Math.ceil(need) + 'px';
+        return { need: Math.ceil(need), clash };
+      });
+      expect(narrow.clash, `at ${narrow.need} px P10/P25 must collide`).toBe(true);
       await page.waitForTimeout(300);
       const n = await page.evaluate(READ);
       expect(n.marks.filter(m => m.shown).map(m => m.at)).toEqual([25, 50, 75]);
