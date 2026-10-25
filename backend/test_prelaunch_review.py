@@ -97,7 +97,7 @@ def test_no_english_sentences_left_on_the_cost_and_pnl_pages_and_fc_percent_is_c
     for rel, s in (("tabs/45-pnl.html", "Click headers to sort"), ("tabs/43-cost.html", "unlock the full margin"),
                    ("js/05-pnl-settings.js", "Margin rate used"), ("js/05-pnl-settings.js", "Est. GP/bill"), ("js/07-home.js", "market context unavailable")):
         assert s not in _src(rel), (rel, s)
-    assert "fcRaw != null && fcRaw <= 999 ? fcRaw : null" in _src("js/08-guest-buffet.js")
+    assert "return v != null && v <= 999 ? v : null;" in _src("js/08-guest-buffet.js")   # DV1: mceFcPct (test_dv1_numbers.py runs it)
 
 
 # ── found by the flow runs ───────────────────────────────────────────────────────────────────────────────────────────────────

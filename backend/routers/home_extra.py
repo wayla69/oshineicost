@@ -270,11 +270,16 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         reasons = [dict(r) for r in con.execute(
             f"""SELECT CASE WHEN x.reason_id=0 THEN 'ไม่ระบุเหตุผล'
                          ELSE COALESCE(rr.reason_desc, 'รหัส '||x.reason_id) END reason,
-                   SUM(x.bills) bills, ROUND(SUM(x.amount)) amount
+                   SUM(x.bills) bills, ROUND(SUM(x.amount)) amount,
+                   -- DV1 (phone table review 2026-10-25): a code the POS reason list does not hold (รหัส -1: one bill of
+                   -- ฿242K) is a data fault, not a reason - flagged so it is checked, never read as a cancel cause
+                   CASE WHEN x.reason_id<>0 AND MAX(rr.reason_desc) IS NULL THEN 1 ELSE 0 END abnormal
                 FROM pos_cancel_bill x JOIN branches b ON b.branch_id=x.branch_id
                 LEFT JOIN pos_cancel_reason rr ON rr.reason_id=x.reason_id
                 WHERE {tw} AND x.period_month=:m
                 GROUP BY x.reason_id ORDER BY bills DESC""", pm).fetchall()]
+        for r in reasons:
+            r["abnormal"] = bool(r["abnormal"])
         s = con.execute(f"SELECT SUM(x.bills) bills, ROUND(SUM(x.amount)) amount {JN}", pm).fetchone()
         # context: valid bills that month (to express cancel rate)
         vb = con.execute(

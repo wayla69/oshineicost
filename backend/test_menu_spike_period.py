@@ -819,6 +819,17 @@ def test_a_menu_back_after_21_days_is_a_new_menu_from_that_day(monkeypatch):
     assert all("returning" not in s for s in r["spikes"])
 
 
+def test_a_return_before_the_period_counts_only_the_periods_plates(monkeypatch):
+    # DV1 (phone table review 2026-10-25, §5 no. 1): back on 28 Jul, period = one day (20 Aug) - the plates are that day's 10, not
+    # the 240 since 28 Jul divided by one day's customers (the 1,515 plates / 2,295 per 100 customers of the review)
+    con = _db(_back_plan(dt.date(2026, 7, 6), dt.date(2026, 7, 28)))
+    m = _nm(_call(con, monkeypatch, threshold=1.0, date="2026-08-20"), "เมนูเล็ก")
+    assert (m["qty"], m["per_day"], m["returned_on"]) == (10, 10.0, "2026-07-28")
+    # this week (Mon 17 .. Thu 20 Aug): 4 days x 10
+    m = _nm(_call(con, monkeypatch, threshold=1.0, period="week", date="2026-08-20"), "เมนูเล็ก")
+    assert (m["qty"], m["per_day"]) == (40, 10.0)
+
+
 def test_a_20_day_gap_or_a_closed_branch_is_not_a_return(monkeypatch):
     # 20 days without a sale (6 .. 25 Jul): an existing menu
     r = _call(_db(_back_plan(dt.date(2026, 7, 6), dt.date(2026, 7, 26))), monkeypatch, threshold=1.0, date="2026-08-10")

@@ -17,8 +17,8 @@ from typing import Optional
 import json as _json
 import io as _io
 from rules import VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
-from rules import GRAND_MENU_FROM, TIER_EXTRA, tier_codes_between, tier_label
-from targets import target_revenue_total, targets_for_month
+from rules import GRAND_MENU_FROM, TIER_EXTRA, month_projection, tier_codes_between, tier_label
+from targets import attainment, target_revenue_total, targets_for_month
 from core import (
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _iso_week_sql, _unified_cogs_expr,
@@ -1938,6 +1938,70 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
     return {"branches": branches}
 
 
+def _cph_split(q_cur, cost_cur, q_prev, cost_prev, covers_cur, covers_prev) -> dict:
+    """DV1 (review §5 no. 2) · a dish's change in cost per head = price_delta (its cost per plate, at last period's plates
+    per head) + usage_delta (its plates per head, at today's cost per plate). usage_delta is what วิเคราะห์เมนู compares
+    (it holds the cost constant), so "+฿11.39" here and "-0.1 %" there are the same dish: price +฿11.40, plates -฿0.01.
+    {} when there is nothing to split (no covers or no plates now)."""
+    if not (covers_cur and covers_prev and q_cur > 0):
+        return {}
+    u_cur = cost_cur / q_cur
+    u_prev = cost_prev / q_prev if q_prev > 0 else u_cur
+    return {"usage_delta": round((q_cur / covers_cur - q_prev / covers_prev) * u_cur, 2),
+            "price_delta": round(q_prev / covers_prev * (u_cur - u_prev), 2)}
+
+
+def _cost_riser_action(m0: dict, pword: str, th: bool) -> str:
+    """The to-do line for the dish whose cost per head rose most, naming the cause (DV1, review §5 no. 2): the cost per
+    plate (check the price list) or the plates per head (check portioning)."""
+    pdl, udl = m0.get("price_delta"), m0.get("usage_delta")
+    if pdl is not None and udl is not None:
+        by_price = abs(pdl) >= abs(udl)
+
+        def sg(v):
+            return ("+" if v > 0 else "−" if v < 0 else "") + f"฿{abs(v):.2f}"
+        split_th = f": ราคาต่อจาน {sg(pdl)} · กินต่อหัว {sg(udl)}"
+        split_en = f": cost per plate {sg(pdl)} · plates per head {sg(udl)}"
+        act_th = "ตรวจสอบราคาต่อจาน / ราคาวัตถุดิบ" if by_price else "ตรวจสอบการตักเสิร์ฟ"
+        act_en = "check the dish cost / ingredient prices" if by_price else "check portioning"
+    else:
+        split_th = split_en = ""
+        act_th, act_en = "ตรวจสอบการตักเสิร์ฟ / ต้นทุนวัตถุดิบ", "check portioning / ingredient cost"
+    if th:
+        return (f"{m0['menu']} ต้นทุนต่อหัวเพิ่มขึ้น ฿{m0['delta']:.2f} เทียบ{pword}ก่อน "
+                f"(฿{m0['cost_per_head']:.2f}/หัว){split_th} — {act_th}")
+    return (f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
+            f"(฿{m0['cost_per_head']:.2f}/head){split_en} — {act_en}.")
+
+
+def _mgt_target_scope(con, ctx) -> None:
+    """DV1 (phone table review 2026-10-25, §5 no. 5) · targets on one basis, in place on ctx (monthly report only).
+    A month in progress measures each branch on its month-end projection, as the chain does: its sales to date x the
+    chain's projection factor (pace.projected / to date, weekday-fair), so the branches' projections sum to the chain's
+    and "18 branches under 90 %" no longer divides 19 days of sales by a whole month's target (mtd_vs_target_pct keeps
+    the to-date ratio). The chain's % of target is like for like (targets.attainment): the branches with a target that
+    sold this month - pace.target / proj_vs_target_pct follow it, pace.target_scope says what was left out."""
+    pace, branches, cs = ctx.get("pace"), ctx.get("branches") or [], ctx.get("cs")
+    if ctx.get("period") != "monthly" or not pace or not cs or pace.get("month") != cs.strftime("%Y-%m"):
+        return
+    mtd = pace.get("mtd_revenue")
+    live = not ctx.get("month_complete") and pace.get("projected") and mtd
+    f = pace["projected"] / mtd if live else 1.0
+    if live:
+        for b in branches:
+            if b.get("target"):
+                b["mtd_vs_target_pct"] = b["vs_target_pct"]
+                b["projected"] = round((b["revenue"] or 0) * f)
+                b["vs_target_pct"] = round(b["projected"] / b["target"] * 100, 1)
+                b["target_basis"] = "projected"
+    att = attainment(con, pace["month"], {b["branch"]: b["revenue"] for b in branches}, f, ctx.get("branch"), ctx.get("group"))
+    pace["target"] = att["target"]
+    pace["proj_vs_target_pct"] = att["pct"]
+    pace["target_scope"] = att
+    ctx["target"] = att["target"]
+    ctx["target_projected"] = att["projected"]
+
+
 def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
     # names this section hands on; None where a period path never assigns one
     cash_heavy = None
@@ -2178,7 +2242,12 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
         c_prev = cph(cost_prev, covers_prev)
         if not c_cur and not c_prev:
             continue
+        # DV1 (review §5 no. 2): the change splits into the cost per plate (each month's dish cost) and the plates per head
+        # at today's cost - the latter is what วิเคราะห์เมนู compares (it holds the cost constant), so both pages tie out
+        split = (_cph_split(r["qty"] or 0, cost_cur, (prev_m[sid]["qty"] if sid in prev_m else 0) or 0, cost_prev,
+                            covers_cur, covers_prev) if cmp_ok else {})
         menu_rows.append({
+            **split,
             "menu": clean(r["description"] or r["sku_code"]),
             "qty": round(r["qty"] or 0), "cost": round(cost_cur),
             "cost_per_head": c_cur,
@@ -2591,6 +2660,12 @@ def _mgt_gp(con, *, cmp_ok, cost_available, cost_src, cur, daily_min, headline, 
             "revenue": cur["revenue"], "food_cost": round(tot_cur_cost),
             "gp": gp_cur, "gp_pct": gp_pct,
             "gp_per_head": round(gp_cur / cur["customers"], 1) if cur["customers"] else None,
+            # DV1 (phone table review 2026-10-25, §5 no. 3): THE food cost per head = the cost GP subtracts / covers - the
+            # bridge's cost_head and food cost % use the same cost, so the phone tile no longer shows the food-dish-only
+            # menu.total_cph (336) beside the bridge's 383
+            "cost_per_head": round(tot_cur_cost / cur["customers"], 1) if cur["customers"] else None,
+            "cost_per_head_prev": (round(tot_prev_cost / prev["customers"], 1)
+                                   if (cmp_ok and prev and prev["customers"] and prev_cost_available) else None),
             "gp_pct_prev": gp_prev_pct,
             "gp_pct_delta_pp": round(gp_pct - gp_prev_pct, 1) if (gp_pct is not None and gp_prev_pct is not None) else None,
             "cost_basis": cost_src,
@@ -2775,15 +2850,9 @@ def _mgt_mom(con, *, MON, _dt, cur_month, days_elapsed, days_total, latest_day, 
     # Mon+Tue read as "-44%"), and the flat mtd/days*days_total projection
     # undershoots until the first weekend is in — so while the month is partial,
     # both the MoM baseline and the projection are weighted by weekday instead.
-    pm_dow = con.execute(f"""
-        SELECT CAST(strftime('%w', st.sold_at) AS INT) wd,
-               {net_revenue_sum('st')} rev,
-               COUNT(DISTINCT date(st.sold_at)) days
-        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:month
-        GROUP BY wd""", {**params, "month": prev_month}).fetchall()
-    dow_avg = {r["wd"]: (r["rev"] or 0) / r["days"] for r in pm_dow if r["days"]}
-    dow_fallback = sum(dow_avg.values()) / len(dow_avg) if dow_avg else 0
+    # DV1: the one projection rule (rules.month_projection) - /api/forecast reads the same
+    _mproj = month_projection(con, where, params, ref_anchor.replace(day=1), days_elapsed, days_total, mtd_rev)
+    dow_avg, dow_fallback = _mproj["dow_avg"], _mproj["dow_fallback"]
 
     # ---- §3 weekly bars (this month) + last-month comparison --------------
     # `weekly`: ex-VAT revenue per Mon–Sun week WITHIN the period's month (each bar =
@@ -2820,8 +2889,8 @@ def _mgt_mom(con, *, MON, _dt, cur_month, days_elapsed, days_total, latest_day, 
             for i in range(n))
         w_elapsed = _wsum(days_elapsed)
         mom_baseline, mom_basis = round(w_elapsed, 2), "dow"
-        if mtd_rev and w_elapsed:
-            pace["projected"] = projected = round(mtd_rev / w_elapsed * _wsum(days_total), 2)
+        if mtd_rev and w_elapsed and _mproj["method"] == "dow":
+            pace["projected"] = projected = _mproj["projected"]
             pace["proj_vs_target_pct"] = round(projected/target*100, 1) if target else None
             pace["proj_method"] = "dow"
     pace["prev_month"] = {
@@ -3148,6 +3217,7 @@ def report_management(
         ctx.update(out)
         out = _mgt_payment(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), pe=ctx.get("pe"), ps=ctx.get("ps"))
         ctx.update(out)
+        _mgt_target_scope(con, ctx)
     branches = ctx["branches"]
     cash_heavy = ctx["cash_heavy"]
     ce = ctx["ce"]
@@ -3224,14 +3294,21 @@ def report_management(
             "text": (f"ต้นทุนอาหาร {food_cost_pct:.0f}% — สูงกว่าเป้า ~50%"
                      if th else
                      f"Food cost {food_cost_pct:.0f}% — above the ~50% target.")})
+    _ts = (pace or {}).get("target_scope") or {}
+    if ctx.get("target_projected") is not None:          # DV1: like for like - the branches that have a target
+        projected = ctx["target_projected"]
     if projected and target and projected < target * 0.95:
         gap = (1 - projected/target) * 100
         if th:
             word = "ยอดรวมทั้งเดือน" if month_complete else "ประมาณการสิ้นเดือน"
+            if _ts.get("no_target_branches"):
+                word += f" {_ts['branches']} สาขาที่มีเป้า"
             actions.append({"sev": "med",
                 "text": f"{word} ฿{projected:,.0f} ต่ำกว่าเป้า ฿{target:,.0f} อยู่ {gap:.0f}%"})
         else:
             word = "Month total" if month_complete else "Month-end projection"
+            if _ts.get("no_target_branches"):
+                word += f" of the {_ts['branches']} branches with a target"
             actions.append({"sev": "med",
                 "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
     _behind = [r for r in branches if r.get("vs_target_pct") is not None and r["vs_target_pct"] < 90]
@@ -3239,18 +3316,15 @@ def report_management(
         _behind.sort(key=lambda r: r["vs_target_pct"])
         _names = ", ".join(f"{r['branch']} {r['vs_target_pct']:.0f}%" for r in _behind[:4])
         _more = (f" +{len(_behind) - 4}" if len(_behind) > 4 else "")
+        _proj = any(r.get("target_basis") == "projected" for r in _behind)
         actions.append({"sev": "med",
-            "text": (f"{len(_behind)} สาขาต่ำกว่า 90% ของเป้าเดือนนี้: {_names}{_more}"
+            "text": (f"{len(_behind)} สาขาต่ำกว่า 90% ของเป้าเดือนนี้{' (ประมาณการสิ้นเดือน)' if _proj else ''}: {_names}{_more}"
                      if th else
-                     f"{len(_behind)} branches under 90% of this month's target: {_names}{_more}.")})
+                     f"{len(_behind)} branches under 90% of this month's target{' (month-end projection)' if _proj else ''}: {_names}{_more}.")})
     if has_prev and cost_up and (cost_up[0].get("delta") or 0) >= 0.5:
         m0 = cost_up[0]
-        actions.append({"sev": "low",
-            "text": (f"{m0['menu']} ต้นทุนต่อหัวเพิ่มขึ้น ฿{m0['delta']:.2f} เทียบ{pword}ก่อน "
-                     f"(฿{m0['cost_per_head']:.2f}/หัว) — ตรวจสอบการตักเสิร์ฟ / ต้นทุนวัตถุดิบ"
-                     if th else
-                     f"{m0['menu']} food cost/head up ฿{m0['delta']:.2f} vs last {pword} "
-                     f"(฿{m0['cost_per_head']:.2f}/head) — check portioning / ingredient cost.")})
+        # DV1 (review §5 no. 2): the line names the cause - the cost per plate or the plates per head
+        actions.append({"sev": "low", "text": _cost_riser_action(m0, pword, th)})
     if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
         actions.append({"sev": "med",
             "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"

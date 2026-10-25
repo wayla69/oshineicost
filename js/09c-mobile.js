@@ -1913,13 +1913,14 @@ function msKpisHtml(j) {
 }
 // target card: % of target as the headline, the bar, then the figures behind it
 function msTargetHtml(j) {
-  const P = j.pace || {}, pvt = P.proj_vs_target_pct, mc = P.month_complete;
+  const P = j.pace || {}, pvt = P.proj_vs_target_pct, mc = P.month_complete, TS = P.target_scope;   // DV1: % of target like for like
   if (!P.target) return _msNone('ยังไม่มีเป้าเดือนนี้ — สาขาใหม่ยังไม่มีเดือนเดียวกันปีก่อน');
   const c = _msTgtCol(pvt);
   return `<div style="display:flex;align-items:baseline;gap:10px;padding:10px 0 4px"><span style="font-size:30px;font-weight:800;line-height:1;color:${textInk(c)}">${pvt != null ? pvt.toFixed(0) + '%' : '—'}</span><span style="font-size:12px;${_msMuted}">${mc ? 'ของเป้าทั้งเดือน' : 'ของเป้า (ประมาณการสิ้นเดือน)'}</span></div>
     <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${msBar(Math.min(100, Math.round(pvt || 0)), c)}<span style="font-size:12px;${_msMuted}">100%</span></div>
     <div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอดทั้งเดือน' : `ยอดสะสม (${P.days_elapsed || 0}/${P.days_total || 0} วัน)`}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.mtd_revenue || 0)}</b></div>
     ${mc ? '' : `<div class="ms-row"><span style="flex:1;font-size:13px">ประมาณการสิ้นเดือน${P.proj_method === 'dow' ? ' <span style="font-size:12px;' + _msMuted + '">(ถ่วงวันในสัปดาห์)</span>' : ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.projected || 0)}</b></div>`}
+    ${TS && TS.no_target_branches ? `<div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอด' : 'ประมาณการ'} ${TS.branches} สาขาที่มีเป้า <span style="font-size:12px;${_msMuted}">(ไม่รวม ${TS.no_target_branches} สาขาที่ยังไม่มีเป้า)</span></span><b style="font-variant-numeric:tabular-nums">${fmt(TS.projected || 0)}</b></div>` : ''}
     <div class="ms-row"><span style="flex:1;font-size:13px">เป้า ${P.month || ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.target)}</b></div>
     ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:12px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
     <p style="font-size:12px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;
@@ -2094,7 +2095,7 @@ function msRenderBranches() {
   const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o) : '';
   const withT = branches.filter(b => b.vs_target_pct != null), onT = withT.filter(b => b.vs_target_pct >= 100).length;
   const head = (sentence ? `<div style="padding-top:8px">${msGlanceLine(sentence)}</div>` : '')
-    + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
+    + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า${withT.some(b => b.target_basis === 'projected') ? ' (ประมาณการสิ้นเดือน)' : ''} · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
   document.getElementById('msBranches').innerHTML = head + branches.map(b => {
     const right = S === 'rph'
       ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
@@ -2307,10 +2308,13 @@ function msTopMenuHtml(items) {
 function msProfitKpisHtml(j) {
   const H = j.headline || {}, P = j.pace || {}, G = j.gp || {}, M = j.menu || {};
   const fcPrev = P.food_cost_pct_prev;
+  // DV1: one food cost per head - the cost GP subtracts ÷ covers (gp.cost_per_head, = the bridge's), menu.total_cph only as a fallback
+  const cph = G.cost_per_head != null ? G.cost_per_head : M.total_cph;
+  const cphD = G.cost_per_head != null ? (G.cost_per_head_prev != null ? G.cost_per_head - G.cost_per_head_prev : null) : M.total_cph_delta;
   return [
     { l: 'GP %', v: G.gp_pct != null ? G.gp_pct.toFixed(1) + '%' : '—', c: '#10b981', s: G.gp_pct_delta_pp != null ? `${G.gp_pct_delta_pp > 0 ? '+' : ''}${G.gp_pct_delta_pp}pp vs เดือนก่อน` : (G.cost_basis === 'unavailable' ? 'ไม่มีข้อมูลต้นทุน' : '') },
     { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: fcPrev != null ? `เดือนก่อน ${fcPrev.toFixed(1)}%` : '' },
-    { l: 'ต้นทุนอาหาร/หัว', v: M.total_cph != null ? fmt(M.total_cph) : '—', c: '#ef4444', s: M.total_cph_delta != null ? `${M.total_cph_delta > 0 ? '+' : M.total_cph_delta < 0 ? '−' : ''}฿${Math.abs(M.total_cph_delta).toFixed(1)} vs เดือนก่อน` : '' },
+    { l: 'ต้นทุนอาหาร/หัว', v: cph != null ? fmt(cph) : '—', c: '#ef4444', s: cphD != null ? `${cphD > 0 ? '+' : cphD < 0 ? '−' : ''}฿${Math.abs(cphD).toFixed(1)} vs เดือนก่อน` : '' },
     { l: 'GP/หัว', v: G.gp_per_head != null ? fmt(G.gp_per_head) : '—', c: '#0891b2', s: H.rev_per_head != null ? `รายได้/หัว ${fmt(H.rev_per_head)}` : '' },
   ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p><p class="sub" style="font-size:12px;${_msMuted}">${k.s}</p></div>`).join('');
 }

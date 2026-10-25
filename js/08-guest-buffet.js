@@ -377,6 +377,14 @@ async function _mceCompare(d) {
   host.innerHTML = `<span class="text-xs" style="color:var(--text-secondary)">ต้นทุนรวม ${esc(R.label_th)}</span> ` +
     periodCmpHtml(c ? c.total_cost : null, p ? p.total_cost : null, l ? l.total_cost : null, { upGood: false, range: R });
 }
+// <mce-fc> FC% of a dish or a category (pure; backend/test_dv1_numbers.py runs it): cost / revenue, "—" (null) without a price
+// of its own or above 999 % (a buffet dish's few ฿ of à-la-carte sales)
+function mceFcPct(cost, revenue) {
+  const v = revenue > 0 ? (cost || 0) / revenue * 100 : null;
+  return v != null && v <= 999 ? v : null;
+}
+// </mce-fc>
+
 async function loadMCE() {
   const _fk = _filterKey();
   if (_tabLastKey.menuefficiency === _fk) return;
@@ -530,8 +538,7 @@ function renderMce2Table(col, dir) {
 
     // FC% = cost / revenue * 100. RV-M: a buffet item has almost no revenue of its own (a few ฿ of à-la-carte sales), so the ratio ran to
     // 859,642 % - a number that reads as data and is not. Above 999 % the cell shows "—" (the cost columns still rank it).
-    const fcRaw = r.revenue > 0 ? (r.cost / r.revenue * 100) : null;
-    const fcPct = fcRaw != null && fcRaw <= 999 ? fcRaw : null;
+    const fcPct = mceFcPct(r.cost, r.revenue);
     const fcColor = fcPct == null ? 'var(--text-muted)' : fcPct > 60 ? 'var(--bad-ink)' : fcPct > 40 ? '#f59e0b' : '#10b981';
     const fcCell = fcPct != null ? `<span style="color:${textInk(fcColor)}">${fcPct.toFixed(1)}%</span>` : '<span style="color:var(--text-muted)">—</span>';
 
@@ -866,11 +873,14 @@ function renderMce2CategoryRollup() {
   const catMap = {};
   for (const r of data) {
     const cat = r.category || 'อื่นๆ';
-    if (!catMap[cat]) catMap[cat] = { cost: 0, revenue: 0, servings: 0, count: 0 };
+    if (!catMap[cat]) catMap[cat] = { cost: 0, revenue: 0, servings: 0, count: 0, fcCost: 0, fcRev: 0 };
     catMap[cat].cost     += r.cost     || 0;
     catMap[cat].revenue  += r.revenue  || 0;
     catMap[cat].servings += r.servings || 0;
     catMap[cat].count    += 1;
+    // DV1: FC% only over the dishes that carry their own price (the row's FC% is shown) - buffet dishes cost much and earn
+    // ~฿0 of their own, so the category read 5531 %
+    if (mceFcPct(r.cost, r.revenue) != null) { catMap[cat].fcCost += r.cost || 0; catMap[cat].fcRev += r.revenue || 0; }
   }
   const totCost = Object.values(catMap).reduce((s, v) => s + v.cost, 0) || 1;
   const cats = Object.entries(catMap)
@@ -881,7 +891,7 @@ function renderMce2CategoryRollup() {
       servings: v.servings,
       count:    v.count,
       cost_pct: v.cost / totCost * 100,
-      fc_rate:  v.revenue > 0 ? v.cost / v.revenue * 100 : null,
+      fc_rate:  mceFcPct(v.fcCost, v.fcRev),
       avg_cps:  v.servings > 0 ? v.cost / v.servings : 0,
     }))
     .sort((a, b) => b.cost - a.cost);

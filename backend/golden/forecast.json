@@ -19,7 +19,18 @@
  "days_total": 30,
  "hi": 57000.0,
  "lo": 57000.0,
+ "method": "dow",
  "mtd": 5700.0,
  "period": "2026-06",
- "projected": 57000.0
+ "proj_vs_target_pct": null,
+ "projected": 57000.0,
+ "target": null,
+ "target_scope": {
+  "branches": 0,
+  "no_target_branches": 2,
+  "no_target_revenue": 57000.0,
+  "pct": null,
+  "projected": null,
+  "target": null
+ }
 }

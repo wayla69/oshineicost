@@ -98,6 +98,8 @@
   "bridge": null,
   "bridge_yoy": null,
   "cost_basis": "daily",
+  "cost_per_head": 112.5,
+  "cost_per_head_prev": null,
   "food_cost": 2700,
   "gp": 3000.0,
   "gp_pct": 52.6,
@@ -238,6 +240,14 @@
   "proj_vs_target_pct": null,
   "projected": 5700.0,
   "target": null,
+  "target_scope": {
+   "branches": 0,
+   "no_target_branches": 2,
+   "no_target_revenue": 5700.0,
+   "pct": null,
+   "projected": null,
+   "target": null
+  },
   "weekly": [
    {
     "complete": false,

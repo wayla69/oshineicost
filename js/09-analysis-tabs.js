@@ -1544,6 +1544,15 @@ async function loadTableTurnover() {
   });
 }
 
+// <tf-fmt-cell> the heat-map cell label (pure; backend/test_dv1_numbers.py runs it)
+function tfFmtCell(v, isMoney) {
+  if (!v) return '';
+  // DV1: below 10k one decimal - the average bill (฿1.5k–2.5k) read "2k" in every cell
+  if (isMoney) return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 10000 ? Math.round(v/1000)+'k' : v >= 1000 ? (v/1000).toFixed(1)+'k' : String(Math.round(v));
+  return v >= 1000 ? (v/1000).toFixed(1)+'k' : String(Math.round(v));
+}
+// </tf-fmt-cell>
+
 function renderTimeflowGrid() {
   const DOW_LABELS = ['อา.','จ.','อ.','พ.','พฤ.','ศ.','ส.'];   // RV-M: Thai day names on a Thai page
   const gridEl = document.getElementById('timeflowGrid');
@@ -1560,11 +1569,7 @@ function renderTimeflowGrid() {
   const openHours = [];
   for (let h = _tfOpenFrom; h <= _tfOpenTo; h++) openHours.push(h);
 
-  const fmtCell = v => {
-    if (!v) return '';
-    if (isMoney) return v >= 1e6 ? (v/1e6).toFixed(1)+'M' : v >= 1000 ? Math.round(v/1000)+'k' : Math.round(v);
-    return v >= 1000 ? (v/1000).toFixed(1)+'k' : Math.round(v);
-  };
+  const fmtCell = v => tfFmtCell(v, isMoney);
 
   // One navy scale, darker = busier (a quiet hour is not "bad"); the label takes white / navy
   const cellColor = intensity => {

@@ -1399,13 +1399,27 @@ def bom_consumption_analysis(
     """
     with get_db() as con:
         rows = con.execute(sql, params).fetchall()
+        # DV1 (phone table review 2026-10-25, §5 no. 6): one ingredient carries different types in different recipes, and
+        # MAX(type) took the alphabetically last ('seasoning' > 'protein'): the wagyu was filed as seasoning, so the
+        # Beef family read "seasoning". The type is the one carrying the most cost.
+        tcost: Dict[str, Dict[str, float]] = {}
+        for k, t, c in con.execute("""
+            SELECT COALESCE(NULLIF(bi.ingredient_code, ''), '__' || bi.ingredient_name), bi.ingredient_type,
+                   SUM(ssm.qty * bi.ingredient_cost)
+              FROM v_sales_sku_monthly ssm
+              JOIN branches b         ON b.branch_id = ssm.branch_id
+              JOIN bom_ingredients bi ON bi.sku_id   = ssm.sku_id
+             WHERE """ + where + """
+             GROUP BY 1, 2""", params).fetchall():
+            tcost.setdefault(k, {})[t or "other"] = float(c or 0)
+    dom_type = {k: max(v.items(), key=lambda kv: (kv[1], kv[0]))[0] for k, v in tcost.items()}
 
     grand_total = sum(float(r["total_cost"] or 0) for r in rows)
     all_rows = []
     type_totals: Dict[str, float] = {}
     for r in rows:
         cost = float(r["total_cost"] or 0)
-        t = r["type"] or "other"
+        t = dom_type.get(r["ing_key"]) or r["type"] or "other"
         type_totals[t] = type_totals.get(t, 0.0) + cost
         all_rows.append({
             "code":     r["code"] or "",
@@ -1431,8 +1445,11 @@ def bom_consumption_analysis(
             f["total_cost"] += r["total_cost"]
             f["n_menus"]     = max(f["n_menus"], r["n_menus"])
             f["n_variants"] += 1
+            f.setdefault("_tc", {})[r["type"]] = f.get("_tc", {}).get(r["type"], 0.0) + r["total_cost"]
         all_rows = sorted(fam.values(), key=lambda x: x["total_cost"], reverse=True)
         for r in all_rows:
+            # DV1: the family's type = the type carrying most of its cost (not its first variant's)
+            r["type"] = max(r.pop("_tc").items(), key=lambda kv: (kv[1], kv[0]))[0]
             r["total_qty"]  = round(r["total_qty"], 2)
             r["total_cost"] = round(r["total_cost"], 2)
             r["pct"]        = round(100.0 * r["total_cost"] / grand_total, 2) if grand_total > 0 else 0

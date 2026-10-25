@@ -363,6 +363,38 @@ def latest_settled_day(con, where: str = "t.source='Easy' AND b.name!='ALL'", pa
     return {"day": counts[0][0] if counts else None, "skipped_day": None, "skipped_bills": None}
 
 
+def month_projection(con, where: str, params: Optional[dict], month_first, days_elapsed: int, days_total: int,
+                     mtd: float) -> dict:
+    """THE month-end projection of a month in progress (DV1, phone table review 2026-10-25: the overview page projected
+    flat - to date / days x days in month - while the management summary weighted by weekday, 126 % vs 124 % of target).
+    Weekday-fair: to date / (the previous month's average revenue of each weekday summed over the days elapsed) x (the
+    same over the whole month); a weekday the previous month lacks uses its mean. Flat when the previous month has no
+    sales. `where` uses the aliases st (sales_transaction) and b (branches); revenue = net_revenue_sum.
+    Returns {"projected", "method" ('dow' | 'flat'), "dow_avg", "dow_fallback", "baseline_elapsed"}."""
+    import datetime as _dt
+    prev_month = (month_first - _dt.timedelta(days=1)).strftime("%Y-%m")
+    rows = con.execute(f"""
+        SELECT CAST(strftime('%w', st.sold_at) AS INT) wd, {net_revenue_sum('st')} rev, COUNT(DISTINCT date(st.sold_at)) days
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND strftime('%Y-%m', st.sold_at)=:_pm_month
+        GROUP BY wd""", {**(params or {}), "_pm_month": prev_month}).fetchall()
+    dow_avg = {r[0]: (r[1] or 0) / r[2] for r in rows if r[2]}
+    fb = sum(dow_avg.values()) / len(dow_avg) if dow_avg else 0
+
+    def wsum(n):
+        return sum(dow_avg.get(int((month_first + _dt.timedelta(days=i)).strftime("%w")), fb) for i in range(n))
+    out = {"projected": None, "method": "flat", "dow_avg": dow_avg, "dow_fallback": fb, "baseline_elapsed": None}
+    if not (mtd and days_elapsed):
+        return out
+    out["projected"] = round(mtd / days_elapsed * days_total, 2)
+    if dow_avg and days_elapsed < days_total:
+        w = wsum(days_elapsed)
+        out["baseline_elapsed"] = round(w, 2)
+        if w:
+            out.update(projected=round(mtd / w * wsum(days_total), 2), method="dow")
+    return out
+
+
 def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
                  group: Optional[str] = None, alias: str = "b") -> None:
     if branch:
