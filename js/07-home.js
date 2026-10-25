@@ -1326,7 +1326,7 @@ function _spikeDraw(d, oneBr) {
   const oldTitle = cv ? 'เมนูเดิม · ดันต้นทุนเพิ่มสูงสุด' : 'เมนูเดิม · จานเพิ่มสูงสุด';
   const nHi = d.spike_count != null ? d.spike_count : spAll.filter(s => s.spike).length;
   el.innerHTML = `<section class="sp-sec sp-sec-old" aria-label="${oldTitle}">
-      <h3 class="sp-h">${oldTitle} <span class="sp-n" id="spikeOldN" title="${esc(`ทั้งหมด ${fmtN(nSp)} รายการ · พุ่ง ≥${thr}× ${fmtN(nHi)} รายการ`)}">(${fmtN(nSp)} · พุ่ง ${fmtN(nHi)}${shown(nSp, sp.length)})</span><span class="sp-sort">${cv ? 'เรียงตามต้นทุนเพิ่ม' : 'เรียงตามจานที่เพิ่ม'}</span></h3>${oldHtml}</section>
+      <h3 class="sp-h">${oldTitle} <span class="sp-n" id="spikeOldN" title="${esc(`ทั้งหมด ${fmtN(nSp)} รายการ · พุ่ง ≥${thr}× ${fmtN(nHi)} รายการ`)}">(${fmtN(nSp)} · พุ่ง ${fmtN(nHi)}${shown(nSp, sp.length)})</span>${cv ? '<span class="sp-sort">เรียงตามต้นทุนเพิ่ม</span>' : ''}</h3>${oldHtml}</section>
     <section class="sp-sec sp-sec-new" aria-label="เมนูใหม่">
       <h3 class="sp-h"><span class="sp-long">เมนูใหม่และเมนูที่กลับมาขาย · ครบ 4 สัปดาห์แล้วย้ายเป็นเมนูเดิม</span><span class="sp-short">เมนูใหม่ (ไม่เกิน 4 สัปดาห์)</span>
         <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-dailysales-spike-new" title="คำอธิบาย">?</button>
