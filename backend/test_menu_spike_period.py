@@ -9,7 +9,10 @@
 - the weekday-fair "ปกติ": a weekend-heavy menu is not flagged in a period that is mostly weekend;
 - custom range validation answers 400 in formal Thai;
 - the 5-plate floor; the new-menu list (28-day boundary, per_day, trend, day mode) - section 7;
-- the pure JS helper periodRange(kind, anchor) of the card (lifted into js/01-core.js by PR-PP1).
+- the pure JS helper periodRange(kind, anchor) of the card (lifted into js/01-core.js by PR-PP1);
+- PR-SC (owner 2026-10-25) · section 9: ต้นทุนเพิ่ม = extra plates x the month-weighted dish cost of THE engine, its share of the
+  scope's food cost and its points of food-cost %, the order by it (uncosted / package rows last), top = 15, and no cost key at all
+  for a role without cost.analysis / profit.pnl.
 """
 import datetime as dt
 import json
@@ -602,3 +605,173 @@ def test_day_mode_per_head(monkeypatch):
     s = _row(_call(con, monkeypatch, date="2026-08-20"), "ข้าวปั้น")
     assert (s["rate"], s["normal_rate"], s["x"], s["basis"]) == (100.0, 50.0, 2.0, "buffet")
     assert [(g["label"], g["excess"]) for g in s["tiers"]] == [("฿799", 15.0)]
+
+
+# ── 9. PR-SC · ต้นทุนเพิ่ม: the spike list sorted by the food cost of the extra plates, top 15 (owner 2026-10-25) ───────────
+# One branch, 17 Aug .. 4 Oct 2026, 100 customers and one bill of ฿10,700 (net ฿10,000) a day. The period is Mon 28 Sep .. Sun 4 Oct
+# (3 days in September, 4 in October); its baseline 7 .. 27 Sep. Per day, baseline -> period:
+#   แซลมอน 10 -> 30 (excess 140)  dish cost: the analyst's list ฿50 in Sep, ฿60 in Oct (weighted (90x50 + 120x60) / 210)
+#   หมึก   20 -> 60 (excess 280)  ฿10 from the cost-management table (no list row)
+#   ไม่มีต้นทุน 10 -> 30 (excess 140) no cost anywhere -> last, uncosted
+#   BUFFET799 10 -> 30 (excess 140) a tier PACKAGE: a sku_cost row of ฿999 that must never be used -> last, package
+#   ข้าว 50 -> 50 (no spike, ฿5 in the food cost) · เมนูใหม่ from 25 Sep, 5 a day, list ฿20 (new menu: period_cost 35 x 20)
+_PC0, _PC1 = dt.date(2026, 9, 28), dt.date(2026, 10, 4)
+_COST_ROW = {"unit_cost", "extra_cost", "cost_share", "extra_cost_per_head_pp", "uncosted", "package", "period_cost"}
+_COST_TOP = {"food_cost_total", "revenue_total", "revenue_basis", "top_extra_cost", "top_cost_share", "top_pp", "uncosted_count"}
+
+
+def _db_cost():
+    con = sqlite3.connect(":memory:", check_same_thread=False)        # the app answers in its own worker thread
+    con.row_factory = sqlite3.Row
+    con.executescript("""
+      CREATE TABLE branches(branch_id INTEGER PRIMARY KEY, name TEXT, branch_type TEXT);
+      CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT, description TEXT);
+      CREATE TABLE sales_sku_daily(branch_id INT, day TEXT, sku_id INT, qty REAL, subtotal_ex_vat REAL);
+      CREATE INDEX ix_ssd ON sales_sku_daily(branch_id, day, sku_id);
+      CREATE VIEW v_sales_sku_daily AS SELECT * FROM sales_sku_daily
+        WHERE sku_id NOT IN (SELECT sku_id FROM skus WHERE UPPER(sku_code) IN ('SERVICECHARGE','SERVICE'));
+      CREATE TABLE sales_transaction(branch_id INT, receipt_no TEXT, sold_at TEXT, customer_count INT, source TEXT,
+        total_inc_vat REAL, service_charge REAL);
+      CREATE TABLE menu_fact_total(branch_id INT, day TEXT, tier TEXT, bills INT, pax REAL, cogs REAL, rev REAL, hc REAL,
+        PRIMARY KEY(branch_id, day, tier));
+      CREATE TABLE menu_fact_day(branch_id INT, day TEXT, tier TEXT, ent TEXT, bills INT, pax REAL, qty REAL,
+        ent_cogs REAL, ent_hc REAL, cogs REAL, rev REAL, hc REAL, PRIMARY KEY(branch_id, day, tier, ent));
+      CREATE TABLE bc_sku_cost_list(sku_id INT, month TEXT, unit_cost REAL);
+      CREATE TABLE bc_sku_cost_month(sku_id INT, month TEXT, unit_cost REAL);
+      CREATE TABLE sku_effective_cost(sku_id INT, recipe_cost REAL);
+      CREATE TABLE sku_cost(sku_id INT, unit_cost REAL);
+      CREATE TABLE bom_ingredients(sku_id INT, ingredient_cost REAL);
+      CREATE TABLE bom_sku_alias(bom_sku_code TEXT, resolved_sku_id INT);
+      INSERT INTO branches VALUES (1, 'สาขาทดสอบ', 'master');
+      INSERT INTO skus VALUES (1, 'SALMON', '(A) แซลมอน'), (2, 'SQUID', '(A) หมึก'), (3, 'NOCOST', '(A) ไม่มีต้นทุน'),
+                              (4, 'BUFFET799', '(B) บุฟเฟ่ต์ 799'), (5, 'RICE', '(A) ข้าว'), (6, 'NEWM', '(A) เมนูใหม่');
+      INSERT INTO bc_sku_cost_list VALUES (1, '2026-09', 50), (1, '2026-10', 60), (6, '2026-09', 20);
+      INSERT INTO sku_cost VALUES (2, 10), (4, 999), (5, 5);
+    """)
+    d = dt.date(2026, 8, 17)
+    while d <= _PC1:
+        day, p = d.isoformat(), _PC0 <= d <= _PC1
+        con.execute("INSERT INTO sales_transaction VALUES (1, ?, ?, 100, 'Easy', 10700, 0)", (f"R{day}", day + " 12:00:00"))
+        plan = {1: 30 if p else 10, 2: 60 if p else 20, 3: 30 if p else 10, 4: 30 if p else 10, 5: 50}
+        if d >= dt.date(2026, 9, 25):
+            plan[6] = 5
+        for sid, q in plan.items():
+            con.execute("INSERT INTO sales_sku_daily VALUES (1, ?, ?, ?, 0)", (day, sid, q))
+        d += dt.timedelta(days=1)
+    return con
+
+
+def _cost_range(con, monkeypatch, **kw):
+    return _call(con, monkeypatch, period="range", date_from=_PC0.isoformat(), date_to=_PC1.isoformat(), **kw)
+
+
+def test_extra_cost_and_cost_share_two_months_of_dish_cost(monkeypatch):
+    r = _cost_range(_db_cost(), monkeypatch)
+    assert r["cost_view"] is True and r["sort"] == "extra_cost" and r["top"] == 15
+    # the scope's food cost of the period = its COGS: 90x50 + 120x60 + 420x10 + 350x5 + the new menu 35x20 (the September list
+    # price stays in force in October); the package and the uncosted menu at ฿0
+    assert r["food_cost_total"] == 11700 + 4200 + 1750 + 700
+    assert (r["revenue_total"], r["revenue_basis"]) == (70000.0, "net")
+    s = _row(r, "แซลมอน")
+    assert s["excess"] == 140 and s["unit_cost"] == round((90 * 50 + 120 * 60) / 210, 2)
+    assert s["extra_cost"] == 7800.0                                     # 140 x 55.71..., not 140 x 50 nor 140 x 60
+    assert s["cost_share"] == round(7800 / 18350 * 100, 2) and s["extra_cost_per_head_pp"] == round(7800 / 70000 * 100, 2)
+    assert (s["uncosted"], s["package"]) == (False, False)
+    q = _row(r, "หมึก")
+    assert (q["unit_cost"], q["extra_cost"]) == (10.0, 2800.0)
+    assert (r["top_extra_cost"], r["top_cost_share"], r["top_pp"]) == (10600.0, round(10600 / 18350 * 100, 2), round(10600 / 70000 * 100, 2))
+    nm = _nm(r, "เมนูใหม่")
+    assert (nm["unit_cost"], nm["period_cost"]) == (20.0, 700.0)
+
+
+def test_sorted_by_extra_cost_uncosted_and_package_last(monkeypatch):
+    r = _cost_range(_db_cost(), monkeypatch)
+    assert [s["menu"] for s in r["spikes"]][:2] == ["แซลมอน", "หมึก"]          # by ฿, although หมึก has twice the extra plates
+    tail = r["spikes"][2:]
+    assert len(tail) == 2 and all(s["unit_cost"] == 0 and s["extra_cost"] == 0 for s in tail)
+    nc = next(s for s in tail if s["uncosted"])
+    assert nc["menu"] == "ไม่มีต้นทุน" and nc["package"] is False and r["uncosted_count"] == 1
+    # the buffet tier package code is never costed: its ฿999 sku_cost row is not used, not in the food cost, and not "uncosted"
+    pk = next(s for s in tail if s["package"])
+    assert pk["menu"] == "บุฟเฟ่ต์ 799"
+    assert pk["uncosted"] is False and pk["unit_cost"] == 0
+    assert r["food_cost_total"] == 18350                                 # 210 x ฿999 would add ฿209,790
+
+
+def test_no_cost_view_keeps_the_excess_order_and_no_cost_key(monkeypatch):
+    con = _db_cost()
+    r = sales._menu_spike_period(con, "range", None, _PC0.isoformat(), _PC1.isoformat(), "", {}, 300, 1.5, with_cost=False)
+    assert r["cost_view"] is False and r["sort"] == "excess" and r["top"] == 15
+    assert [s["menu"] for s in r["spikes"]][0] == "หมึก"                    # +280 plates first, as before PR-SC
+    assert not (_COST_TOP & set(r))
+    for s in r["spikes"] + r["new_menus"]:
+        assert not (_COST_ROW & set(s)), s
+
+
+def test_top_param_sums_the_first_rows(monkeypatch):
+    r = _cost_range(_db_cost(), monkeypatch, top=1)
+    assert r["top"] == 1 and r["top_extra_cost"] == 7800.0 and len(r["spikes"]) == 4      # every row still comes; the card cuts
+
+
+def test_the_food_cost_is_the_cogs_expression_on_the_fixture(client, app_db):
+    """The scope's food cost = SUM(rules.cogs_expr) over the same rows (THE engine, not a copy of it)."""
+    import rules
+    j = client.get("/api/sales/menu-spike", params={"period": "range", "date_from": "2026-05-01", "date_to": "2026-06-03",
+                                                    "threshold": 1.0}).json()
+    assert j["cost_view"] is True and j["food_cost_total"] > 0
+    con = sqlite3.connect(str(app_db))
+    try:
+        want = con.execute(f"SELECT SUM({rules.cogs_expr('ssm')}) FROM (SELECT branch_id, sku_id, qty, subtotal_ex_vat, "
+                           f"'Easy' AS source, substr(day, 1, 7) AS period_month FROM v_sales_sku_daily "
+                           f"WHERE day BETWEEN '2026-05-01' AND '2026-06-03') ssm").fetchone()[0] or 0
+    finally:
+        con.close()
+    assert abs(j["food_cost_total"] - want) < 0.05
+
+
+@pytest.fixture
+def auth_on(monkeypatch):
+    monkeypatch.setenv("OSHINEI_AUTH", "1")
+    monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret-stable")
+    yield
+
+
+def _as(user):
+    import auth
+    import main
+    from fastapi.testclient import TestClient
+    c = TestClient(main.app)
+    assert c.post("/api/auth/login", json={"username": user, "password": auth.DEFAULT_PASSWORD}).status_code == 200
+    return c
+
+
+def test_roles_without_cost_get_no_cost_key(client, app_db, auth_on, monkeypatch):
+    """Through the app with auth on (the signed-in role decides), on the cost DB of this section."""
+    con = _db_cost()
+
+    @contextmanager
+    def fake_db():
+        yield con
+    monkeypatch.setattr(sales, "get_db", fake_db)
+    q = {"period": "range", "date_from": _PC0.isoformat(), "date_to": _PC1.isoformat()}
+    mk = _as("marketing1").get("/api/sales/menu-spike", params=q)
+    assert mk.status_code == 200
+    a = mk.json()
+    assert a.get("cost_view") is False and a["sort"] == "excess" and a["top"] == 15, a
+    assert not (_COST_TOP & set(a))
+    assert len(a["spikes"]) == 4 and a["new_menus"]
+    for s in a["spikes"] + a["new_menus"]:
+        assert not (_COST_ROW & set(s)), s
+    assert a["spikes"][0]["menu"] == "หมึก"
+    ex = [x["excess"] for x in a["spikes"]]
+    assert ex == sorted(ex, reverse=True)
+    # operation holds neither menu.analysis nor customer.buffet: the card's data is refused altogether
+    assert _as("operation1").get("/api/sales/menu-spike", params=q).status_code == 403
+    for user in ("management1", "analyst1"):
+        b = _as(user).get("/api/sales/menu-spike", params=q).json()
+        assert b.get("cost_view") is True and _COST_TOP <= set(b), (user, b)
+        assert all({"unit_cost", "extra_cost", "cost_share", "extra_cost_per_head_pp"} <= set(s) for s in b["spikes"])
+        # the plates are the same answer for everyone; only the order and the cost keys differ
+        key = lambda r: sorted((s["menu"], s["branch"], s["today"], s["excess"]) for s in r["spikes"])
+        assert key(a) == key(b)
+        assert [x["menu"] for x in b["spikes"]][:2] == ["แซลมอน", "หมึก"]

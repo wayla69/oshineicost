@@ -1301,6 +1301,77 @@ _SPIKE_PER = 100
 _SPIKE_NB = "nonbuffet"                   # the group of plates sold on bills that are not buffet bills
 _SPIKE_NB_LABEL = "ไม่ใช่บุฟเฟ่ต์"
 _SPIKE_TIER_CHIPS = 3
+_SPIKE_TOP = 15                            # PR-SC: the card shows this many rows first; "ดูทั้งหมด (N)" opens the rest
+_SPIKE_COST_MODULES = {"cost.analysis", "profit.pnl"}   # PL3: a role holding neither gets no cost key at all
+
+
+class _SpikeCost:
+    """PR-SC (owner 2026-10-25) · the food cost behind a spike, from THE cost engine: per SKU and month the unit cost
+    COGS multiplies (rules.effective_unit_cost_sql with the month - from the Grand Menu month on the analyst's monthly
+    dish-cost list bc_sku_cost_list, else a released BoM Center version, else the recipe / cost-management chain), a
+    buffet TIER package code at ฿0 as rules.cogs_expr does (the dishes eaten carry the cost). One pass over the period's
+    plates of the scope (branch x SKU x month, v_sales_sku_daily) gives both the scope's food cost (the COGS of the
+    same rows and expression as /api/sales/cost-per-head) and each row's month-weighted unit cost. Revenue = the
+    scope's net revenue (rules.net_revenue_sum over the Easy bills of the period; the lines' ex-VAT subtotal when the
+    DB has no bills table)."""
+
+    def __init__(self, con, ps, pe, bfilt, params):
+        import datetime as _dt
+        from rules import is_tier_code
+        cur = con.cursor()
+        cur.row_factory = None
+        bjoin = "JOIN branches b ON b.branch_id=d.branch_id" if bfilt else ""
+        q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat()}
+        self.plates: dict = {}                   # (bid, sid) -> {month: plates}
+        sub = 0.0
+        sm: set = set()
+        for bid, sid, m, qq, rv in cur.execute(f"""
+            SELECT d.branch_id, d.sku_id, substr(d.day, 1, 7), SUM(d.qty), SUM(d.subtotal_ex_vat)
+            FROM v_sales_sku_daily d {bjoin} WHERE d.day BETWEEN :ps AND :pe {bfilt}
+            GROUP BY d.branch_id, d.sku_id, substr(d.day, 1, 7)""", q):
+            self.plates.setdefault((bid, sid), {})[m] = qq or 0.0
+            sub += rv or 0.0
+            sm.add((sid, m))
+        self.unit: dict = {}                     # (sid, month) -> ฿ per plate (0 = uncosted, or a package)
+        self.pkg: set = set()                    # sku ids that are buffet tier packages: never costed
+        pairs = sorted(sm)
+        expr = effective_unit_cost_sql("x", "x.m")
+        for i in range(0, len(pairs), 400):
+            chunk = pairs[i:i + 400]
+            vals = ",".join("(?,?)" for _ in chunk)
+            for sid, m, code, uc in cur.execute(
+                    f"WITH x(sku_id, m) AS (VALUES {vals}) SELECT x.sku_id, x.m, sk.sku_code, {expr} "
+                    f"FROM x LEFT JOIN skus sk ON sk.sku_id = x.sku_id", [v for p in chunk for v in p]):
+                if is_tier_code(code or ""):
+                    self.pkg.add(sid)
+                    uc = 0.0
+                self.unit[(sid, m)] = float(uc or 0.0)
+        self.food_cost = sum(qq * self.unit.get((sid, m), 0.0)
+                             for (_b, sid), mm in self.plates.items() for m, qq in mm.items())
+        try:
+            nx = (pe + _dt.timedelta(days=1)).isoformat()
+            tj = "JOIN branches b ON b.branch_id=t.branch_id" if bfilt else ""
+            rv = cur.execute(f"SELECT {net_revenue_sum('t')} FROM sales_transaction t {tj} WHERE t.source='Easy' "
+                             f"AND t.sold_at >= :ps AND t.sold_at < :nx {bfilt}", {**q, "nx": nx}).fetchone()[0]
+            self.revenue, self.revenue_basis = float(rv or 0.0), "net"
+        except Exception:
+            self.revenue, self.revenue_basis = sub, "ex_vat_lines"
+
+    def unit_of(self, bid, sid) -> float:
+        """The row's unit cost weighted by its plates in each month of the period (a dish cost that changes on the 1st)."""
+        mm = self.plates.get((bid, sid)) or {}
+        tq = sum(mm.values())
+        if tq <= 0:
+            return 0.0
+        return sum(qq * self.unit.get((sid, m), 0.0) for m, qq in mm.items()) / tq
+
+    def share(self, baht):
+        """฿ as % of the scope's food cost of the period."""
+        return round(baht / self.food_cost * 100, 2) if self.food_cost > 0 else None
+
+    def pp(self, baht):
+        """฿ as percentage points of the scope's food-cost % (฿ / net revenue x 100)."""
+        return round(baht / self.revenue * 100, 2) if self.revenue > 0 else None
 
 
 def _spike_kind(desc) -> str:
@@ -1451,7 +1522,8 @@ def _spike_new_menus(con, cands, anchor, ps, tdays=None, cust=None) -> list:
                     "first_sold_th": f"{first.day} {_TH_MON_SPIKE[first.month - 1]}", "age_days": age,
                     "qty": round(pq), "per_day": round(pq / n, 1) if n else None,
                     "kind": kind, "basis": basis, "customers": round(c) if basis != "days" else None,
-                    "rate": round(pq / c * _SPIKE_PER, 1) if c > 0 else None, "trend": trend})
+                    "rate": round(pq / c * _SPIKE_PER, 1) if c > 0 else None, "trend": trend,
+                    "_bid": bid, "_sid": sid, "_q": pq})
     out.sort(key=lambda r: (-r["qty"], r["menu"], r["branch"]))
     return out
 
@@ -1568,7 +1640,8 @@ def _spike_tiers(con, rows, cust, tdays, base, ps, pe, bs, be, threshold) -> Non
             r["tier_rest"] = round(r["_pq"] - r["_exp"] - sum(g["excess"] for g in tiers), 1)
 
 
-def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold):
+def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params, limit, threshold, with_cost=False,
+                       top=_SPIKE_TOP):
     """Day / week / MTD / custom-range spike, per head and weekday-fair (memory rule 'MTD weekday-fair baseline';
     PR-ST owner 2026-10-25: the day mode too). Per branch x SKU: plates = sum of qty over the period; customers = the
     row's basis over the period's trading days (see _SPIKE_PER above); expected = sum over weekdays of (the SKU's
@@ -1578,7 +1651,15 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
     Spike when x >= threshold, plates >= 5 and the SKU sold on >= 5 baseline days; an existing menu sold on < 5 baseline
     days is listed from 20 plates with thin_base: true when x >= threshold, or when that baseline is 0 (x None). A NEW
     menu (anchor = period end, anchor - first_sold < 28 days) is never a spike: it goes to new_menus. Listed rows carry
-    the tier split (_spike_tiers). Sorted by excess = plates - expected. Qty only - NO cost (iron rule)."""
+    the tier split (_spike_tiers). Sorted by excess = plates - expected.
+
+    PR-SC (owner 2026-10-25) · with_cost (a role holding cost.analysis or profit.pnl): each row also carries unit_cost
+    (the month-weighted dish cost of _SpikeCost), extra_cost = max(0, excess) x unit_cost, cost_share = extra_cost / the
+    scope's food cost of the period x 100 and extra_cost_per_head_pp = extra_cost / its net revenue x 100 (percentage
+    points of food-cost %); the list is then sorted by extra_cost, a row without a cost last (uncosted: true, or
+    package: true for a buffet tier package code, never costed); new menus carry unit_cost and period_cost = plates x
+    unit_cost. Without with_cost not one cost key is in the answer (PL3) and the order stays by excess plates.
+    top = how many rows the card shows first (top_* = the sums over those rows)."""
     import datetime as _dt
     from rules import TH_TODAY_SQL
     # the last finished day; MAX through the (branch, day) index, not a table scan
@@ -1715,15 +1796,46 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
         if thin:
             row["thin_base"] = True
         spikes.append(row)
-    spikes.sort(key=lambda s: (-(s["_pq"] - s["_exp"]), s["menu"], s["branch"]))
+    sc = None
+    if with_cost:
+        try:
+            sc = _SpikeCost(con, ps, pe, bfilt, params)
+        except Exception as e:                  # a DB without the cost tables: the plates still answer
+            print(f"[menu-spike] cost skipped: {e}")
+    if sc is not None:
+        for s in spikes:
+            uc = sc.unit_of(s["_bid"], s["_sid"])
+            ex = max(0.0, s["_pq"] - s["_exp"]) * uc
+            s.update({"unit_cost": round(uc, 2), "extra_cost": round(ex, 2), "cost_share": sc.share(ex),
+                      "extra_cost_per_head_pp": sc.pp(ex), "uncosted": uc <= 0 and s["_sid"] not in sc.pkg,
+                      "package": s["_sid"] in sc.pkg, "_ex": ex})
+        spikes.sort(key=lambda s: (s["unit_cost"] <= 0, -s["_ex"], -(s["_pq"] - s["_exp"]), s["menu"], s["branch"]))
+    else:
+        spikes.sort(key=lambda s: (-(s["_pq"] - s["_exp"]), s["menu"], s["branch"]))
     shown = spikes[:limit]
     _spike_tiers(con, shown, cust, tdays, base, ps, pe, bs, be, threshold)
+    top = max(1, int(top or _SPIKE_TOP))
+    cost_out: dict = {}
+    if sc is not None:
+        tx = sum(s["_ex"] for s in spikes[:top])
+        cost_out = {"food_cost_total": round(sc.food_cost, 2), "revenue_total": round(sc.revenue, 2),
+                    "revenue_basis": sc.revenue_basis, "top_extra_cost": round(tx, 2), "top_cost_share": sc.share(tx),
+                    "top_pp": sc.pp(tx), "uncosted_count": sum(1 for s in spikes if s["uncosted"])}
     for s in spikes:
-        for k in ("_bid", "_sid", "_pq", "_exp", "_cp"):
+        for k in ("_bid", "_sid", "_pq", "_exp", "_cp", "_ex"):
             s.pop(k, None)
     new_menus = _spike_new_menus(con, newc, pe, ps, tdays, cust)
+    if sc is not None:
+        for m in new_menus:
+            uc = sc.unit_of(m["_bid"], m["_sid"])
+            m.update({"unit_cost": round(uc, 2), "period_cost": round(m["_q"] * uc, 2),
+                      "uncosted": uc <= 0 and m["_sid"] not in sc.pkg, "package": m["_sid"] in sc.pkg})
+    for m in new_menus:
+        for k in ("_bid", "_sid", "_q"):
+            m.pop(k, None)
     fh = cust.fact_hi
-    return {"date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
+    return {**cost_out, "sort": "extra_cost" if sc is not None else "excess", "top": top,
+            "cost_view": sc is not None, "date": pe.isoformat(), "period": period, "date_from": ps.isoformat(), "date_to": pe.isoformat(),
             "days": days, "baseline_from": bs.isoformat(), "baseline_to": be.isoformat(),
             "latest_day": latest.isoformat(),
             "window_days": _SPIKE_BASE_DAYS, "threshold": threshold, "rate_per": _SPIKE_PER,
@@ -1733,12 +1845,20 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
 
 
 @router.get("/api/sales/menu-spike")
-def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
+def menu_spike(request: Request = None, date: Optional[str] = Query(None), branch: Optional[str] = Query(None),
                group: Optional[str] = Query(None), limit: int = Query(300, ge=1, le=1000),
                threshold: float = Query(1.5, ge=1.0), period: str = Query("day"),
-               date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+               date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
+               top: int = Query(_SPIKE_TOP, ge=1, le=1000)):
     """Menus whose plates PER HEAD spiked, per branch (answers '#5: which menu was abnormally high'). Shows ALL items
-    above `threshold`x (default 1.5x). Qty and customer counts only - NO cost (iron rule).
+    above `threshold`x (default 1.5x).
+
+    PR-SC (owner 2026-10-25): for a role holding cost.analysis or profit.pnl the rows carry the food cost of the extra
+    plates (unit_cost, extra_cost, cost_share, extra_cost_per_head_pp, uncosted, package) and are sorted by extra_cost;
+    the answer carries food_cost_total, revenue_total, revenue_basis, top_extra_cost / top_cost_share / top_pp (the
+    first `top` rows, default 15 = what the card shows before "ดูทั้งหมด"), uncosted_count; new menus carry unit_cost
+    and period_cost. Any other role gets none of these keys (never computed, PL3) and the order by excess plates.
+    cost_view says which of the two answers this is. A direct call without a request (tests, internal) is the cost view.
 
     PR-ST (owner 2026-10-25): every period is per head (rate = plates per 100 customers; buffet menus on the branch's
     buffet customers, the rest on all its customers) and weekday-fair against the 3 weeks before the period - see
@@ -1764,7 +1884,13 @@ def menu_spike(date: Optional[str] = Query(None), branch: Optional[str] = Query(
             pfilt += " AND b.name=:branch"; pparams["branch"] = branch
         if group:
             pfilt += " AND COALESCE(b.branch_type,'master')=:grp"; pparams["grp"] = group
-        return _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold)
+        with_cost = True
+        top = top if isinstance(top, int) else _SPIKE_TOP            # a direct call leaves the Query default
+        if request is not None:
+            import auth as _auth
+            with_cost = bool(_auth.request_modules(request) & _SPIKE_COST_MODULES)
+        return _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
+                                  with_cost=with_cost, top=top)
 
 
 @router.get("/api/sales/cost-per-head")
