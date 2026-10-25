@@ -4346,6 +4346,8 @@ function fmsgOpenPending() {
 function supplyDeepLink(link) {
   let q;
   try { q = new URLSearchParams(String(link).includes('?') ? String(link).split('?')[1] : String(link)); } catch (e) { return false; }
+  // "?go=tab&tab=<tab>": the page that was open before a reload for a new version (appUpdateReload below)
+  if (q.get('go') === 'tab') { const t = q.get('tab') || ''; if (!TABS[t] || !tabAllowed(t)) return false; switchTab(t); return true; }
   if (q.get('go') !== 'supply') return false;
   let tab = q.get('tab') || 'supplyhome', pane = q.get('pane') || null;
   if (!SUPPLY_CHIPS.some(c => c.items.some(i => i.tab === tab))) tab = 'supplyhome';
@@ -4353,6 +4355,134 @@ function supplyDeepLink(link) {
   supplyGo({ tab, pane });
   return true;
 }
+
+// ── A new version after a deploy ──────────────────────────────────────────────────────────────────────────────────
+// The shell carries its build (<meta name="app-build">, backend/main.py = sw.js BUILD). On return to the foreground
+// (03-tabs-main.js visibilitychange) and every 10 min while visible, appUpdateCheck() asks GET /api/meta/build (no-store).
+// A different build: registration.update() and wait for the new worker to take over (it deletes the old shell caches),
+// then reload to the same page (supplyDeepLink: ?go=supply&tab&pane or ?go=tab&tab, kept in sessionStorage for one load).
+// Unsaved input on the page (appHasUnsaved) or a second miss for the same build (the reload did not bring it) shows one
+// persistent toast instead; a tap reloads once the saves in flight have finished. Never while offline.
+const _APP_UPD = { build: '', at: 0, busy: false, toast: null, writes: 0, touched: new Set() };
+try { const m = document.querySelector('meta[name="app-build"]'); _APP_UPD.build = (m && m.getAttribute('content')) || ''; } catch (e) { /* no shell meta */ }
+try {
+  const l = sessionStorage.getItem('oshinei_upd_link');
+  if (l) { sessionStorage.removeItem('oshinei_upd_link'); if (!_supplyPendingLink) _supplyPendingLink = l; }
+} catch (e) { /* no session storage */ }
+// the saves in flight (POST/PUT/PATCH/DELETE): a tap on the toast waits for them
+(function () {
+  const f = window.fetch;
+  window.fetch = function (input, init) {
+    const m = (init && init.method) || (typeof input !== 'string' && input && input.method) || 'GET';
+    if (!/^(POST|PUT|DELETE|PATCH)$/i.test(m)) return f.apply(this, arguments);
+    _APP_UPD.writes++;
+    let p;
+    try { p = f.apply(this, arguments); } catch (e) { _APP_UPD.writes--; throw e; }
+    return Promise.resolve(p).finally(() => { _APP_UPD.writes--; });
+  };
+})();
+// what a person typed (not what a script filled in): a field still differing from what the page drew counts as unsaved
+document.addEventListener('input', (e) => {
+  const el = /** @type {any} */ (e.target);
+  if (!el || !el.tagName) return;
+  if (el.isContentEditable) { _APP_UPD.touched.add(el); return; }
+  if (el.tagName === 'TEXTAREA' || (el.tagName === 'INPUT' && !/^(search|checkbox|radio|file|button|submit|range|color|hidden|password)$/i.test(el.type || '')
+      && !/search/i.test(el.id || ''))) _APP_UPD.touched.add(el);
+}, true);
+function appHasUnsaved() {
+  try {
+    if (_APP_UPD.writes > 0) return true;
+    // the branch forms' own flags (js/14-branch.js): count, issue slip, order, receive
+    if (typeof _brnDirty !== 'undefined' && _brnDirty) return true;
+    if (typeof _brnIssDirty !== 'undefined' && _brnIssDirty) return true;
+    if (typeof _brnOrdDirty !== 'undefined' && _brnOrdDirty) return true;
+    if (typeof _brnRcv !== 'undefined' && _brnRcv) {
+      const r = _brnRcv, box = document.getElementById('brnRecvOrder');
+      const n = (r.picked || []).length + Object.keys(r.vals || {}).length + Object.keys(r.pcs || {}).length + Object.keys(r.wts || {}).length;
+      if (n && box && box.offsetParent) return true;
+    }
+    if (document.querySelector('[data-dirty="1"], [data-ui-dialog]')) return true;      // a changed row (ตั้งค่าวันส่ง ...), an open dialog
+    const a = /** @type {any} */ (document.activeElement);
+    if (a && (a.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName || '')) && !/^(search|checkbox|radio|button|submit)$/i.test(a.type || '')) return true;
+    for (const el of [..._APP_UPD.touched]) {
+      if (!el.isConnected) { _APP_UPD.touched.delete(el); continue; }
+      if (el.isContentEditable || el.value !== el.defaultValue) return true;
+    }
+    return false;
+  } catch (e) { return true; }                 // unsure = unsaved
+}
+// the page open now, as a link the boot opens again (supplyDeepLink)
+function _appUpdLink() {
+  try {
+    if (typeof _desktopBooted === 'undefined' || !_desktopBooted) return '';
+    if (phOn() && typeof _phView !== 'undefined' && _phView !== 'page') return '';
+    const tab = activeTab;
+    if (!tab || tab === 'launcher' || tab === 'home' || !TABS[tab]) return '';
+    if (SUPPLY_CHIPS.some(c => c.items.some(i => i.tab === tab))) {
+      const acc = _SUPPLY_PANE[tab], pane = acc && acc.get ? acc.get() : '';
+      return `?go=supply&tab=${encodeURIComponent(tab)}${pane ? '&pane=' + encodeURIComponent(pane) : ''}`;
+    }
+    return `?go=tab&tab=${encodeURIComponent(tab)}`;
+  } catch (e) { return ''; }
+}
+// the new worker has activated (skipWaiting; its activate deletes the old shell caches) - at most 10 s
+async function _appSwSettle() {
+  if (!('serviceWorker' in navigator)) return;
+  let reg = null;
+  try { reg = await navigator.serviceWorker.getRegistration(); if (reg) await reg.update(); } catch (e) { return; }
+  const w = reg && (reg.installing || reg.waiting);
+  if (!w) return;
+  await new Promise(res => {
+    const t = setTimeout(res, 10000);
+    const step = () => {
+      if (w.state === 'activated' || w.state === 'redundant') { clearTimeout(t); res(); }
+      else if (w.state === 'installed') w.postMessage({ type: 'skip-waiting' });
+    };
+    w.addEventListener('statechange', step);
+    step();
+  });
+}
+function appUpdateReload() {
+  const l = _appUpdLink();
+  try { if (l) sessionStorage.setItem('oshinei_upd_link', l); } catch (e) { /* the landing page then */ }
+  location.reload();
+}
+function _appUpdToast() {
+  if (_APP_UPD.toast && _APP_UPD.toast.el.isConnected) return;
+  const h = uiToast('มีเวอร์ชันใหม่ · แตะเพื่อโหลด', 'info', { ms: 0 });
+  _APP_UPD.toast = h;
+  h.el.classList.add('ui-toast-update');
+  h.el.addEventListener('click', async (e) => {
+    if (/** @type {any} */ (e.target).closest('.ui-toast-x')) return;          // × only closes it
+    for (let i = 0; i < 100 && _APP_UPD.writes > 0; i++) await new Promise(r => setTimeout(r, 200));   // the save finishes first
+    if (_APP_UPD.writes > 0) { _appUpdToast(); return; }
+    if (appHasUnsaved() && !(await uiConfirm('หน้านี้มีข้อมูลที่ยังไม่บันทึก หากโหลดตอนนี้ ข้อมูลนั้นจะหายไป',
+      { title: 'โหลดเวอร์ชันใหม่', ok: 'โหลดเลย', cancel: 'กลับไปบันทึก', write: false }))) return;
+    await _appSwSettle();
+    appUpdateReload();
+  });
+}
+async function appUpdateCheck() {
+  if (!_APP_UPD.build || _APP_UPD.busy || document.hidden || navigator.onLine === false) return;
+  if (Date.now() - _APP_UPD.at < 15000) return;          // the foreground hook and the timer in the same moment
+  _APP_UPD.busy = true; _APP_UPD.at = Date.now();
+  try {
+    const r = await (window._rawFetch || fetch)(`${API}/api/meta/build`, { cache: 'no-store' });
+    if (!r.ok) return;
+    const b = String(((await r.json()) || {}).build || '');
+    if (!b || b === _APP_UPD.build) return;
+    let tried = '';
+    try { tried = sessionStorage.getItem('oshinei_upd_build') || ''; } catch (e) { tried = b; }   // no session storage: no loop guard, so no auto-reload
+    if (tried === b || appHasUnsaved()) { _appUpdToast(); return; }
+    try { sessionStorage.setItem('oshinei_upd_build', b); } catch (e) { _appUpdToast(); return; }
+    await _appSwSettle();
+    if (appHasUnsaved() || !navigator.onLine) { _appUpdToast(); return; }   // typing started while the worker took over
+    appUpdateReload();
+  } catch (e) { /* offline or the server restarting: the next check */ }
+  finally { _APP_UPD.busy = false; }
+}
+setInterval(() => { if (!document.hidden && Date.now() - _APP_UPD.at >= 10 * 60 * 1000) appUpdateCheck(); }, 60 * 1000);
+
 // A level-1 chip: reopen the item last used there, else its first item the role can open.
 function supplyChipOpen(key) {
   const ch = SUPPLY_CHIPS.find(c => c.key === key);

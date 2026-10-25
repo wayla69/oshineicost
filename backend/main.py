@@ -255,6 +255,7 @@ async def enforce_auth(request: Request, call_next):
     if not (path.startswith("/api/") or docs_req) or path.startswith("/api/auth/login") \
             or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
             or path.startswith("/api/analysis/health") \
+            or path == "/api/meta/build" \
             or path.startswith("/api/_admin/seed-db") \
             or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
             or path.startswith("/api/_admin/bc-sku-cost-month") \
@@ -929,6 +930,9 @@ def _versioned_index_html() -> str:
         p = _JS_DIR / m.group(1)
         return f'data-lazy="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
     html = _re.sub(r'data-lazy="/js/([0-9a-z-]+\.js)"', sub_lazy, html)
+    # the build this shell belongs to (= the service worker's BUILD): an open page compares it with
+    # GET /api/meta/build and loads the new version after a deploy (js/01-core.js appUpdateCheck)
+    html = html.replace('<head>', f'<head>\n<meta name="app-build" content="{_build_id()}">', 1)
     return html.replace('<div id="tabsRoot"></div>',
                         f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle()[1]}"></div>', 1)
 
@@ -972,15 +976,42 @@ def tabs_html(v: Optional[str] = Query(None)):
 _SW_FILE = INDEX.parent / "sw.js"
 
 
+_index_hash_cache: dict = {}
+
+
+def _index_hash() -> str:
+    """The shell file's own content hash (cached per mtime/size): a deploy that changes only
+    index.html is a new build too."""
+    try:
+        st = INDEX.stat()
+        key = (st.st_mtime_ns, st.st_size)
+        if _index_hash_cache.get("key") != key:
+            _index_hash_cache.update(key=key, h=hashlib.md5(INDEX.read_bytes()).hexdigest()[:8])
+        return _index_hash_cache["h"]
+    except OSError:
+        return "0"
+
+
 def _build_id() -> str:
-    """One short hash over every js slice's hash + the tabs bundle: it changes whenever
-    any of them does, so the service worker's shell cache is retired on a deploy."""
+    """One short hash over every js slice's hash + the tabs bundle + the shell: it changes
+    whenever any of them does, so the service worker's shell cache is retired on a deploy and
+    an open page (meta app-build vs GET /api/meta/build) knows a new version exists."""
     parts = [_js_hash(p) for p in sorted(_JS_DIR.glob("*.js"))] if _JS_DIR.exists() else []
     try:
         parts.append(_tabs_bundle()[1])
     except Exception:
         pass
+    parts.append(_index_hash())
     return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()[:10]
+
+
+@app.get("/api/meta/build", include_in_schema=False)
+def meta_build():
+    """The build the server is serving now (the same id as sw.js's BUILD and the shell's meta
+    app-build). no-store: an open page asks for it on return to the foreground and every 10 min.
+    Open without a session (a content hash, no data) so the login screen also updates."""
+    return JSONResponse({"build": _build_id()},
+                        headers={"Cache-Control": "no-store, max-age=0"})
 
 
 @app.get("/sw.js", include_in_schema=False)
