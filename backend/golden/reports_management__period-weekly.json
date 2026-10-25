@@ -1,6 +1,8 @@
 {
  "actions": [
   {
+   "baht": -5694,
+   "baht_label": "cost above the 58% target",
    "sev": "med",
    "text": "Food cost 157.9% — 99.9 pts above the 58% target."
   }
@@ -12,8 +14,10 @@
    "bills": 3,
    "branch": "BranchA",
    "customers": 12,
+   "prev_revenue": null,
    "rank": 1,
    "rank_change": null,
+   "rev_delta": null,
    "rev_per_head": 237.5,
    "revenue": 2850.0,
    "share_pct": 50.0,
@@ -27,8 +31,10 @@
    "bills": 3,
    "branch": "BranchB",
    "customers": 12,
+   "prev_revenue": null,
    "rank": 2,
    "rank_change": null,
+   "rev_delta": null,
    "rev_per_head": 237.5,
    "revenue": 2850.0,
    "share_pct": 50.0,

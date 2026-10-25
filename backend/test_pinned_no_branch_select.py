@@ -49,10 +49,11 @@ def test_the_strip_is_wired_in_and_the_branch_list_is_skipped_for_a_pinned_login
 
 
 def test_the_franchise_page_has_no_branch_picker_and_never_asks_for_the_branch_list():
-    """PR-L: ร้านของฉัน shows the branch as text. Its fragment holds no <select> but the month picker, and its slice
+    """PR-L: ร้านของฉัน shows the branch as text. Its fragment holds no <select> (DV6: not the month picker either), and its slice
     never calls the branch-list endpoints; the one sidebar entry is the only one a franchise login keeps."""
     html = (ROOT / "tabs" / "56-franchise.html").read_text(encoding="utf-8")
-    assert [m.group(1) for m in re.finditer(r"<select\b[^>]*\bid=\"([A-Za-z0-9]+)\"", html)] == ["frcMonth"]
+    # DV6: no select at all - the page follows the top bar's period (on a phone #frcPeriodChip opens the period sheet)
+    assert [m.group(1) for m in re.finditer(r"<select\b[^>]*\bid=\"([A-Za-z0-9]+)\"", html)] == []
     assert "data-branch-picker" not in html and 'id="frcBranchName"' in html
     js = (ROOT / "js" / "17-franchise.js").read_text(encoding="utf-8")
     assert not re.search(r"/api/branches|/stock/me|branch_id|getBranch\(", js)

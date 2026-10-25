@@ -2038,6 +2038,11 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
 .frc-heat .hd { font-size: 12px; color: var(--text-secondary); }
 .frc-heat .hx { height: 22px; border-radius: 3px; }
 .frc-stars { color: var(--amber-ink); letter-spacing: 1px; font-size: 13px; }
+/* DV6: the period chip of ร้านของฉัน on a phone (the franchise login has no top bar there): 32 px drawn, 44 px to tap */
+.frc-pchip { position: relative; display: inline-flex; align-items: center; gap: 4px; height: 32px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--accent);
+  background: var(--bg-card); color: var(--accent); font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.frc-pchip[hidden] { display: none; }
+.frc-pchip::after { content: ''; position: absolute; left: 0; right: 0; top: -6px; bottom: -6px; }
 /* DV6: เรื่องที่ควรดู · the 6 weeks' sales strip (3 x 2 on a phone, 6 in a row from 560 px); the fill is heatRG, the label inkOn */
 .frc-wks { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
 @media (min-width: 560px) { .frc-wks { grid-template-columns: repeat(6, 1fr); } }
@@ -2955,7 +2960,7 @@ body.php-open { overflow: hidden; }
     <div class="ms-section">
       <div style="display:flex;gap:6px;margin-bottom:10px">
         <!-- DV6: the list opens on the baht against last month; เป้า ranks by the baht away from the target (month-end projection) -->
-        <button id="msSortChg" class="ms-seg ms-seg-on" onclick="msSetBranchSort('chg')">฿ เทียบเดือนก่อน</button>
+        <button id="msSortChg" class="ms-seg ms-seg-on" onclick="msSetBranchSort('chg')" title="บาทที่เปลี่ยนเทียบเดือนก่อน">฿ เปลี่ยน</button>
         <button id="msSortRev" class="ms-seg" onclick="msSetBranchSort('rev')">ยอด</button>
         <button id="msSortRph" class="ms-seg" onclick="msSetBranchSort('rph')">/หัว</button>
         <button id="msSortTgt" class="ms-seg" onclick="msSetBranchSort('tgt')">฿ เป้า</button>

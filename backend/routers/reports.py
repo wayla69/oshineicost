@@ -3354,13 +3354,14 @@ def report_management(
             "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"
                      if th else
                      f"Gross margin down {abs(gp['gp_pct_delta_pp']):.1f}pp vs last {pword} — now {gp['gp_pct']:.0f}%.")})
-    # the food-cost line (its wording and threshold live in their own block): the baht of the cost per head against the
-    # comparison - the GP bridge's cost_head effect, the same figure the profit view draws
-    _bridge = (gp.get("bridge") or {}) if isinstance(gp, dict) else {}
+    # the food-cost line (its wording lives in its own block): the baht above the ONE target (rules.food_cost_target) -
+    # (food cost % - target) x the sales the % is taken on (pace.mtd_revenue: food_cost_pct = bom cost / those sales)
+    _fc_rev = (pace or {}).get("mtd_revenue")
     for a in actions:
         if "baht" not in a and a["text"].startswith(("ต้นทุนอาหาร", "Food cost")):
-            a["baht"] = _bridge.get("cost_head")
-            a["baht_label"] = (f"ผลต่อกำไรจากต้นทุนต่อหัว {_vs}" if th else f"GP effect of the cost per head {_vs}")
+            a["baht"] = (-round((food_cost_pct - fc_target) / 100.0 * _fc_rev)
+                         if food_cost_pct is not None and _fc_rev else None)
+            a["baht_label"] = (f"ต้นทุนเกินเป้า {fc_target:g}%" if th else f"cost above the {fc_target:g}% target")
     sev_rank = {"high": 0, "med": 1, "low": 2}
     actions.sort(key=lambda a: (sev_rank.get(a["sev"], 9), -abs(a.get("baht") or 0)))
     actions = actions[:7]

@@ -1294,8 +1294,8 @@ def franchise_supply(request: Request, month: Optional[str] = Query(None, patter
 #              menus ordered more per customer than their normal (the 3 weeks before, weekday-fair), top 5 by extra plates; and
 #              the new / returning menus of the period (top 5 by plates)
 #   food_cost  food cost % of sales (period_cost.cost_sum, the one cost engine of the period pattern) now / the period before,
-#              against เฉลี่ยทุกสาขา (the chain's pooled figure); gap_baht = (pct - chain pct) x the branch's sales: what a
-#              chain-average food cost would have saved (> 0) or cost (< 0)
+#              against the ONE target (rules.food_cost_target; target_gap_baht = (pct - target) x the branch's sales) and against
+#              เฉลี่ยทุกสาขา (the chain's pooled figure; gap_baht = (pct - chain pct) x the branch's sales)
 #   weeks      the last DECIDE_WEEKS whole Monday-Sunday weeks ending on or before the period's end: net sales
 #              (rules.net_revenue_sum, finished days only) against the branch's own average of those weeks (the heat strip)
 DECIDE_KINDS = ("week", "month")
@@ -1358,6 +1358,7 @@ def _decide_menus(con, w: dict, name: str) -> dict:
 def _decide_food_cost(con, w: dict, name: str) -> dict:
     import period_cost as PC
     import periods as P
+    from rules import food_cost_target
     floor = PC.cost_floor(con)
     cur, why = PC.cost_sum(con, *w["cur"], name, None, floor)
     prev = PC.cost_sum(con, *w["prev"], name, None, floor)[0] if w.get("has_prev") else None
@@ -1369,7 +1370,10 @@ def _decide_food_cost(con, w: dict, name: str) -> dict:
     pct, ppct, apct, appct = fc(cur), fc(prev), fc(avg), fc(avg_prev)
     rev = (cur or {}).get("revenue")
     both = pct is not None and apct is not None
-    return {"pct": pct, "prev_pct": ppct, "change_pp": P.pp(pct, ppct) if pct is not None and ppct is not None else None,
+    tgt = food_cost_target(con)                       # the ONE target (owner 2026-10-25, Settings → ค่าเริ่มต้น)
+    return {"target_pct": tgt,
+            "target_gap_baht": round((pct - tgt) / 100.0 * rev) if pct is not None and rev else None,
+            "pct": pct, "prev_pct": ppct, "change_pp": P.pp(pct, ppct) if pct is not None and ppct is not None else None,
             "avg_pct": apct, "avg_prev_pct": appct,
             "avg_change_pp": P.pp(apct, appct) if apct is not None and appct is not None else None,
             "vs_avg_pp": P.pp(pct, apct) if both else None,

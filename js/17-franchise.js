@@ -45,6 +45,8 @@ async function loadFranchise() {
   const per = _frcPeriod();
   _frcMonth = per.month;
   const decideP = frcFetchDecide(per);         // DV6: เรื่องที่ควรดู loads beside the summary (the first screen)
+  decideP.catch(() => { /* drawn by frcShowDecide */ });
+  frcPeriodChip(null);
   const qs = new URLSearchParams();
   if (_frcMonth) qs.set('month', _frcMonth);
   let d;
@@ -340,7 +342,20 @@ async function frcShowDecide(gen, p) {
   const box = document.getElementById('frcDecide');
   if (gen !== _frcGen || !box) return;
   if (d && d.period && typeof periodChip === 'function') periodChip(d.period, true);    // the chip shows the server's own period
+  frcPeriodChip(d && d.period);
   box.innerHTML = _frcDecide(d);
+}
+// the phone's period control of this page (#frcPeriodChip): the franchise login has no top bar on a phone, so the chip sits in the page head
+function frcPeriodChip(per) {
+  const c = document.getElementById('frcPeriodChip'); if (!c) return;
+  const on = typeof phOn === 'function' && phOn();
+  c.hidden = !on;
+  if (!on) return;
+  const r = per && per.label_th ? per : (typeof gPeriodResolve === 'function' ? gPeriodResolve() : null);
+  const kind = typeof getPeriodKind === 'function' && getPeriodKind() === 'week' ? 'สัปดาห์' : 'เดือน';
+  const txt = r && typeof periodChipShort === 'function' ? periodChipShort(r) : '';
+  const l = c.querySelector('.frc-pchip-l'); if (l) l.textContent = `${kind} · ${txt}`;
+  c.setAttribute('aria-label', `ช่วงเวลา ${kind} ${r && r.label_th ? r.label_th : ''} · แตะเพื่อเปลี่ยน`);
 }
 const _frcSignPct = (v, unit = '%') => v == null ? '—' : `${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(1).replace(/\.0$/, '')}${unit}`;
 const _frcInk = (v, upBad) => v == null || v === 0 ? 'var(--text-secondary)' : (v > 0) === !!upBad ? 'var(--bad-ink)' : 'var(--good-ink)';
@@ -358,19 +373,25 @@ function _frcDecide(d) {
 function _frcFoodCost(f) {
   if (!f) return '';
   const help = '<p>ต้นทุนอาหาร = ต้นทุนของเมนูที่ขาย ÷ ยอดขาย (ไม่รวม VAT) ' + stkWord('ตามสูตรของแต่ละเมนู', 'ตามต้นทุนต่อจานของแต่ละเมนู') + '</p>'
-    + '<p>เฉลี่ยทุกสาขา = ต้นทุนอาหารรวมของทุกสาขา ÷ ยอดขายรวมของทุกสาขา ในช่วงเดียวกัน</p>'
-    + '<p>บาท = ส่วนที่ต่างจากเฉลี่ยทุกสาขา × ยอดขายของสาขาในช่วงนี้</p>';
+    + '<p>เป้า = เป้าต้นทุนอาหารของบริษัท · เฉลี่ยทุกสาขา = ต้นทุนอาหารรวมของทุกสาขา ÷ ยอดขายรวมของทุกสาขา ในช่วงเดียวกัน</p>'
+    + '<p>บาท = ส่วนที่ต่างจากเป้าหรือจากเฉลี่ยทุกสาขา × ยอดขายของสาขาในช่วงนี้</p>';
   if (f.pct == null) return _frcCard('ต้นทุนอาหาร', 'dfood', help, '', `<div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">${esc(f.reason || 'ยังไม่มีต้นทุนของช่วงนี้')}</div></div>`);
   const gap = f.vs_avg_pp, gb = f.gap_baht;
-  const gapTxt = gap == null ? '' : gap > 0
-    ? `สูงกว่าเฉลี่ยทุกสาขา ${_frcSignPct(gap, ' จุด').replace(/^\+/, '')}${gb ? ` · ประมาณ ฿${fmtN(Math.abs(gb))}` : ''}`
-    : gap < 0 ? `ต่ำกว่าเฉลี่ยทุกสาขา ${_frcSignPct(-gap, ' จุด').replace(/^\+/, '')}${gb ? ` · ประมาณ ฿${fmtN(Math.abs(gb))}` : ''}` : 'เท่ากับเฉลี่ยทุกสาขา';
-  const hero = `<div class="ms-kpi"><p class="lbl">ต้นทุนอาหาร (% ของยอดขาย)</p>`
-    + `<p class="val" style="color:${_frcInk(gap, true)}">${_frcPct(f.pct)}</p>`
-    + `<p class="sub">${f.change_pp != null ? `<b style="color:${_frcInk(f.change_pp, true)}">${_frcSignPct(f.change_pp, ' จุด')}</b> <span style="font-size:12px;${_FRC_MUTED}">เทียบช่วงก่อน (${_frcPct(f.prev_pct)})</span>` : `<span style="font-size:12px;${_FRC_MUTED}">ช่วงก่อนยังไม่มีต้นทุน</span>`}</p>`
-    + (gapTxt ? `<p class="sub" style="margin-top:4px;font-size:13px;font-weight:600;color:${_frcInk(gap, true)}">${esc(gapTxt)}</p>` : '') + `</div>`;
+  const t = typeof fcTargetSet === 'function' ? fcTargetSet(f.target_pct) : f.target_pct;      // the ONE target (rules.food_cost_target)
+  const over = f.target_pct != null && f.pct > t, tb = f.target_gap_baht;
+  const bahtTxt = v => v ? ` · ประมาณ ฿${fmtN(Math.abs(v))}` : '';
+  const gapTxt = gap == null ? '' : gap > 0 ? `สูงกว่าเฉลี่ยทุกสาขา ${_frcSignPct(gap, ' จุด').replace(/^\+/, '')}${bahtTxt(gb)}`
+    : gap < 0 ? `ต่ำกว่าเฉลี่ยทุกสาขา ${_frcSignPct(-gap, ' จุด').replace(/^\+/, '')}${bahtTxt(gb)}` : 'เท่ากับเฉลี่ยทุกสาขา';
+  const tgtTxt = f.target_pct == null ? '' : over ? `เกินเป้า ${t}% อยู่ ${(f.pct - t).toFixed(1)} จุด${bahtTxt(tb)}` : `ในเป้า ${t}%`;
+  // a plain card (not the coloured hero tile): the figure's colour says in / over the target
+  const hero = `<div class="ms-card" style="padding:12px 14px"><p style="font-size:12px;margin:0;${_FRC_MUTED}">ต้นทุนอาหาร (% ของยอดขาย)</p>`
+    + `<p style="font-size:30px;font-weight:800;line-height:1.15;margin:2px 0;font-variant-numeric:tabular-nums;color:${f.target_pct == null ? 'var(--text-primary)' : over ? 'var(--bad-ink)' : 'var(--good-ink)'}">${_frcPct(f.pct)}</p>`
+    + (tgtTxt ? `<p style="font-size:13px;font-weight:600;margin:0;color:${over ? 'var(--bad-ink)' : 'var(--good-ink)'}">${esc(tgtTxt)}</p>` : '')
+    + `<p style="font-size:13px;margin:4px 0 0">${f.change_pp != null ? `<b style="color:${_frcInk(f.change_pp, true)}">${_frcSignPct(f.change_pp, ' จุด')}</b> <span style="font-size:12px;${_FRC_MUTED}">เทียบช่วงก่อน (${_frcPct(f.prev_pct)})</span>` : `<span style="font-size:12px;${_FRC_MUTED}">ช่วงก่อนยังไม่มีต้นทุน</span>`}</p>`
+    + `</div>`;
   const rows = `<div class="ms-card" style="margin-top:10px">`
     + _frcRow('เฉลี่ยทุกสาขา', _frcPct(f.avg_pct), f.avg_change_pp != null ? `เทียบช่วงก่อน ${_frcSignPct(f.avg_change_pp, ' จุด')}` : '')
+    + (gapTxt ? `<div class="ms-row" style="font-size:13px;font-weight:600;color:${_frcInk(gap, true)}">${esc(gapTxt)}</div>` : '')
     + (f.coverage_pct != null && f.coverage_pct < 99.5 ? _frcRow('จานที่มีต้นทุนแล้ว', _frcPct(f.coverage_pct), 'เมนูที่ยังไม่มีต้นทุนนับเป็น 0 บาท') : '')
     + `</div>`;
   return _frcCard('ต้นทุนอาหาร', 'dfood', help, '', hero + rows);
@@ -390,12 +411,12 @@ function _frcCostly(c) {
     const why = g.plates_change != null && g.main
       ? `จาน ${_frcSignPct(g.plates_change, '')} · สาเหตุหลัก <b style="color:var(--text-primary)">${cause[g.main] || ''}</b> (ลูกค้า ${_frcSignPct(g.by_customers, '')} · กินต่อหัว ${_frcSignPct(g.by_per_head, '')})` : '';
     return `<div class="ms-row" style="flex-wrap:wrap;gap:2px 10px;align-items:flex-start">`
-      + `<span style="flex:1 1 50%;min-width:0;font-size:14px;font-weight:600;color:var(--text-primary)">${esc(g.label)}`
+      + `<span style="flex:1 1 0;min-width:0;font-size:14px;font-weight:600;color:var(--text-primary)">${esc(g.label)}`
       + `<br><span style="font-size:12px;font-weight:400;${_FRC_MUTED}">ช่วงก่อน ${g.prev_per_head != null ? Number(g.prev_per_head).toFixed(2) : '—'} · เฉลี่ยทุกสาขา ${g.avg_per_head != null ? Number(g.avg_per_head).toFixed(2) : '—'}</span></span>`
-      + `<span style="text-align:right;line-height:1.3"><b style="font-size:16px;font-variant-numeric:tabular-nums;color:var(--text-primary)">${g.per_head != null ? Number(g.per_head).toFixed(2) : '—'}</b> <span style="font-size:12px;${_FRC_MUTED}">จาน/คน</span>`
-      + `<br><span style="font-size:12px;font-weight:600;color:${_frcInk(vsA, true)}">${vsA != null ? _frcSignPct(vsA) + ' จากเฉลี่ย' : ''}</span>`
-      + `${ch != null ? ` <span style="font-size:12px;color:${_frcInk(ch, true)}">· ${_frcSignPct(ch)} จากช่วงก่อน</span>` : ''}</span>`
-      + (why ? `<span style="flex:1 1 100%;font-size:12px;line-height:1.4;${_FRC_MUTED}">${why}</span>` : '')
+      + `<span style="flex:0 0 auto;text-align:right;line-height:1.3"><b style="font-size:16px;font-variant-numeric:tabular-nums;color:var(--text-primary)">${g.per_head != null ? Number(g.per_head).toFixed(2) : '—'}</b> <span style="font-size:12px;${_FRC_MUTED}">จาน/คน</span>`
+      + `<br><span style="font-size:12px;font-weight:600;color:${_frcInk(vsA, true)}">${vsA != null ? _frcSignPct(vsA) + ' จากเฉลี่ย' : ''}</span></span>`
+      + `<span style="flex:1 1 100%;font-size:12px;line-height:1.4;${_FRC_MUTED}">`
+      + `${ch != null ? `<span style="font-weight:600;color:${_frcInk(ch, true)}">${_frcSignPct(ch)} จากช่วงก่อน</span>` : ''}${ch != null && why ? ' · ' : ''}${why}</span>`
       + `</div>`;
   }).join('');
   return _frcCard('ของแพง (จานต่อลูกค้า)', 'dcostly', help, sub, `<div class="ms-card">${rows}</div>`);

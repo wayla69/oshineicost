@@ -12,6 +12,9 @@
       <!-- DV6: no month picker of its own - the page follows the top bar's period (สัปดาห์ · เดือน; the chip by the title on a phone);
            this line names the month the month cards show -->
       <span id="frcStatus" class="text-xs flex-1 min-w-0" style="color:var(--text-muted)"></span>
+      <!-- DV6: on a phone the franchise login has no top bar - this chip is its period control (it opens the period sheet, phPeriodOpen) -->
+      <button type="button" id="frcPeriodChip" class="frc-pchip" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
+        aria-haspopup="dialog"><span class="frc-pchip-l"></span> <span aria-hidden="true">▾</span></button>
       <!-- PR-F1: the month as an Excel file (GET /api/franchise/summary.xlsx); a paper copy prints from this page (A4, index.html) -->
       <button type="button" id="frcDownload" class="frc-dl" onclick="frcDownload()" hidden>ดาวน์โหลดรายงานเดือนนี้</button>
     </div>
