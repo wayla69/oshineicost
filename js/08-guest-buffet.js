@@ -2996,7 +2996,7 @@ function sortBench(key) {
 }
 function renderBenchTable() {
   const { key, dir } = _benchSort;
-  const rows = [..._benchRows].sort((a, b) => {
+  const rows = [..._benchRows].filter(r => !getBranch() || r.branch === getBranch()).sort((a, b) => {   // DV2: follows the top bar's branch
     const x = a[key], y = b[key];
     if (x == null && y == null) return 0;
     if (x == null) return 1;

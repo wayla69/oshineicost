@@ -2774,7 +2774,7 @@ async function loadCashCtl(force) {
   // DV2: by the size of the difference either way (a large over is a control or data signal too); branches under ฿1,000 either way are
   // folded behind "ดูทั้งหมด"; an over from ฿1,000 is amber, a short red
   const ccRows = (d.branches || []).slice().sort((a, b) => Math.abs(b.over_short || 0) - Math.abs(a.over_short || 0));
-  const ccKeep = ccRows.filter(r => Math.abs(r.over_short || 0) >= 1000).length;
+  const ccKeep = getBranch() ? ccRows.length : ccRows.filter(r => Math.abs(r.over_short || 0) >= 1000).length;   // one branch: no fold
   const ccInk = v => v < 0 ? 'var(--bad-ink)' : v >= 1000 ? 'var(--amber-ink)' : 'var(--text-secondary)';
   document.getElementById('ccMore').innerHTML = ccRows.length > ccKeep
     ? (ccKeep ? '' : `<p class="text-xs py-2" style="color:var(--text-muted)">ไม่มีสาขาที่ขาดหรือเกินตั้งแต่ ฿1,000</p>`) + dvMoreBtn('ccBody', ccRows.length, ccKeep) : '';
