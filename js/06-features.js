@@ -2466,7 +2466,6 @@ const _WIDE_TABLES = {
   orderedTable:    { key: [5], fold: [7, 9], stick: [3] },   // เมนู · จำนวนขาย; the two running % fold; the menu name stays
   costItemTable:   { key: [9], fold: [5, 7] },        // ต้นทุน · อัตรากำไร; the two mix % fold
   profitBandTable: { key: [5], fold: [8] },           // กำไร · กำไร; BoM per bill folds
-  staffTable:      { key: [9], fold: [7] },           // พนักงาน · % ส่วนลด
   pbLossTable:     { key: [5], fold: [8] },           // P&L ต่อบิล · ขาดทุน
 };
 function _wideFoldKey(id) { return 'oshinei_wide_open:' + id; }

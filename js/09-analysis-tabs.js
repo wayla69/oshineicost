@@ -325,6 +325,23 @@ async function openDiscountBills(opts = {}) {
   body.innerHTML = renderDiscBillsTable(d.bills, s.p95_discount||0, !cashier, !branch);
 }
 
+// DV2 · พนักงาน "บิลส่วนลดสูงผิดปกติ": four columns, the answer in column 3-4 (บิล · สาขา · ส่วนลด ฿ · % ของบิล), largest discount first;
+// a row opens the bill's menus; every column of the bills stays in "ดูบิลทั้งหมด"
+function _staffAnomTable(bills, p95) {
+  const rows = bills.slice().sort((a, b) => (b.discount || 0) - (a.discount || 0));
+  return `<table class="w-full text-xs" id="staffAnomTable"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
+    <th class="py-2 pr-3">บิล</th><th class="py-2 pr-3">สาขา</th><th class="py-2 pr-3 text-right">ส่วนลด (฿)</th><th class="py-2 text-right">% ของบิล</th></tr></thead><tbody>`
+    + rows.map(b => {
+      const hot = (b.discount || 0) >= p95 && p95 > 0;
+      const pnlRow = JSON.stringify({ receipt: b.receipt_no, branch: b.branch, rev: Math.round((b.total_inc_vat || 0) / 1.07), disc: b.discount || 0,
+        cogs: b.cogs_bom != null ? Math.round(b.cogs_bom) : 0, cust: b.customer_count || 0 }).replace(/'/g, '&#39;');
+      return `<tr class="border-b border-slate-100 cursor-pointer hover:bg-indigo-50/50" title="คลิกดูเมนูในบิล" onclick='openBillItems(${pnlRow})'>
+        <td class="py-1.5 pr-3"><span class="font-mono">${esc(b.receipt_no || '—')}</span><div class="text-[11px]" style="color:var(--text-muted)">${esc((b.sold_at || '').replace('T', ' ').slice(0, 16))}</div></td>
+        <td class="py-1.5 pr-3">${esc(b.branch || '—')}</td>
+        <td class="py-1.5 pr-3 text-right font-semibold" style="color:${hot ? 'var(--bad-ink)' : 'var(--amber-ink)'}">${fmtN(b.discount || 0)}</td>
+        <td class="py-1.5 text-right">${b.disc_pct != null ? b.disc_pct.toFixed(1) + '%' : '—'}</td></tr>`;
+    }).join('') + '</tbody></table>';
+}
 function renderDiscBillsTable(bills, p95, showCashier=true, showBranch=true) {
   const head = `<table class="w-full text-xs"><thead><tr class="text-left text-slate-500 border-b border-slate-200">
     <th class="py-2 pr-3">ใบเสร็จ</th><th class="py-2 pr-3">วันเวลา</th>
@@ -425,27 +442,28 @@ async function loadStaff() {
   if (_staffByBranch) cashierParams.set('by_branch', 'true');
 
   // Loading states
-  document.getElementById('staffBody').innerHTML =
+  const staffBody = document.getElementById('staffBody');   // DV2: the cashier summary table is gone (null on the page)
+  if (staffBody) staffBody.innerHTML =
     '<tr><td colspan="10" class="py-6 text-center text-slate-400 text-xs">กำลังโหลด…</td></tr>';
   document.getElementById('staff-abnormal-bills').innerHTML =
     '<p class="text-sm text-slate-400 py-4 text-center">กำลังโหลด…</p>';
 
   // Abnormal-discount bills panel (top by discount, current filters)
   (async () => {
-    const bp = new URLSearchParams(params); bp.set('limit', '8'); bp.set('sort', 'discount');
+    const bp = new URLSearchParams(params); bp.set('limit', '10'); bp.set('sort', 'discount');
     const db = await api(`${API}/api/analysis/discount_bills?${bp}`).catch(() => null);
     const el = document.getElementById('staff-abnormal-bills');
     if (!db || !db.bills || !db.bills.length) {
       el.innerHTML = '<p class="text-sm text-slate-400 py-4 text-center">ไม่มีบิลส่วนลดในช่วงนี้</p>'; return;
     }
-    el.innerHTML = renderDiscBillsTable(db.bills, db.summary?.p95_discount || 0, true, !getBranch());
+    el.innerHTML = _staffAnomTable(db.bills, db.summary?.p95_discount || 0);
   })();
 
   const d = await api(`${API}/api/analysis/cashiers?${cashierParams}`).catch(() => []);
 
   if (!Array.isArray(d) || !d.length) {
     document.getElementById('staff-kpi-row').innerHTML = '';
-    document.getElementById('staffBody').innerHTML =
+    if (staffBody) staffBody.innerHTML =
       '<tr><td colspan="10" class="py-8 text-center text-slate-400 text-sm">ไม่มีข้อมูลแคชเชียร์ในช่วงเวลา/สาขาที่เลือก — ลองขยายช่วงเวลา หรือเลือก "ทุกสาขา"</td></tr>';
     return;
   }
@@ -491,7 +509,8 @@ async function loadStaff() {
     }
   });
 
-  document.getElementById('staffBody').innerHTML = d.map((r, i) => {
+  if (!staffBody) return;
+  staffBody.innerHTML = d.map((r, i) => {
     const branchLabel = r.primary_branch
       ? (r.branch_count > 1
           ? `${r.primary_branch} <span class="text-[10px] text-slate-400">+${r.branch_count - 1}</span>`
