@@ -2,7 +2,7 @@
 
 The tile used to judge a buffet against à-la-carte bars (38% / 45%): red every
 day, and "ต้นทุนอาหารสูง" the permanent #1 urgent action. These tests pin what
-replaced it — the business's own band, the move against last month, and how
+replaced it — the business's one target (58%, owner 2026-10-25), the move against last month, and how
 complete the costing is — plus the cost work the page now surfaces.
 """
 import sqlite3
@@ -12,21 +12,28 @@ import rules
 from conftest import LATEST_MONTH, PREV_MONTH
 
 
-def test_band_defaults_to_the_buffet_band_and_is_editable_in_settings(client):
+def test_target_defaults_to_58_and_is_editable_in_settings(client):
     d = client.get("/api/home/brief").json()["cost_health"]
-    assert (d["band_lo"], d["band_hi"]) == rules.FOOD_COST_BAND == (55.0, 70.0)
-    assert client.put("/api/settings", json={"food_cost_band_lo": "50", "food_cost_band_hi": "65"}).status_code == 200
+    assert d["food_cost_target"] == rules.FOOD_COST_TARGET == 58.0
+    assert "band_lo" not in d and "band_hi" not in d
+    assert client.put("/api/settings", json={"food_cost_target": "60"}).status_code == 200
     try:
         d = client.get("/api/home/brief").json()["cost_health"]
-        assert (d["band_lo"], d["band_hi"]) == (50.0, 65.0)
-        # nonsense (lo >= hi) must fall back, never blank the home page
-        client.put("/api/settings", json={"food_cost_band_lo": "80", "food_cost_band_hi": "60"})
+        assert d["food_cost_target"] == 60.0
+        # nonsense never reaches the home page: the endpoint refuses it, and a bad stored value reads as 58
+        assert client.put("/api/settings", json={"food_cost_target": "120"}).status_code == 422
+        con = sqlite3.connect(str(core.DB_PATH))
+        con.execute("UPDATE app_settings SET value='abc' WHERE key='food_cost_target'")
+        con.commit(); con.close()
+        client.put("/api/settings", json={})            # drops the cached brief
+        core.invalidate_cache(rebuild_cost=False)
         d = client.get("/api/home/brief").json()["cost_health"]
-        assert (d["band_lo"], d["band_hi"]) == (55.0, 70.0)
+        assert d["food_cost_target"] == 58.0
     finally:
         con = sqlite3.connect(str(core.DB_PATH))
-        con.execute("DELETE FROM app_settings WHERE key LIKE 'food_cost_band_%'")
+        con.execute("DELETE FROM app_settings WHERE key='food_cost_target'")
         con.commit(); con.close()
+        core.invalidate_cache(rebuild_cost=False)
 
 
 def test_movement_is_measured_on_one_basis_and_coverage_by_plates(client):

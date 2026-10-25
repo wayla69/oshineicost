@@ -112,6 +112,7 @@ def build(api, gen_date, group, scope_label, out_name):
     cats     = fetch(api, "/api/sales/category" + gq)
 
     grand = gpb["grand_total"]
+    fct = float(gpb.get("food_cost_target") or 58)   # ONE food-cost target (owner 2026-10-25), Settings → ค่าเริ่มต้น
     branches = sorted(gpb["rows"], key=lambda r: -(r.get("total_revenue") or 0))
     mt = profit["monthly_trend"]
     period = f"{mt[0]['period_month']} – {mt[-1]['period_month']}"
@@ -293,7 +294,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     <div class="kpis">
       <div class="kpi"><div class="lbl">รายได้ (ex-VAT)</div><div class="val">{thb_m(last_mt['revenue'])}</div><div class="sub">{mom(last_mt['revenue'], prev_mt['revenue'] if prev_mt else None)}</div></div>
       <div class="kpi"><div class="lbl">กำไรขั้นต้น</div><div class="val" style="color:var(--em)">{thb_m(last_mt['gross_profit'])}</div><div class="sub">{pct(last_mt['margin_pct'])} · {mom(last_mt['margin_pct'], prev_mt['margin_pct'] if prev_mt else None, as_pts=True)}</div></div>
-      <div class="kpi"><div class="lbl">Food Cost</div><div class="val" style="color:var(--am)">{pct(last_fc)}</div><div class="sub">{mom(last_fc, prev_fc, good_up=False, as_pts=True)} · เป้า 55–70%</div></div>
+      <div class="kpi"><div class="lbl">Food Cost</div><div class="val" style="color:var(--am)">{pct(last_fc)}</div><div class="sub">{mom(last_fc, prev_fc, good_up=False, as_pts=True)} · เป้า {fct:g}%</div></div>
       <div class="kpi"><div class="lbl">ใบเสร็จ/เดือน (เฉลี่ย)</div><div class="val">{format(int(round(rcpt_mo)),',')}</div><div class="sub">{thb(profit['avg_ticket'])}/บิล</div></div>
       <div class="kpi"><div class="lbl">ลูกค้า/เดือน (เฉลี่ย)</div><div class="val">{format(int(round(covers_mo)),',')}</div><div class="sub">{buf['avg_pax_per_bill']}/บิล</div></div>
       <div class="kpi"><div class="lbl">กำไร/บิล</div><div class="val" style="color:var(--em)">{thb(profit['profit_per_bill'])}</div><div class="sub">เฉลี่ยทั้งช่วง</div></div>
@@ -321,7 +322,7 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
     for b in active:
         cur = b["_cur"]; prev = b["_prev"]
         fc = cur["food_cost_pct"]
-        fccol = "var(--em)" if 40 <= fc <= 62 else ("var(--rd)" if fc > 67 else "var(--am)")
+        fccol = "var(--em)" if fc <= fct else "var(--rd)"
         rows_html += (f"<tr><td>{b['branch']}</td>"
                       f"<td>{bar(cur['revenue'],max_rev,'#1f3a6b',thb_m(cur['revenue']))}</td>"
                       f"<td>{thb_m(cur['gp'])}</td>"
@@ -352,8 +353,8 @@ footer{{text-align:center;color:var(--mut);font-size:12px;margin-top:30px}}
       <div class="kpi"><div class="lbl">Food Cost บุฟเฟ่ต์ (เดือนล่าสุด)</div><div class="val" style="color:var(--am)">{pct(bf_cur)}</div><div class="sub">{mom(bf_cur, bf_prev, good_up=False, as_pts=True)}</div></div>
       <div class="kpi"><div class="lbl">เครื่องดื่ม (attach)</div><div class="val">~80%</div><div class="sub">ของบิลสั่งดื่ม · {pct(buf['beverage_attach_pct'])} ของรายได้</div></div>
     </div>
-    <p class="sec-sub" style="margin-bottom:2px">แนวโน้ม Food Cost บุฟเฟ่ต์รายเดือน (เป้า 55–70%)</p>
-    {svg_line(bf_series, "#ec4899", "rgba(236,72,153,.10)", y_is_pct=True, y_suffix="%", target=65)}
+    <p class="sec-sub" style="margin-bottom:2px">แนวโน้ม Food Cost บุฟเฟ่ต์รายเดือน (เป้า {fct:g}%)</p>
+    {svg_line(bf_series, "#ec4899", "rgba(236,72,153,.10)", y_is_pct=True, y_suffix="%", target=fct)}
     <div class="callout good">ต้นทุนอาหารบุฟเฟ่ต์รายเดือนปรับลดจาก <b>{pct(bf_series[0][1])} ({bf_series[0][0]}) → {pct(bf_cur)} ({bf_vals[-1]['period']})</b> · เดือนล่าสุด {mom(bf_cur, bf_prev, good_up=False, as_pts=True)} — สะท้อนการคุม portion / เจรจาซัพพลายเออร์ที่ได้ผล</div>
     <div class="callout warn"><b>เครื่องดื่มเป็นโอกาสที่ยังไม่ถูกใช้เต็มที่</b> — ~80% ของบิลสั่งเครื่องดื่ม แต่คิดเป็นเพียง {pct(buf['beverage_attach_pct'])} ของรายได้ การดันเครื่องดื่มมาร์จิ้นสูง (เครื่องดื่มพิเศษ/แอลกอฮอล์) เพิ่มกำไรได้โดยไม่กระทบต้นทุนอาหาร</div>
     </section>""")

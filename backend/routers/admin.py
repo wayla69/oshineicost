@@ -9,6 +9,11 @@ from core import get_db
 from core import invalidate_cache
 from core import require_write_token
 from targets import targets_for_month
+from rules import FOOD_COST_TARGET_MAX, FOOD_COST_TARGET_MIN, valid_food_cost_target
+
+# the @ttl_cache endpoints whose answer carries or uses rules.food_cost_target (besides home_brief / report_management)
+FOOD_COST_TARGET_CACHED = ("gp_by_branch_month", "buffet_performance", "food_cost_trend", "cost_recalibration",
+                           "bom_cost_branch_foodcost_mom")
 from fastapi import Depends
 from fastapi import HTTPException
 from fastapi import Query
@@ -143,6 +148,10 @@ def get_settings():
 
 @router.put("/api/settings", dependencies=[Depends(require_write_token)])
 def put_settings(body: Dict[str, str]):
+    # the ONE food-cost target (owner 2026-10-25): a number in 20-90, or blank to go back to the default 58
+    fct = body.get("food_cost_target")
+    if fct is not None and str(fct).strip() != "" and not valid_food_cost_target(fct):
+        raise HTTPException(422, f"เป้าต้นทุนอาหารต้องเป็นตัวเลข {FOOD_COST_TARGET_MIN:g}–{FOOD_COST_TARGET_MAX:g}")
     with get_db() as con:
         cur = con.cursor()
         for k, v in body.items():
@@ -152,7 +161,11 @@ def put_settings(body: Dict[str, str]):
         con.commit()
     # settings feed cached endpoints (e.g. discount_alerts thresholds) → drop stale
     invalidate_cache("analysis_discount_alerts", "analysis_discounts", "report_management",
-                     "home_brief")     # the food-cost band drives the home tile
+                     "home_brief")
+    if "food_cost_target" in body:
+        # the cached endpoints that carry the target (home_brief and report_management are dropped above); only these,
+        # so a target change does not make every heavy report recompute at once
+        invalidate_cache(*FOOD_COST_TARGET_CACHED, rebuild_cost=False)
     return {"ok": True}
 
 

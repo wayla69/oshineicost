@@ -250,8 +250,8 @@ A25	'YoY'		b
 B25	'Suppressed before mid-May 2026 — sales history starts ~May 2025, so the year-ago window is incomplete.'		w	
 A26	'Basis of preparation'		b	
 B26	'Unaudited management information generated from the POS sales database. Tier, discount and cost-per-head analysis covers buffet bills.'		w	
-## Action Items 2x2 widths={'A': 10.0, 'B': 41.0}
+## Action Items 2x2 widths={'A': 10.0, 'B': 51.0}
 A1	'Severity'		bc	0F766E
 B1	'Action'		bc	0F766E
 A2	'med'			
-B2	'Food cost 158% — above the ~50% target.'			
+B2	'Food cost 157.9% — 99.9 pts above the 58% target.'			

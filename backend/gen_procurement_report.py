@@ -144,6 +144,7 @@ def build_html(d: dict, gen_dt: str) -> str:
     tm = thai_month(m)
     fc = d["foodcost"]["branches"]
     fc_sorted = sorted(fc, key=lambda b: -(b["food_cost_pct"] or 0))
+    fct = float(d["foodcost"].get("food_cost_target") or 58)   # ONE food-cost target (owner 2026-10-25)
     chain_rev = sum(b["revenue"] for b in fc)
     chain_cogs = sum(b["cogs"] for b in fc)
     chain_costed = sum(b["costed_revenue"] for b in fc)
@@ -190,7 +191,7 @@ def build_html(d: dict, gen_dt: str) -> str:
         f'<td class="n">฿{b0(b["revenue"])}</td><td class="n">฿{b0(b["cogs"])}</td>'
         f'<td class="n"><b>{pct(b["food_cost_pct"])}</b></td>'
         f'<td class="n {"up" if (b["delta_pp"] or 0) > 0 else "down"}">{signed_pct(b["delta_pp"])}</td>'
-        f'<td class="n">{"<span class=\'badge hi\'>สูง</span>" if (b["food_cost_pct"] or 0) >= 65 else ("<span class=\'badge lo\'>ต่ำ</span>" if (b["food_cost_pct"] or 0) <= 55 else "")}</td></tr>'
+        f'<td class="n">{"<span class=\'badge hi\'>เกินเป้า</span>" if (b["food_cost_pct"] or 0) > fct else ""}</td></tr>'
         for i, b in enumerate(fc_sorted))
     p2 = f'''
     <h2>1. ยอดซื้อ (ต้นทุนวัตถุดิบ) เทียบยอดขาย</h2>
@@ -261,7 +262,7 @@ def build_html(d: dict, gen_dt: str) -> str:
         cards = (
             fig("ยอดขาย (ไม่รวม VAT)", "฿" + b0(fcb["revenue"]), "", "neutral")
             + fig("ต้นทุนวัตถุดิบตามสูตร", "฿" + b0(fcb["cogs"]), pct(fcb["food_cost_pct"]) + " ของยอดขาย",
-                  "up" if (fcb["food_cost_pct"] or 0) >= 65 else ("down" if (fcb["food_cost_pct"] or 0) <= 55 else "neutral"))
+                  "up" if (fcb["food_cost_pct"] or 0) > fct else "down")
             + fig("เปลี่ยนจากเดือนก่อน", signed_pct(fcb["delta_pp"]), pct(fcb["prev_food_cost_pct"]) + " เดือนก่อน",
                   "up" if (fcb["delta_pp"] or 0) > 0 else "down")
             + fig("มูลค่าที่ควรสั่งซื้อ 48 รายการหลัก/เดือน", "฿" + b0(opb_totals.get("value_month", 0)),

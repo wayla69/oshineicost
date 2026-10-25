@@ -1888,7 +1888,7 @@ async function msVoiceHandled(id) {
 const _msYoyOk = j => !!(j && j.has_yoy && j.range && j.range[1] >= '2026-05-15');   // same guard as the report
 const _msTgtCol = p => p == null ? '#94a3b8' : p >= 100 ? '#10b981' : p >= 90 ? '#f59e0b' : '#ef4444';
 const _msSevCol = s => s === 'high' ? '#ef4444' : s === 'med' ? '#f59e0b' : '#94a3b8';
-const _msCpCol = cp => cp == null ? '#94a3b8' : cp >= 70 ? '#ef4444' : cp >= 55 ? '#f59e0b' : '#10b981';
+const _msCpCol = cp => fcTargetCol(cp);   // ONE food-cost target (owner 2026-10-25): ≤ target green, above it red
 const _msMuted = 'color:var(--text-muted,#64748b)';
 const _msNone = t => `<div class="ms-row" style="font-size:12px;${_msMuted}">${t}</div>`;
 // PR-PP2: the month in progress is compared to date - days 1..n against days 1..n of last month and of the same
@@ -2308,12 +2308,13 @@ function msTopMenuHtml(items) {
 function msProfitKpisHtml(j) {
   const H = j.headline || {}, P = j.pace || {}, G = j.gp || {}, M = j.menu || {};
   const fcPrev = P.food_cost_pct_prev;
+  const fct = fcTargetSet(j.food_cost_target);
   // DV1: one food cost per head - the cost GP subtracts ÷ covers (gp.cost_per_head, = the bridge's), menu.total_cph only as a fallback
   const cph = G.cost_per_head != null ? G.cost_per_head : M.total_cph;
   const cphD = G.cost_per_head != null ? (G.cost_per_head_prev != null ? G.cost_per_head - G.cost_per_head_prev : null) : M.total_cph_delta;
   return [
     { l: 'GP %', v: G.gp_pct != null ? G.gp_pct.toFixed(1) + '%' : '—', c: '#10b981', s: G.gp_pct_delta_pp != null ? `${G.gp_pct_delta_pp > 0 ? '+' : ''}${G.gp_pct_delta_pp}pp vs เดือนก่อน` : (G.cost_basis === 'unavailable' ? 'ไม่มีข้อมูลต้นทุน' : '') },
-    { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: fcPrev != null ? `เดือนก่อน ${fcPrev.toFixed(1)}%` : '' },
+    { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: `<span class="ms-fc-badge">เป้า ${fcTargetTxt(fct)}%${P.food_cost_pct != null ? ' · ' + fcStatusText(P.food_cost_pct, fct) : ''}</span>${fcPrev != null ? ` · เดือนก่อน ${fcPrev.toFixed(1)}%` : ''}` },
     { l: 'ต้นทุนอาหาร/หัว', v: cph != null ? fmt(cph) : '—', c: '#ef4444', s: cphD != null ? `${cphD > 0 ? '+' : cphD < 0 ? '−' : ''}฿${Math.abs(cphD).toFixed(1)} vs เดือนก่อน` : '' },
     { l: 'GP/หัว', v: G.gp_per_head != null ? fmt(G.gp_per_head) : '—', c: '#0891b2', s: H.rev_per_head != null ? `รายได้/หัว ${fmt(H.rev_per_head)}` : '' },
   ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p><p class="sub" style="font-size:12px;${_msMuted}">${k.s}</p></div>`).join('');
@@ -2342,9 +2343,9 @@ async function msRenderProfit() {
   let d; try { d = await api(`${API}/api/sales/cost-per-head?${q}`); } catch (e) { br.innerHTML = '<div class="ms-row">โหลดไม่สำเร็จ</div>'; return; }
   if (_msRpt !== j) return;
   const branches = (d.branches || []).filter(r => r.cost_pct != null).sort((a, b2) => b2.cost_pct - a.cost_pct);   // worst first
-  const over = branches.filter(r => r.cost_pct >= 55).length;
+  const fct = fcTarget(), over = branches.filter(r => r.cost_pct > fct).length;
   const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(r => r.branch), branches.map(r => r.cost_pct), { pct: true, fmt: v => v + '%' }) : '';
-  br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`ต้นทุนอาหาร ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขา ≥ 55%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row" data-br="${esc(r.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
+  br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`ต้นทุนอาหาร ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขาเกินเป้า ${fcTargetTxt(fct)}%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row" data-br="${esc(r.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
       <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
       <span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
       <span class="ms-chip" style="background:${_msCpCol(r.cost_pct)}22;color:${textInk(_msCpCol(r.cost_pct))}">${r.cost_pct}%</span>

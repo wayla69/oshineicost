@@ -359,14 +359,14 @@ async function startApp() {
           hideOfflineOverlay();
           clearInterval(_healthTimer);
           _healthTimer = setInterval(checkApiHealth, 30000);
-          await Promise.all([loadBranches(), loadMonths()]);
+          await Promise.all([loadBranches(), loadMonths(), fcTargetLoad()]);
           _appStarted = true;
           if (_phoneApp()) await phBoot(); else if (_phoneFirst()) loadMobileSummary(); else await ensureDesktopBooted();
         }
       }, 5000);
       return;
     }
-    await Promise.all([loadBranches(), loadMonths()]);
+    await Promise.all([loadBranches(), loadMonths(), fcTargetLoad()]);
     _appStarted = true;
     if (_phoneApp()) {
       // PR-D3: a phone opens on the department launcher; the owner's summary and the shell load when a person opens them (phBoot, js/09c-mobile.js)
@@ -815,7 +815,7 @@ function renderKpiHero(trendData, gpb, disc) {
     gpTile = tile('กำไรขั้นต้น (GP)', fmt(c.gp), '', '#059669',
       `Margin ${c.gp_pct != null ? c.gp_pct.toFixed(1) + '%' : '—'}`, spark(gpSeriesM, '#059669'), cc('gp', '%', true));
     cogsTile = tile('ต้นทุน (COGS)', fmt(c.cogs), '', '#ef4444',
-      `${c.food_cost_pct != null ? c.food_cost_pct.toFixed(1) + '% ของรายได้ · ' : ''}BoM`, spark(cogsSeriesM, '#ef4444'), cc('cogs', '%', false));
+      `${c.food_cost_pct != null ? `${c.food_cost_pct.toFixed(1)}% ของรายได้ · <span style="color:${textInk(fcTargetCol(c.food_cost_pct))}">${fcStatusText(c.food_cost_pct)}</span> (เป้า ${fcTargetTxt()}%) · ` : ''}BoM`, spark(cogsSeriesM, '#ef4444'), cc('cogs', '%', false));
   }
 
   function tile(label, value, deltaHtml, accent, sub, sparkHtml, cmpHtml) {

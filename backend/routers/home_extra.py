@@ -8,7 +8,7 @@ host-module pattern as routers/reports.py.
 from fastapi import Query, Request
 from typing import Optional
 from rules import closed_day_clause, latest_settled_day
-from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_band,
+from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_target,
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
 from core import (
@@ -713,13 +713,12 @@ def _cost_health(con, month, branch, food_pct, mtd_rev, fc=None):
 
     A bare percentage against a fixed bar told the owner nothing: the bar was an
     à-la-carte norm, so the tile was red every day, and the figure itself is a
-    floor whenever dishes are uncosted. This returns the band that applies to this
+    floor whenever dishes are uncosted. This returns the one target of this
     business, how the figure MOVED against last month (the signal worth a glance),
     how complete the costing is, and the cost work that is waiting on a human.
     Each part degrades to None on a DB that lacks its tables — never an error on
     the first screen anyone sees."""
-    lo, hi = food_cost_band(con)
-    out = {"food_pct": food_pct, "band_lo": lo, "band_hi": hi, "delta_pp": None, "prev_food_pct": None,
+    out = {"food_pct": food_pct, "food_cost_target": food_cost_target(con), "delta_pp": None, "prev_food_pct": None,
            "coverage_pct": None, "uncosted_plates": None, "est_food_pct": None,
            "pending_review": None, "giveaways": None, "requisition": None}
     bf = "AND b.name = :branch" if branch else ""

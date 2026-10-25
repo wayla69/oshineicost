@@ -478,12 +478,13 @@ async function renderCphCompare() {
 }
 
 async function loadFoodCostTrend() {
-  const threshold = document.getElementById('foodCostThreshold')?.value || 35;
-  const params = new URLSearchParams({ alert_threshold: threshold });
+  // ONE food-cost target (owner 2026-10-25): the alert line is the target in Settings → ค่าเริ่มต้น, not a page-local box
+  const params = new URLSearchParams();
   if (getBranch())    params.set('branch', getBranch());
   if (getGroup())     params.set('group',  getGroup());
   const d = await api(`${API}/api/analysis/food_cost_trend?${params}`).catch(() => null);
   if (!d || !d.months || !d.months.length) return;
+  const threshold = fcTargetSet(d.food_cost_target);
 
   // Alerts
   const alertEl = document.getElementById('foodCostAlerts');
@@ -502,7 +503,7 @@ async function loadFoodCostTrend() {
       { type:'bar',  label:'ต้นทุนขาย (BoM)',        data: overall.map(o => o.cost),     backgroundColor:'rgba(220,38,38,0.7)',   borderRadius:3, order:3, yAxisID:'y'  },
       { type:'line', label:'จำนวนเสิร์ฟ',       data: overall.map(o => o.servings), borderColor:'#0891b2', backgroundColor:'transparent', borderWidth:2, pointRadius:3, tension:0.3, order:1, yAxisID:'y2' },
       { type:'line', label:'ต้นทุนอาหาร %',       data: overall.map(o => o.cost_pct), borderColor:'#f59e0b', backgroundColor:'rgba(245,158,11,0.10)', borderWidth:2, borderDash:[4,3], pointRadius:3, tension:0.25, fill:true, order:0, yAxisID:'y1' },
-      { type:'line', label:`Threshold (${threshold}%)`, data: d.months.map(() => parseFloat(threshold)), borderColor:'#ef4444', borderWidth:1, borderDash:[6,3], pointRadius:0, fill:false, yAxisID:'y1' },
+      { type:'line', label:`เป้า ${fcTargetTxt(threshold)}%`, data: d.months.map(() => threshold), borderColor:'#ef4444', borderWidth:1, borderDash:[6,3], pointRadius:0, fill:false, yAxisID:'y1' },
     ] },
     options: {
       responsive: true, maintainAspectRatio: false,
@@ -524,7 +525,7 @@ async function loadFoodCostTrend() {
       scales: {
         x:  { ticks: { font: { size: 9 } } },
         y:  { position:'left',  ticks: { font: { size: 9 }, callback: v => fmt(v) }, title: { display: true, text: 'รายได้ / ต้นทุน (บาท)', font: { size: 9 } } },
-        y1: { position:'right', ticks: { font: { size: 9 }, callback: v => v + '%' }, grid: { display: false }, min: 0, suggestedMax: Math.max(60, parseFloat(threshold) + 10) },
+        y1: { position:'right', ticks: { font: { size: 9 }, callback: v => v + '%' }, grid: { display: false }, min: 0, suggestedMax: Math.max(60, threshold + 10) },
         y2: { display: false, beginAtZero: true },
       }
     }
@@ -1839,8 +1840,8 @@ async function loadPreferences() {
   document.getElementById('prefDefaultMonth').value  = settings.default_month  || '';
   document.getElementById('prefFiscalStart').value   = settings.fiscal_year_start || '1';
   document.getElementById('prefDiscountPolicy').value = settings.discount_policy_pct || '2.5';
-  document.getElementById('prefFoodBandLo').value = settings.food_cost_band_lo || '55';
-  document.getElementById('prefFoodBandHi').value = settings.food_cost_band_hi || '70';
+  // ONE food-cost target (owner 2026-10-25); blank in app_settings = the default 58
+  document.getElementById('prefFoodCostTarget').value = String(fcTargetSet(settings.food_cost_target));
 }
 
 async function savePreferences() {
@@ -1850,16 +1851,22 @@ async function savePreferences() {
     default_month:       document.getElementById('prefDefaultMonth').value,
     fiscal_year_start:   document.getElementById('prefFiscalStart').value,
     discount_policy_pct: document.getElementById('prefDiscountPolicy').value || '2.5',
-    food_cost_band_lo:   document.getElementById('prefFoodBandLo').value || '55',
-    food_cost_band_hi:   document.getElementById('prefFoodBandHi').value || '70',
+    food_cost_target:    document.getElementById('prefFoodCostTarget').value.trim(),
   };
+  const fct = Number(body.food_cost_target);
+  if (body.food_cost_target !== '' && !(isFinite(fct) && fct >= 20 && fct <= 90)) {
+    status.textContent = '✗ เป้าต้นทุนอาหารต้องอยู่ระหว่าง 20–90'; status.className = 'text-sm text-red-600';
+    return;
+  }
   try {
     status.textContent = 'Saving…'; status.className = 'text-sm text-slate-400';
-    await fetch(`${API}/api/settings`, {
+    const r = await fetch(`${API}/api/settings`, {
       method: 'PUT',
       headers: {'Content-Type':'application/json'},
       body: JSON.stringify(body),
     });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    _fcTarget = FC_TARGET_DEFAULT; fcTargetSet(body.food_cost_target);   // blank = back to the default
     status.textContent = '✓ Saved'; status.className = 'text-sm text-emerald-600';
     setTimeout(() => { status.textContent = ''; }, 2500);
     // settings feed other tabs (the discount ceiling → Discounts, Management Report);

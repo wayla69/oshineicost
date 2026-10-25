@@ -9,7 +9,7 @@
     <h2 class="text-base font-bold" style="color:var(--accent)">ภาพรวมผลงานบุฟเฟ่ต์</h2>
     <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-buffetperf" title="คำอธิบายของหน้านี้">?</button>
     <template id="hlp-buffetperf" data-title="ภาพรวมผลงานบุฟเฟ่ต์"><p>วัดผลหลักของบุฟเฟ่ต์: จำนวนลูกค้าจริง การใช้ที่นั่ง ต้นทุนอาหาร อัตราการกินเกินปกติ และสัดส่วนลูกค้าที่สั่งเครื่องดื่ม</p>
-      <p>เกณฑ์อ้างอิงของร้านบุฟเฟ่ต์ไทย (ปี 2026): ต้นทุนอาหาร 55–70% · การใช้ที่นั่ง 60–80% · ลูกค้าที่สั่งเครื่องดื่ม ตั้งแต่ 15% ขึ้นไป</p></template>
+      <p>เกณฑ์อ้างอิงของร้านบุฟเฟ่ต์ไทย (ปี 2026): ต้นทุนอาหาร เป้า 58% (ตั้งค่า → ค่าเริ่มต้น) · การใช้ที่นั่ง 60–80% · ลูกค้าที่สั่งเครื่องดื่ม ตั้งแต่ 15% ขึ้นไป</p></template>
   </div>
 
   <!-- KPI hero row — always visible -->
@@ -43,7 +43,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-5">
       <div class="card p-5">
         <h2 class="section-title mb-1">ต้นทุนอาหารเทียบเป้า (เฉพาะบุฟเฟ่ต์)</h2>
-        <p class="text-xs text-slate-400 mb-3">เทียบ % ต้นทุนจริงกับช่วงเป้าหมายร้านปัจจุบัน Oshinei (55-70%)</p>
+        <p class="text-xs text-slate-400 mb-3">เทียบ % ต้นทุนจริงกับเป้าต้นทุนอาหาร (ตั้งค่า → ค่าเริ่มต้น)</p>
         <div style="height:220px"><canvas id="bperfFoodCost"></canvas></div>
       </div>
       <div class="card p-5">

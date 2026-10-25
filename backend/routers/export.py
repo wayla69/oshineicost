@@ -8,6 +8,7 @@ from core import _cogs_case
 from core import _costed_rev_case
 from core import _ym_parts
 from core import get_db
+from rules import food_cost_status_th, food_cost_target
 from fastapi import HTTPException
 from fastapi import Query
 from fastapi.responses import StreamingResponse
@@ -33,22 +34,7 @@ def _mpack_collect(month: str) -> dict:
     costed_rev_expr = _costed_rev_case('ssm', 'sk', 'sc')
 
     with get_db() as con:
-        # Targets from app_settings
-        try:
-            srows = con.execute(
-                "SELECT key, value FROM app_settings WHERE key IN ('cost_target_lo','cost_target_hi')"
-            ).fetchall()
-            settings = {r["key"]: r["value"] for r in srows}
-        except Exception:
-            settings = {}
-        try:
-            target_lo = float(settings.get("cost_target_lo", 55))
-        except Exception:
-            target_lo = 55.0
-        try:
-            target_hi = float(settings.get("cost_target_hi", 70))
-        except Exception:
-            target_hi = 70.0
+        target = food_cost_target(con)   # ONE food-cost target (owner 2026-10-25), Settings → ค่าเริ่มต้น
 
         # Network summary — current + prior
         def _net(m: str) -> dict:
@@ -220,26 +206,17 @@ def _mpack_collect(month: str) -> dict:
         gp   = rev - cogs
         gp_p = (gp/rev*100)   if rev > 0 else None
         fc_p = (cogs/rev*100) if rev > 0 else None
-        if fc_p is None:
-            status = "no-data"
-        elif fc_p > target_hi:
-            status = "out"
-        elif fc_p < target_lo - 5:
-            status = "low"        # suspiciously low
-        elif fc_p > target_hi - 3:
-            status = "borderline"
-        else:
-            status = "in"
+        status = "no-data" if fc_p is None else ("in" if fc_p <= target else "out")
         branches.append({
             "branch": r["branch"], "revenue": rev, "cogs": cogs,
             "costed_rev": cr, "gp": gp, "gp_pct": gp_p, "food_cost_pct": fc_p,
-            "status": status,
+            "status": status, "status_th": food_cost_status_th(fc_p, target),
         })
         # Alerts
-        if fc_p is not None and fc_p > 70.0:
+        if fc_p is not None and fc_p > target:
             alerts.append({
                 "branch": r["branch"], "severity": "high",
-                "message": f"ต้นทุนอาหาร {fc_p:.1f}% เกิน 70% (เป้า {target_lo}-{target_hi}%)",
+                "message": f"ต้นทุนอาหาร {fc_p:.1f}% {food_cost_status_th(fc_p, target)} (เป้า {target:g}%)",
             })
         if gp is not None and gp < 0:
             alerts.append({
@@ -265,10 +242,10 @@ def _mpack_collect(month: str) -> dict:
     # Auto action items
     actions = []
     # 1) Branches over target
-    over = sorted([b for b in branches if b["food_cost_pct"] and b["food_cost_pct"] > target_hi],
+    over = sorted([b for b in branches if b["food_cost_pct"] and b["food_cost_pct"] > target],
                   key=lambda x: -x["food_cost_pct"])[:5]
     for b in over:
-        actions.append(f"ทบทวน BoM/ราคาขาย ที่สาขา {b['branch']} — Food Cost {b['food_cost_pct']:.1f}% (เป้า ≤{target_hi}%)")
+        actions.append(f"ทบทวน BoM/ราคาขาย ที่สาขา {b['branch']} — Food Cost {b['food_cost_pct']:.1f}% (เป้า {target:g}%, {food_cost_status_th(b['food_cost_pct'], target)})")
     # 2) Top cost driver concentration
     if top_drivers_out:
         top5_pct = sum(d["pct_of_total"] for d in top_drivers_out[:5])
@@ -290,8 +267,7 @@ def _mpack_collect(month: str) -> dict:
         "prior_month": prior_month,
         "summary_current": summary_cur,
         "summary_prior":   summary_prior,
-        "target_lo": target_lo,
-        "target_hi": target_hi,
+        "food_cost_target": target,
         "branches":  branches,
         "top_drivers": top_drivers_out,
         "ingredients": ingredients,
@@ -316,9 +292,7 @@ def _mpack_render_xlsx(pack: dict) -> bytes:
 
     STATUS_COLOR = {
         "in":         ("E8F5E9", "1B5E20", "ในเป้า"),
-        "borderline": ("FFF3E0", "E65100", "⚠ ใกล้ขอบ"),
         "out":        ("FFEBEE", "B71C1C", "เกินเป้า"),
-        "low":        ("E3F2FD", "0D47A1", "ℹ️ ต่ำผิดปกติ"),
         "no-data":    ("ECEFF1", "455A64", "— ไม่มีข้อมูล"),
     }
 
@@ -341,7 +315,7 @@ def _mpack_render_xlsx(pack: dict) -> bytes:
     ws["A1"] = f"Oshinei — Monthly Review Pack · {pack['month']}"
     ws["A1"].font = TITLE
     ws.merge_cells("A1:E1")
-    ws["A2"] = f"เทียบกับ {pack['prior_month']} · เป้า Food Cost {pack['target_lo']:.0f}–{pack['target_hi']:.0f}%"
+    ws["A2"] = f"เทียบกับ {pack['prior_month']} · เป้าต้นทุนอาหาร {pack['food_cost_target']:g}%"
     ws["A2"].font = SUBTITLE
     ws.merge_cells("A2:E2")
     make_header(ws, ["Metric", pack["month"], pack["prior_month"], "Δ", "Δ %"], row=4)
@@ -375,7 +349,7 @@ def _mpack_render_xlsx(pack: dict) -> bytes:
         ws2.cell(row=r, column=5, value=b["gp_pct"]).number_format        = PCT_FMT
         ws2.cell(row=r, column=6, value=b["food_cost_pct"]).number_format = PCT_FMT
         bg, fg, label = STATUS_COLOR.get(b["status"], STATUS_COLOR["no-data"])
-        sc_cell = ws2.cell(row=r, column=7, value=label)
+        sc_cell = ws2.cell(row=r, column=7, value=b.get("status_th") or label)
         sc_cell.fill = PatternFill("solid", fgColor=bg)
         sc_cell.font = Font(color=fg, bold=True)
     autofit(ws2)
@@ -483,7 +457,7 @@ def _mpack_render_pdf(pack: dict) -> bytes:
     story.append(Paragraph("Oshinei Monthly Review Pack", h1))
     story.append(Paragraph(f"{pack['month']}", h2))
     story.append(Spacer(1, 1*cm))
-    story.append(Paragraph(f"<b>{sc['branch_count']}</b> สาขา · เป้า Food Cost <b>{pack['target_lo']:.0f}–{pack['target_hi']:.0f}%</b>", body))
+    story.append(Paragraph(f"<b>{sc['branch_count']}</b> สาขา · เป้าต้นทุนอาหาร <b>{pack['food_cost_target']:g}%</b>", body))
     story.append(Spacer(1, 0.6*cm))
     cover_tbl = Table([
         ["Metric", pack["month"], pack["prior_month"]],
@@ -519,13 +493,11 @@ def _mpack_render_pdf(pack: dict) -> bytes:
         bar_colors = []
         for b in branches:
             st = b["status"]
-            bar_colors.append({"in":"#10b981","borderline":"#f59e0b","out":"#ef4444",
-                               "low":"#3b82f6","no-data":"#94a3b8"}.get(st, "#94a3b8"))
+            bar_colors.append({"in":"#10b981","out":"#ef4444","no-data":"#94a3b8"}.get(st, "#94a3b8"))
         ax.barh(labels, gpps, color=bar_colors)
         ax.invert_yaxis()
         ax.set_xlabel("GP %")
-        ax.axvline(100 - pack["target_hi"], color="#10b981", linestyle="--", lw=0.7, alpha=0.5)
-        ax.axvline(100 - pack["target_lo"], color="#10b981", linestyle="--", lw=0.7, alpha=0.5)
+        ax.axvline(100 - pack["food_cost_target"], color="#10b981", linestyle="--", lw=0.7, alpha=0.5)   # GP at the one target
         ax.grid(axis="x", alpha=0.2)
         fig.tight_layout()
         imgbuf = _io.BytesIO()
@@ -541,7 +513,7 @@ def _mpack_render_pdf(pack: dict) -> bytes:
         tbl_data.append([
             b["branch"], fmt_n(b["revenue"]), fmt_n(b["cogs"]), fmt_n(b["gp"]),
             fmt_p(b["gp_pct"]), fmt_p(b["food_cost_pct"]),
-            {"in":"ในเป้า","borderline":"ใกล้ขอบ","out":"เกินเป้า","low":"ต่ำผิดปกติ","no-data":"-"}.get(b["status"],"-"),  # words: KIRA UI has no ✓ ⚠ ●
+            b.get("status_th") or "-",  # words: KIRA UI has no ✓ ⚠ ●
         ])
     branch_tbl = Table(tbl_data, colWidths=[3.2*cm, 2.5*cm, 2.5*cm, 2.5*cm, 1.8*cm, 1.8*cm, 2.1*cm])
     branch_tbl.setStyle(TableStyle([

@@ -740,6 +740,7 @@ function renderMgtReport(j, jM, jF) {
   // §2 — Month pacing & food cost (full month for a past period, MTD for the current one)
   // + weekly net-sales bars for the month and a last-month comparison (MoM).
   const P = j.pace || {};
+  const fct = fcTargetSet(j.food_cost_target);   // ONE food-cost target (owner 2026-10-25), Settings → ค่าเริ่มต้น
   const pvt = P.proj_vs_target_pct;
   const mc = P.month_complete;
   const PMx = P.prev_month || {};
@@ -1255,17 +1256,15 @@ function renderMgtReport(j, jM, jF) {
   // 5 — Food cost
   if (P.food_cost_pct != null) {
     const fc = P.food_cost_pct;
-    const fcCol = fc >= 53 ? 'var(--bad-ink)' : fc <= 47 ? 'var(--good-ink)' : '#d97706';
+    const fcCol = fc > fct ? 'var(--bad-ink)' : 'var(--good-ink)';
     if (isTH) {
-      const v  = fc >= 53 ? 'สูงกว่าเกณฑ์ ~50% — อัตรากำไรกำลังถูกกดดัน'
-               : fc <= 47 ? 'อยู่ในเกณฑ์ ~50% อย่างสบายๆ — อัตรากำไรแข็งแรง'
-               : 'อยู่ราวเกณฑ์ ~50%';
+      const v  = fc > fct ? `${fcStatusText(fc, fct)} (เป้า ${fcTargetTxt(fct)}%) — อัตรากำไรกำลังถูกกดดัน`
+               : `ในเป้า ${fcTargetTxt(fct)}%`;
       ex.push({c:'#d97706', lead:'ต้นทุนอาหาร', body:'ต้นทุนอาหารอยู่ที่ <b>' + fc.toFixed(1) + '%</b> ของยอดขาย (อิงสูตร BoM) สำหรับ ' + P.month +
               ' <span style="color:' + textInk(fcCol) + ';font-weight:600">' + v + '</span>'});
     } else {
-      const v  = fc >= 53 ? 'above the ~50% benchmark — margins are under pressure'
-               : fc <= 47 ? 'comfortably within the ~50% benchmark — healthy margins'
-               : 'around the ~50% benchmark';
+      const v  = fc > fct ? `${(fc - fct).toFixed(1)} pts above the ${fcTargetTxt(fct)}% target — margins are under pressure`
+               : `within the ${fcTargetTxt(fct)}% target`;
       ex.push({c:'#d97706', lead:'Food cost.', body:'Food cost is running at <b>' + fc.toFixed(1) + '%</b> of sales (BoM basis) for ' + P.month +
               ', <span style="color:' + textInk(fcCol) + ';font-weight:600">' + v + '</span>.'});
     }
@@ -1355,10 +1354,10 @@ function renderMgtReport(j, jM, jF) {
       : `Sales shift driven mainly by <b>${byT ? 'customer traffic' : 'spend per head'}</b> (covers ${signed(H.cust_wow_pct)} · per-head ${signed(H.rph_wow_pct)})`);
   }
   if (_fc != null) {
-    const fCol = _fc >= 53 ? 'var(--bad-ink)' : _fc <= 47 ? 'var(--good-ink)' : '#d97706';
+    const fCol = _fc > fct ? 'var(--bad-ink)' : 'var(--good-ink)';
     _bul.push(isTH
-      ? `ต้นทุนอาหาร <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'สูงกว่าเป้า ~50%' : _fc <= 47 ? 'ต่ำกว่าเป้า ~50% (ดี)' : 'ใกล้เป้า ~50%'}`
-      : `Food cost <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> ${_fc >= 53 ? 'above the ~50% target' : _fc <= 47 ? 'below ~50% (good)' : 'near the ~50% target'}`);
+      ? `ต้นทุนอาหาร <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(_fc, fct)}`
+      : `Food cost <b style="color:${textInk(fCol)}">${_fc.toFixed(1)}%</b> ${_fc > fct ? `${(_fc - fct).toFixed(1)} pts above the ${fcTargetTxt(fct)}% target` : `within the ${fcTargetTxt(fct)}% target`}`);
   }
   const _hv = L.heavy_discount || {};
   if ((_hv.bills || 0) > 0) {

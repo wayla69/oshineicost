@@ -68,24 +68,47 @@ def discount_policy_pct(con) -> float:
     return v if 0 <= v <= 100 else DISCOUNT_POLICY_PCT
 
 
-# Food-cost band for THIS business. The home page used to judge food cost against
-# 38% / 45% — à-la-carte norms — which left the tile permanently red for a buffet
-# whose honest recipe cost runs 52-68%, and put "ต้นทุนอาหารสูง" at the top of the
-# action queue every single day. 55-70 is the band the buffet tab has always used.
-FOOD_COST_BAND = (55.0, 70.0)
+# ONE food-cost target for THIS business (owner 2026-10-25: "food-cost target 58%"). Food cost %
+# at or below it is good (ในเป้า), above it is bad (เกินเป้า x.x จุด). It replaced the 55-70 band
+# (and the hard-coded ~50% of the management report): every page, report and chart reads this one
+# number. Settings → ค่าเริ่มต้น writes app_settings['food_cost_target']; the old band keys
+# (food_cost_band_lo/_hi, cost_target_lo/_hi) are not read - unset means the default below.
+FOOD_COST_TARGET = 58.0
+FOOD_COST_TARGET_MIN, FOOD_COST_TARGET_MAX = 20.0, 90.0
 
 
-def food_cost_band(con) -> tuple:
-    """(lo, hi) in force: app_settings food_cost_band_lo / _hi (Settings →
-    ค่าเริ่มต้น), else FOOD_COST_BAND. Unreadable, out of range or lo >= hi → default."""
+def valid_food_cost_target(v) -> bool:
+    """True when v reads as a number inside 20-90 (the range Settings accepts)."""
     try:
-        got = dict(con.execute("SELECT key, value FROM app_settings "
-                               "WHERE key IN ('food_cost_band_lo','food_cost_band_hi')").fetchall())
-        lo = float(got.get("food_cost_band_lo") or FOOD_COST_BAND[0])
-        hi = float(got.get("food_cost_band_hi") or FOOD_COST_BAND[1])
+        f = float(v)
+    except (TypeError, ValueError):
+        return False
+    return FOOD_COST_TARGET_MIN <= f <= FOOD_COST_TARGET_MAX
+
+
+def food_cost_target(con) -> float:
+    """The target in force: app_settings['food_cost_target'], else FOOD_COST_TARGET.
+    Unreadable, blank or outside 20-90 → the default, never an error."""
+    try:
+        row = con.execute("SELECT value FROM app_settings WHERE key='food_cost_target'").fetchone()
+        v = row[0] if row else None
     except Exception:
-        return FOOD_COST_BAND
-    return (lo, hi) if 0 < lo < hi <= 100 else FOOD_COST_BAND
+        return FOOD_COST_TARGET
+    return float(v) if v not in (None, "") and valid_food_cost_target(v) else FOOD_COST_TARGET
+
+
+def food_cost_over_pp(pct, target):
+    """Points above the target (> 0 = เกินเป้า), 0.0 when within it, None without a figure."""
+    if pct is None:
+        return None
+    return round(max(0.0, float(pct) - float(target)), 1)
+
+
+def food_cost_status_th(pct, target) -> str:
+    """'ในเป้า' at or below the target, 'เกินเป้า x.x จุด' above it, '—' without a figure."""
+    if pct is None:
+        return "—"
+    return "ในเป้า" if float(pct) <= float(target) else f"เกินเป้า {float(pct) - float(target):.1f} จุด"
 
 
 def discount_excess(discount: float, base: float, policy_pct: float) -> float:

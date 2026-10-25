@@ -2,7 +2,7 @@
  "actions": [
   {
    "sev": "med",
-   "text": "Food cost 126% — above the ~50% target."
+   "text": "Food cost 126.3% — 68.3 pts above the 58% target."
   }
  ],
  "available": true,
@@ -97,6 +97,7 @@
   "voices": 0
  },
  "focus": "2026-06-03",
+ "food_cost_target": 58.0,
  "gp": {
   "bridge": null,
   "bridge_yoy": null,

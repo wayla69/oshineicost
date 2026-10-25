@@ -13,7 +13,7 @@ from pydantic import BaseModel
 from typing import Dict, List, Optional
 from datetime import datetime, timezone
 import auth as _auth
-from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, tier_code_sql, costed_sql, coverage_from_sums, coverage_sums_sql, needs_cost_sql
+from rules import ALL_TIER_CODES_SQL as _ALL_TIER_CODES_SQL, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, tier_code_sql, costed_sql, coverage_from_sums, coverage_sums_sql, food_cost_target, needs_cost_sql
 from core import (
     BOM_TYPE_BENCHMARKS, CostEntry, DB_PATH, HERE, _FOOD_CATEGORY_FILTER,
     _bom_cost_period_filters, _build_sku_effective_cost, _cogs_case, _costed_rev_case, _effective_cost_subquery,
@@ -1494,7 +1494,7 @@ def bom_consumption_analysis(
 @router.get("/api/cost/recalibration")
 @ttl_cache
 def cost_recalibration(
-    target_pct:  float = Query(65.0, description="Target food cost % (typical AYCE: 55-70)"),
+    target_pct:  Optional[float] = Query(None, description="Target food cost %; default = the one food-cost target (Settings → ค่าเริ่มต้น)"),
     limit:       int   = Query(50,   description="Top N cost-driver SKUs to surface (default 50)"),
     month_from:  Optional[str] = Query(None),
     month_to:    Optional[str] = Query(None),
@@ -1526,6 +1526,8 @@ def cost_recalibration(
     totals_where = ("WHERE " + " AND ".join(totals_filters)) if totals_filters else ""
 
     with get_db() as con:
+        if target_pct is None:
+            target_pct = food_cost_target(con)
         totals = con.execute(f"""
             SELECT
               SUM(ssm.subtotal_ex_vat) AS rev,
@@ -2722,8 +2724,10 @@ def bom_cost_branch_foodcost_mom(
                "ly_label_th": _P.label_th(*lv) if lv[0] else "", "has_prev": a_prev is not None, "has_ly": a_ly is not None}
         if reasons:
             per["reasons"] = {k: v for k, v in reasons.items() if v}
+    with get_db() as con:
+        fct = food_cost_target(con)   # ONE food-cost target (owner 2026-10-25), Settings → ค่าเริ่มต้น
     return {"month": cur_m, "prev_month": prev_m, "incl_service": bool(incl_service), "branches": out,
-            "mom_basis": "to_date" if to_date else "month", "period": per}
+            "mom_basis": "to_date" if to_date else "month", "period": per, "food_cost_target": fct}
 
 
 @router.get("/api/bom-cost/compare")

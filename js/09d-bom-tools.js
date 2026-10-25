@@ -275,7 +275,9 @@ if (_origLoadActiveTab) {
 let _recalibData = null;
 
 async function loadRecalibration() {
-  const target = parseFloat(document.getElementById('recalibTarget').value || '65');
+  const tEl = document.getElementById('recalibTarget');
+  if (tEl && !tEl.value) tEl.value = String(fcTarget());   // ONE food-cost target (Settings → ค่าเริ่มต้น) unless typed here
+  const target = parseFloat((tEl && tEl.value) || String(fcTarget()));
   const limit  = parseInt(document.getElementById('recalibLimit').value || '50', 10);
   const mf = getMonthFrom(), mt = getMonthTo();
   const params = new URLSearchParams({ target_pct: target, limit });
@@ -297,8 +299,7 @@ function _renderRecalibSummary() {
   const d = _recalibData;
   if (!d) return;
   const cur = d.current_food_cost_pct, tgt = d.target_food_cost_pct;
-  const inRange = cur >= 55 && cur <= 70;
-  const curColor = inRange ? '#10b981' : cur > 70 ? '#ef4444' : '#f59e0b';
+  const curColor = fcTargetCol(cur, tgt);   // ONE food-cost target (owner 2026-10-25)
   document.getElementById('recalibSummary').innerHTML = `
     <div class="bg-white rounded-lg p-2.5 border border-amber-200 text-center">
       <p class="text-[10px] text-slate-500">รายได้ (period)</p>
