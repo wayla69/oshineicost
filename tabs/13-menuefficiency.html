@@ -8,6 +8,59 @@
   </div>
   <!-- KPI chips -->
   <div id="mce2Kpis" class="flex flex-wrap gap-2 mb-4"></div>
+  <!-- DV5 (phone table review 2026-10-25): the answer first - the ingredients to attack and what a cut saves, then the scatter and the full list -->
+  <!-- Ingredient attack section -->
+  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-1" data-title="กลุ่ม: เสิร์ฟ × ต้นทุน เสิร์ฟเยอะ + ต้นทุนสูง"><p>วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p></template>
+    <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
+      <div>
+        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">20 อันดับวัตถุดิบ (ตามต้นทุนรวม)</p>
+        <div style="height:380px"><canvas id="mce2IngBar"></canvas></div>
+      </div>
+      <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
+        <table class="text-xs w-full">
+          <thead class="sticky top-0" style="background:var(--bg-card)">
+            <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
+              <th class="py-1.5 pr-2">#</th>
+              <th class="py-1.5 pr-2">วัตถุดิบ</th>
+              <th class="py-1.5 pr-2 text-[10px]">ประเภท</th>
+              <th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
+              <th class="py-1.5 pr-2 text-right">% ต้นทุน</th>
+              <th class="py-1.5 text-right">ใน N เมนู</th>
+            </tr>
+          </thead>
+          <tbody id="mce2IngBody"><tr><td colspan="6" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- What-If savings calculator -->
+  <div class="card p-5 mb-4" style="border:1px solid #10b981">
+    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สถานการณ์จำลอง: ลดต้นทุนแล้วประหยัดได้เท่าไร? <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-2" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-2" data-title="Pareto 80/20"><p>เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p></template>
+    <div class="flex flex-wrap items-center gap-4 mb-4">
+      <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
+        เป้าหมายอันดับต้น
+        <select id="mce2WifN" onchange="renderMce2Whatif()" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+          <option value="3">3</option><option value="5" selected>5</option><option value="8">8</option>
+          <option value="10">10</option><option value="15">15</option><option value="20">20</option>
+        </select>
+        เมนู
+      </label>
+      <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
+        ลดต้นทุนลง
+        <select id="mce2WifPct" onchange="renderMce2Whatif()" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
+          <option value="5">5%</option><option value="10" selected>10%</option>
+          <option value="15">15%</option><option value="20">20%</option><option value="30">30%</option>
+        </select>
+        ต่อเมนู
+      </label>
+    </div>
+    <div id="mce2WhatifResult" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
+    <div id="mce2WhatifTable" class="overflow-x-auto" style="max-height:260px;overflow-y:auto"></div>
+  </div>
+
   <!-- Quadrant scatter + legend -->
   <div class="card p-5 mb-4">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
@@ -48,33 +101,6 @@
       </table>
     </div>
   </div>
-  <!-- Ingredient attack section -->
-  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">วัตถุดิบที่ควรโจมตีก่อน (จัดกลุ่มแล้ว) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-1" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-1" data-title="กลุ่ม: เสิร์ฟ × ต้นทุน เสิร์ฟเยอะ + ต้นทุนสูง"><p>วัตถุดิบที่ใช้มากที่สุดในทุกเมนู — ต่อรองราคา/เปลี่ยนสูตรที่นี่จะลดต้นทุนรวมได้มากที่สุด</p></template>
-    <div id="mce2IngKpis" class="flex flex-wrap gap-2 mb-3"></div>
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-5">
-      <div>
-        <p class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">20 อันดับวัตถุดิบ (ตามต้นทุนรวม)</p>
-        <div style="height:380px"><canvas id="mce2IngBar"></canvas></div>
-      </div>
-      <div class="overflow-x-auto" style="max-height:380px;overflow-y:auto">
-        <table class="text-xs w-full">
-          <thead class="sticky top-0" style="background:var(--bg-card)">
-            <tr class="text-left border-b" style="border-color:var(--border);color:var(--text-muted)">
-              <th class="py-1.5 pr-2">#</th>
-              <th class="py-1.5 pr-2">วัตถุดิบ</th>
-              <th class="py-1.5 pr-2 text-[10px]">ประเภท</th>
-              <th class="py-1.5 pr-2 text-right">ต้นทุนรวม</th>
-              <th class="py-1.5 pr-2 text-right">% ต้นทุน</th>
-              <th class="py-1.5 text-right">ใน N เมนู</th>
-            </tr>
-          </thead>
-          <tbody id="mce2IngBody"><tr><td colspan="6" class="py-4 text-center" style="color:var(--text-muted)">กำลังโหลด…</td></tr></tbody>
-        </table>
-      </div>
-    </div>
-  </div>
-
   <!-- Pareto 80/20 analysis -->
   <div class="card p-5 mb-4" style="border:1px solid #f59e0b">
     <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
@@ -83,31 +109,6 @@
     </div>
     
     <div style="height:320px"><canvas id="mce2Pareto"></canvas></div>
-  </div>
-
-  <!-- What-If savings calculator -->
-  <div class="card p-5 mb-4" style="border:1px solid #10b981">
-    <h2 class="text-base font-bold mb-1" style="color:var(--text-primary)">สถานการณ์จำลอง: ลดต้นทุนแล้วประหยัดได้เท่าไร? <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-menuefficiency-2" title="คำอธิบาย">?</button></h2><template id="hlp-menuefficiency-2" data-title="Pareto 80/20"><p>เลือกจำนวนเมนู Top-N ที่จะโจมตี และ % ที่จะลด — คำนวณเงินที่ประหยัดได้ในช่วงเวลาที่เลือก</p></template>
-    <div class="flex flex-wrap items-center gap-4 mb-4">
-      <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
-        เป้าหมายอันดับต้น
-        <select id="mce2WifN" onchange="renderMce2Whatif()" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
-          <option value="3">3</option><option value="5" selected>5</option><option value="8">8</option>
-          <option value="10">10</option><option value="15">15</option><option value="20">20</option>
-        </select>
-        เมนู
-      </label>
-      <label class="text-xs flex items-center gap-2" style="color:var(--text-secondary)">
-        ลดต้นทุนลง
-        <select id="mce2WifPct" onchange="renderMce2Whatif()" class="border rounded px-2 py-1 text-xs" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
-          <option value="5">5%</option><option value="10" selected>10%</option>
-          <option value="15">15%</option><option value="20">20%</option><option value="30">30%</option>
-        </select>
-        ต่อเมนู
-      </label>
-    </div>
-    <div id="mce2WhatifResult" class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4"></div>
-    <div id="mce2WhatifTable" class="overflow-x-auto" style="max-height:260px;overflow-y:auto"></div>
   </div>
 
   <!-- Monthly cost trend (top 8 dishes) -->

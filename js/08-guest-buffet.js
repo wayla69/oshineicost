@@ -585,6 +585,8 @@ async function loadMce2Ingredients() {
   catch (e) { return; }
 
   const ing = d.ingredients || d.rows || [];
+  window._mce2Ing = ing;
+  _mce2Answer();
   if (!ing.length) return;
 
   const kpiEl = document.getElementById('mce2IngKpis');
@@ -721,7 +723,25 @@ function renderMce2Whatif() {
       <td colspan="4" class="py-1.5 pr-2 text-right">รวมประหยัดได้</td>
       <td class="py-1.5 text-right" style="color:var(--good-ink)">${fmt(saving)}</td>
     </tr></tbody></table>`;
+  _mce2Answer();
 }
+
+// DV5 · the answer strip of เป้าลดต้นทุน (js/09c-mobile.js): the two ingredients that carry the most cost (where a better price or a
+// recipe change saves the most) and what the page's scenario saves (the top dishes by cost share, cut by the chosen %)
+function _mce2Answer() {
+  const ing = window._mce2Ing || [], data = window._mce2Data || [];
+  const il = (r, k) => r && ansLine(k, `${r.name || r.code || ''} ฿${fmt(r.total_cost || 0)}`, `${(r.pct || 0).toFixed(1)}% ของต้นทุนวัตถุดิบ · ใน ${fmtN(r.n_menus || 0)} เมนู`, 'warn', '#mce2IngBody');
+  let wl = null;
+  if (data.length) {
+    const n = parseInt(document.getElementById('mce2WifN')?.value || '5'), pct = parseFloat(document.getElementById('mce2WifPct')?.value || '10');
+    const saving = [...data].sort((a, b) => b.cost_pct - a.cost_pct).slice(0, n).reduce((a, r) => a + (r.cost || 0) * pct / 100, 0);
+    wl = ansLine(`ลดต้นทุน ${n} เมนูแรกลง ${pct}%`, `ประหยัดได้ ฿${fmt(saving)}`, 'ในช่วงที่เลือก · ปรับได้ที่สถานการณ์จำลอง', 'good', '#mce2WhatifResult');
+  }
+  pageAnswer('menuefficiency', [il(ing[0], 'วัตถุดิบที่ควรเจรจาราคาก่อน'), il(ing[1], 'อันดับถัดไป'), wl]);
+}
+// the ingredient table is the page's first card list on a phone (its 40 rows, the first 10 shown)
+if (typeof PAGE_CARDS === 'object' && Array.isArray(PAGE_CARDS.menuefficiency) && !PAGE_CARDS.menuefficiency.some(c => c.sel === 'table:has(#mce2IngBody)'))
+  PAGE_CARDS.menuefficiency.push({ sel: 'table:has(#mce2IngBody)', title: 'วัตถุดิบ', sub: ['ประเภท'], keyCols: ['ต้นทุนรวม', '% ต้นทุน', 'ใน N เมนู'], labels: ['ต้นทุนรวม', '% ต้นทุน', 'ใช้ในเมนู'] });
 
 // ── Monthly cost trend (top-8 dishes) ────────────────────────────────────
 async function loadMce2Trend() {

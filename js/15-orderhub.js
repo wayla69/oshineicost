@@ -879,6 +879,9 @@ async function ohbLoadOutcome() {
   box.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
   try {
     const o = await _bmcJson(`${API}/api/bom-center/hub/outcome${month ? '?month=' + month : ''}`);
+    // DV5: the branch with the most items out before the next delivery first (then the most rounds with an item out, then the fewest days of cover)
+    o.branches = (o.branches || []).slice().sort((a, b) => (b.measured ? b.stockouts : -1) - (a.measured ? a.stockouts : -1)
+      || (b.stockout_rounds || 0) - (a.stockout_rounds || 0) || (a.cover_days ?? 1e9) - (b.cover_days ?? 1e9));
     const t = o.total, cover = v => v == null ? '<span style="color:var(--text-muted)">—</span>' : `<b style="color:${v < 1 ? 'var(--bad-ink)' : v < 2 ? 'var(--amber-ink)' : 'var(--good-ink)'}">${_bmcNum(v, 1)} วัน</b>`;
     const out = n => `<b style="color:${n ? 'var(--bad-ink)' : 'var(--good-ink)'}">${n}</b>`;
     box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">ผลของการสั่งจริง · ${esc(fmtMonthTh(o.month))}</div>

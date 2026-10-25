@@ -173,6 +173,28 @@ function printMgtReport() {
   setTimeout(restore, 2000);          // afterprint never fires in some engines
 }
 
+// DV5 · on a phone in แตะง่าย the report opens as its answer strip + PDF + the owner's summary; this shows (or folds) the report on screen
+function mgtPhFull(on) {
+  const t = document.getElementById('tab-mgtreport'); if (!t) return;
+  t.classList.toggle('mgt-ph-full', !!on);
+  try { (on ? document.getElementById('mgtRptBody') : t).scrollIntoView({ block: 'start' }); } catch (e) { /* off screen */ }
+}
+// the answer strip of รายงานผู้บริหาร: the period's sales against the comparison, the discount over the ceiling, the first action
+function _mgtAnswer(j) {
+  const H = (j && j.headline) || {}, P = H.prev || {}, th = mgtLang === 'th';
+  const d = H.revenue != null && P.revenue ? H.revenue - P.revenue : null;
+  const a = (j && j.actions) || [];
+  const sum = document.getElementById('mgtPhSum'); if (sum) sum.hidden = !hasModule('sales.overview');
+  pageAnswer('mgtreport', [
+    H.revenue != null && ansLine(th ? 'ยอดขาย (ไม่รวม VAT)' : 'Sales (ex-VAT)', `฿${fmt(H.revenue)}${d != null ? ' · ' + dvBaht(d) : ''}`,
+      [ansPct(H.rev_wow_pct), j.comp_label ? (th ? 'เทียบ' : 'vs ') + j.comp_label : ''].filter(Boolean).join(' '), ansTone(d)),
+    H.discount_excess > 0 && ansLine(th ? 'ส่วนลดเกินเพดาน' : 'Discount over the ceiling', `฿${fmt(H.discount_excess)}`,
+      H.discount_pct != null ? `${(+H.discount_pct).toFixed(1)}% ${th ? 'ของยอดขาย · เพดาน' : 'of sales · ceiling'} ${H.discount_policy_pct}%` : '', 'bad'),
+    a[0] && ansLine(th ? 'เรื่องที่ต้องดู' : 'To look at', a[0].text, a.length > 1 ? (th ? `และอีก ${a.length - 1} เรื่องในรายงาน` : `and ${a.length - 1} more in the report`) : '',
+      a[0].sev === 'high' ? 'bad' : a[0].sev === 'med' ? 'warn' : ''),
+  ]);
+}
+
 // Contents -> section. A plain #anchor does not scroll reliably inside the app's
 // own scroll container (.content-area owns the scrollbar, not the window).
 function _mgtGo(id) {
@@ -279,6 +301,7 @@ async function loadMgtReport() {
   renderMgtReport(j,
     jM && jM.available ? jM : null,
     jF && jF.available ? jF : null);
+  _mgtAnswer(j);
   // Cover-sheet market box (owner request 2026-10-01): the same curated figures
   // as the home page's Industry & Economy block. Fetched beside the report and
   // filled in when it lands, so a slow news/quote feed never delays the report.

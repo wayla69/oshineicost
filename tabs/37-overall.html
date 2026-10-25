@@ -19,12 +19,15 @@
     <div id="kpiBranchHilite" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4"></div>
   </div>
 
-  <!-- KPI cards — period totals, rendered by loadSummaryKpis() -->
+  <!-- KPI cards — period totals, rendered by loadSummaryKpis(). DV5 (phone table review 2026-10-25): the same figures as the cards above
+       once those follow the top bar's period (renderKpiHero hides this block then) - one set of KPI cards on the page -->
+  <div id="kpiTotalsWrap">
   <div class="flex items-baseline gap-2 mb-2">
     <h2 class="section-title mb-0">ยอดรวมช่วงที่เลือก</h2>
     <span class="text-xs text-slate-400">ผลรวมทั้งช่วงตามฟิลเตอร์ (ดู MoM ที่การ์ดด้านบน)</span>
   </div>
   <div id="kpiGrid" class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4 mb-6"></div>
+  </div>
 
   <!-- Franchise vs Master breakdown -->
   <div id="groupBreakdown" class="card p-4 mb-6 hidden">

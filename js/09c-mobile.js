@@ -709,7 +709,7 @@ function _phFitOff(panel) {
 function _phFitWatch(panel) {
   if (_phFitObs) _phFitObs.disconnect();
   let t = null;
-  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) phFitLayout(panel); }, 250); });
+  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) { phFitLayout(panel); phAnswerSchedule(); } }, 250); });
   _phFitObs.observe(panel, { childList: true, subtree: true, characterData: true });
 }
 function _phAvail() {
@@ -1031,6 +1031,10 @@ function phCardList(spec) {
     + (r.spark ? `<span class="ph-cl-spark">${r.spark}</span>` : '') + `</span><span class="ph-cl-chev" aria-hidden="true">›</span></button></li>`;
   const lim = Math.max(_PH_CL_PAGE, spec.limit || 0);
   const shown = rows.slice(0, lim);
+  // DV5: a ranked list shows its first rows (cap.top) and, for a two-sided list, its last rows (cap.bottom); the rest are behind "ดูทั้งหมด (N)"
+  const cp = spec.cap, capOn = !!(cp && !spec.open && rows.length > cp.top + (cp.bottom || 0) + 2);
+  const capBtn = cp && rows.length > cp.top + (cp.bottom || 0) + 2
+    ? `<div class="dv-more-wrap"><button type="button" class="shm-showall dv-more ph-cl-all" aria-expanded="${spec.open ? 'true' : 'false'}" onclick="phCardAll('${id}',${spec.open ? 'false' : 'true'})">${spec.open ? 'ย่อ' : `ดูทั้งหมด (${fmtN(rows.length)})`}</button></div>` : '';
   let list;
   if (!all.length || (!rows.length && !totals.length)) {
     const e = spec.empty || {};
@@ -1039,9 +1043,13 @@ function phCardList(spec) {
       + (stEmpty ? `<button type="button" class="ph-cl-act" onclick="phCardState('all')">ดูทั้งหมด</button>`
         : filter ? `<button type="button" class="ph-cl-act" onclick="phCardFilter('${id}','')">ดูทั้งหมด</button>`
           : `<button type="button" class="ph-cl-act" onclick="phCardEmptyAct('${id}')">${esc(e.act || 'เลือกช่วงอื่น')}</button>`) + '</div>';
+  } else if (capOn) {
+    const top = rows.slice(0, cp.top), bot = cp.bottom ? rows.slice(rows.length - cp.bottom) : [], gap = rows.length - top.length - bot.length;
+    list = `<ul class="ph-cl-list" role="list">${totals.map(r => card(r, 0, true)).join('')}${top.map((r, i) => card(r, i, false)).join('')}`
+      + (bot.length ? `<li class="ph-cl-gap" aria-hidden="true">··· อีก ${fmtN(gap)} รายการ ···</li>${bot.map((r, i) => card(r, i, false)).join('')}` : '') + '</ul>' + capBtn;
   } else {
     list = `<ul class="ph-cl-list" role="list">${totals.map(r => card(r, 0, true)).join('')}${shown.map((r, i) => card(r, i, false)).join('')}</ul>`
-      + (rows.length > lim ? `<button type="button" class="ph-cl-more" onclick="phCardMore('${id}')">แสดงอีก ${Math.min(_PH_CL_PAGE, rows.length - lim)} จาก ${rows.length - lim} รายการ</button>` : '');
+      + (rows.length > lim ? `<button type="button" class="ph-cl-more" onclick="phCardMore('${id}')">แสดงอีก ${Math.min(_PH_CL_PAGE, rows.length - lim)} จาก ${rows.length - lim} รายการ</button>` : '') + capBtn;
   }
   return `<div class="ph-cl" data-cl="${id}">`
     + (spec.hasDone && body.length ? `<div class="ph-cl-st" data-cl-st="${id}"></div>` : '')
@@ -1153,7 +1161,9 @@ function _phCardSpec(table, cfg, id) {
         : svg ? svg.outerHTML : '' });
   });
   const keys = ki.map((i, k) => (cfg.labels && cfg.labels[k]) || _phHeadName(heads[i]));
-  return { id, rows, keys, hasDone: !!doneRe, empty: { t: (cfg.empty && cfg.empty.t) || empty || '', act: cfg.empty && cfg.empty.act } };
+  // managed (DV5): the page already caps the table itself (DV2's "ดูทั้งหมด", rows with data-dv-more) - the cards follow its rows, no second cap
+  return { id, rows, keys, hasDone: !!doneRe, managed: !!table.querySelector('tr[data-dv-more]'),
+    empty: { t: (cfg.empty && cfg.empty.t) || empty || '', act: cfg.empty && cfg.empty.act } };
 }
 // the box of a table that the cards replace: the table and the wrappers that hold nothing else (a scroll box, a .wt-wrap)
 function _phClBox(table, panel) {
@@ -1175,9 +1185,9 @@ function phCardsApply() {
   const pg = phCurPage(), on = !!pg && _phClOn();
   const panel = pg ? document.getElementById('tab-' + pg.tab) : null;
   if (_phClPanel && (_phClPanel !== panel || !on)) { _phClOff(_phClPanel); if (_phClObs) { _phClObs.disconnect(); _phClObs = null; } _phClPanel = null; }
-  if (!phOn() || !panel) return;
+  if (!phOn() || !panel) { phAnswerApply(); return; }
   _phRowNums(panel);
-  if (!on) return;
+  if (!on) { phAnswerApply(); return; }
   if (_phClPanel !== panel) { _phClPanel = panel; _phClWatch(panel); }
   const cfgs = phCardsOf(pg.tab, pg.pane), live = new Set();
   // a table on screen: itself, or (once its cards show) the place of its hidden box; a table of a hidden sub-tab is not
@@ -1195,17 +1205,19 @@ function phCardsApply() {
       const cur = box.previousElementSibling && box.previousElementSibling.matches('.ph-cl') && box.previousElementSibling.getAttribute('data-cl') === id ? box.previousElementSibling : null;
       if (cur && st.sig === sig && st.table === table) return;
       const spec = _phCardSpec(table, cfg, id);
-      Object.assign(st, { sig, table, spec, cfg });
+      if (st.sig !== sig) st.open = false;                                        // new rows (a filter, a period): the list starts capped again
+      Object.assign(st, { sig, table, spec, cfg, cap: _phClCap(pg, cfg, spec) });
       _phClDraw(id, box, cur);
     });
   });
   panel.querySelectorAll('.ph-cl').forEach(l => { if (!live.has(l.getAttribute('data-cl'))) { const b = l.nextElementSibling; l.remove(); if (b) b.classList.remove('ph-cl-src'); } });
+  phAnswerApply();
 }
 function _phClDraw(id, box, cur) {
   const st = _phCl[id]; if (!st || !st.spec) return;
   if (!box) { const old = document.querySelector(`.ph-cl[data-cl="${id}"]`); box = old && old.nextElementSibling; cur = old; }
   if (!box) return;
-  const html = phCardList(Object.assign({}, st.spec, { sort: st.sort, filter: st.filter, limit: st.limit, state: uiStateFilter.get() }));
+  const html = phCardList(Object.assign({}, st.spec, { sort: st.sort, filter: st.filter, limit: st.limit, state: uiStateFilter.get(), cap: st.cap, open: !!st.open }));
   const wrap = document.createElement('div'); wrap.innerHTML = html;
   const el = wrap.firstElementChild;
   if (cur) cur.replaceWith(el); else box.parentElement.insertBefore(el, box);
@@ -1220,11 +1232,11 @@ function _phClDraw(id, box, cur) {
 function _phClWatch(panel) {
   if (_phClObs) _phClObs.disconnect();
   let t = null;
-  const own = n => n.nodeType === 1 && /** @type {Element} */ (n).classList.contains('ph-cl');
+  const own = n => n.nodeType === 1 && (/** @type {Element} */ (n).classList.contains('ph-cl') || /** @type {Element} */ (n).classList.contains('ph-ans'));
   _phClObs = new MutationObserver(ms => {
     const real = ms.some(m => {
       const el = m.target.nodeType === 1 ? /** @type {Element} */ (m.target) : m.target.parentElement;
-      if (el && el.closest('.ph-cl')) return false;
+      if (el && el.closest('.ph-cl, .ph-ans')) return false;
       if (m.type === 'attributes') return m.attributeName !== 'class' || !/ph-(cl|rn)/.test(String(m.oldValue || '') + ' ' + (el ? el.getAttribute('class') : ''));
       return !([...m.addedNodes, ...m.removedNodes].length && [...m.addedNodes, ...m.removedNodes].every(own));
     });
@@ -1241,6 +1253,8 @@ function phCardSort(id, k) {
   st.limit = 0; _phClDraw(id);
 }
 function phCardFilter(id, p) { const st = _phCl[id]; if (!st) return; st.filter = p; st.limit = 0; _phClDraw(id); }
+function phCardAll(id, open) { const st = _phCl[id]; if (!st) return; st.open = !!open; st.limit = 0; _phClDraw(id);
+  if (!open) { const l = document.querySelector(`.ph-cl[data-cl="${id}"]`); if (l) try { l.scrollIntoView({ block: 'nearest' }); } catch (e) { /* off screen */ } } }
 function phCardMore(id) { const st = _phCl[id]; if (!st) return; st.limit = Math.max(_PH_CL_PAGE, st.limit || 0) + _PH_CL_PAGE; _phClDraw(id); }
 function phCardState(f) { uiStateFilter.set(f); Object.keys(_phCl).forEach(id => { if (document.querySelector(`.ph-cl[data-cl="${id}"]`)) _phClDraw(id); }); }
 function phCardOpen(id, i) {
@@ -1277,6 +1291,126 @@ function _phRowNums(panel) {
       c.classList.add('ph-rn');
     });
   });
+}
+
+// ── DV5 (phone table review 2026-10-25) · the answer on the first screen ──────────────────────────────────────────────────────────
+// 1) the cap of a card list: an analytics page's ranked list shows its first 10 cards (cfg.cap: a number = that many; 'pair' = the 5 first
+//    and the 5 last of a two-sided list; false = every card); "ดูทั้งหมด (N)" opens the rest. Not capped: a to-do list (cfg.done), a writer's
+//    table, a list the page caps itself (DV2 data-dv-more), a supply page's work lists, and the lists of the pages being rebuilt in other
+//    PRs (_PH_CL_CAP_LATER: they set cfg.cap themselves when they land).
+const _PH_CL_TOP = 10, _PH_CL_PAIR = 5;
+const _PH_CL_CAP_LATER = { tabs: ['hvmonitor', 'franchise', 'menuactionboard', 'menuopportunities'], sel: /^#spike/ };
+function _phClCap(pg, cfg, spec) {
+  if (cfg.cap === false || spec.hasDone || spec.managed || cfg.fields) return null;
+  if (cfg.cap == null && (_PH_CL_CAP_LATER.tabs.includes(pg.tab) || _PH_CL_CAP_LATER.sel.test(cfg.sel || ''))) return null;
+  if (cfg.cap == null && typeof _SUPPLY_PANE === 'object' && _SUPPLY_PANE[pg.tab]) return null;
+  if (cfg.cap === 'pair') return { top: _PH_CL_PAIR, bottom: _PH_CL_PAIR };
+  return { top: typeof cfg.cap === 'number' ? cfg.cap : _PH_CL_TOP, bottom: 0 };
+}
+// 2) the answer strip (PAGE_ANSWERS / pageAnswer, js/01-core.js): three lines at the top of the page in แตะง่าย, above its first card. A pushed
+//    answer counts only while the filters it was made for are on; a provider is read from the page as drawn, so both follow the top bar's
+//    period and branch. In พอดีจอ it sits above the scaled frame at the touch size (coordinator 2026-10-26); the desktop has none.
+let _phAnsT = null;
+function phAnswerSchedule() { clearTimeout(_phAnsT); _phAnsT = setTimeout(phAnswerApply, 0); }
+function _phAnsCtx(pg, panel) {
+  const id = k => `${pg.tab}${pg.pane ? '-' + pg.pane : ''}-${k}-0`;
+  // the k-th card list of the page as parsed: the drawn cards' spec when they show this very table (แตะง่าย), else read from the table now
+  // (พอดีจอ keeps the table and draws no cards)
+  const spec = k => {
+    const cfg = phCardsOf(pg.tab, pg.pane)[k]; if (!cfg) return null;
+    const ts = [...panel.querySelectorAll(cfg.sel)].filter(t => t.tagName === 'TABLE' && !t.closest('.ph-cl'));
+    const t = ts.find(x => { const src = x.closest('.ph-cl-src'); return (src ? src.parentElement : x).getClientRects().length > 0; }) || ts[0];
+    if (!t) return null;
+    const st = _phCl[id(k)], sig = t.tBodies.length + ':' + t.rows.length + ':' + (t.textContent || '').length;
+    return st && st.spec && st.table === t && st.sig === sig ? st.spec : _phCardSpec(t, cfg, id(k));
+  };
+  return { tab: pg.tab, pane: pg.pane, panel,
+    rows: k => { const s = spec(k); return s ? s.rows.filter(r => !r.total && !r.grp) : []; },
+    total: k => { const s = spec(k); return s ? s.rows.find(r => r.total) || null : null; } };
+}
+function phAnswerLines(pg, panel) {
+  const keys = pg.pane ? [pg.tab + '|' + pg.pane, pg.tab] : [pg.tab];
+  for (const key of keys) {
+    const push = _pageAns[key];
+    if (push) return push.fk === ansFilterKey(push.follow) ? push.lines : [];      // made for other filters: nothing until the page has redrawn
+    const fn = PAGE_ANSWERS[key];
+    if (typeof fn === 'function') { try { return (fn(_phAnsCtx(pg, panel)) || []).filter(Boolean); } catch (e) { console.warn('answer strip:', e); return []; } }
+  }
+  return [];
+}
+function phAnswerHtml(lines) {
+  const li = (l, i) => {
+    const inner = `<span class="ph-ans-k">${esc(l.k)}</span><span class="ph-ans-v">${esc(l.v)}</span>${l.s ? `<span class="ph-ans-s">${esc(l.s)}</span>` : ''}`;
+    return `<li class="ph-ans-i" data-tone="${esc(l.tone || 'neu')}">${l.go
+      ? `<button type="button" class="ph-ans-hit" onclick="phAnswerGo(${i})" aria-label="${esc(l.k + ' ' + l.v)} · ดูรายการ">${inner}<span class="ph-ans-go" aria-hidden="true">›</span></button>`
+      : `<div class="ph-ans-hit">${inner}</div>`}</li>`;
+  };
+  return `<ol class="ph-ans-l">${lines.map(li).join('')}</ol>`;
+}
+// แตะง่าย: the strip is the first block of the page (under its sub-tab bar); พอดีจอ: it sits directly ABOVE the scaled frame, outside it, at the
+// touch size (like the top bar and the chips) - one strip per page either way
+function phAnswerApply() {
+  const pg = phCurPage(), on = !!pg && phOn() && _phView === 'page';
+  const fit = document.body.classList.contains('ph-fit');
+  const panel = on ? document.getElementById('tab-' + pg.tab) : null;
+  const placed = el => fit ? el.nextElementSibling === panel : el.parentElement === panel;
+  document.querySelectorAll('.ph-ans').forEach(el => { if (!panel || el.getAttribute('data-tab') !== pg.tab || !placed(el)) el.remove(); });
+  if (!panel) return;
+  const lines = phAnswerLines(pg, panel).filter(l => l && l.v).slice(0, 3);
+  let el = /** @type {HTMLElement|null} */ (fit ? (panel.previousElementSibling && panel.previousElementSibling.matches('.ph-ans') ? panel.previousElementSibling : null)
+    : panel.querySelector(':scope > .ph-ans'));
+  if (!lines.length) { if (el) el.remove(); return; }
+  const html = phAnswerHtml(lines);
+  if (el && el.getAttribute('data-sig') === html) return;
+  if (!el) {
+    el = document.createElement('section');
+    el.className = 'ph-ans'; el.setAttribute('aria-label', 'คำตอบของหน้านี้'); el.setAttribute('data-tab', pg.tab);
+    if (fit) panel.parentElement.insertBefore(el, panel);
+    else {
+    let at = panel.firstElementChild;                                     // under the page's own sub-tab bar (and a [data-ans-after] head), above the rest
+    while (at && (at.matches('.subtab-bar, [data-ans-after]') || at.tagName === 'TEMPLATE' || at.tagName === 'SCRIPT')) at = at.nextElementSibling;
+    panel.insertBefore(el, at);
+    }
+  }
+  el.setAttribute('data-sig', html);
+  el.innerHTML = html;
+  el._lines = lines;
+}
+// the providers of pages whose ranked list already answers (DV2 ranked them by baht): the first two cards and one line of the page's
+// second list / total. `f(r, k)` = the k-th key figure of a card as the table prints it.
+const _ansF = (r, k) => (r && r.figs && r.figs[k] && r.figs[k].v) || '';
+const _ansB = (r, k) => { const v = _ansF(r, k); return v && !/฿/.test(v) && /^[+−-]?\d/.test(v) ? (/^[+−-]/.test(v) ? v[0] + '฿' + v.slice(1) : '฿' + v) : v; };
+const _ansN = (r, k) => (r && r.figs && r.figs[k] ? r.figs[k].n : null);
+PAGE_ANSWERS.cancelbill = c => {
+  const b = c.rows(0), rs = c.rows(1).slice().sort((x, y) => (_ansN(y, 2) || 0) - (_ansN(x, 2) || 0));
+  return [b[0] && ansLine('มูลค่ายกเลิกมากสุด', `${b[0].title} ${_ansB(b[0], 0)}`, _ansF(b[0], 1) ? `${_ansF(b[0], 1)} ของมูลค่ายกเลิก · ${_ansF(b[0], 2)} บิล` : '', 'bad', '#cbBranches'),
+    b[1] && ansLine('อันดับถัดไป', `${b[1].title} ${_ansB(b[1], 0)}`, _ansF(b[1], 1) ? `${_ansF(b[1], 1)} ของมูลค่ายกเลิก` : '', 'bad', '#cbBranches'),
+    rs[0] && ansLine('เหตุผลที่มูลค่ามากสุด', `${rs[0].title} ${_ansB(rs[0], 2)}`, _ansF(rs[0], 0) ? `${_ansF(rs[0], 0)} บิล` : '', 'warn', '#cbReasons')];
+};
+PAGE_ANSWERS.cashctl = c => {
+  const b = c.rows(0).filter(r => _ansN(r, 0)), w = c.rows(1);
+  const tone = r => (_ansN(r, 0) || 0) < 0 ? 'bad' : 'warn';
+  return [b[0] && ansLine('ขาด/เกินมากสุด', `${b[0].title} ${_ansF(b[0], 0)}`, _ansF(b[0], 2) ? `${_ansF(b[0], 2)} ของยอด` : '', tone(b[0]), '#ccBody'),
+    b[1] && ansLine('อันดับถัดไป', `${b[1].title} ${_ansF(b[1], 0)}`, _ansF(b[1], 2) ? `${_ansF(b[1], 2)} ของยอด` : '', tone(b[1]), '#ccBody'),
+    w[0] && ansLine('วันที่ขาดหนักสุด', `${w[0].title} ${_ansF(w[0], 0)}`, w[0].sub || '', 'bad', '#ccWorst')];
+};
+PAGE_ANSWERS.gpbranch = c => {
+  const b = c.rows(0).filter(r => (_ansN(r, 0) || 0) > 0), t = c.total(0);
+  return [b[0] && ansLine('GP ขาดจากเป้ามากสุด', `${b[0].title} ${_ansB(b[0], 0)}`, `GP ${_ansF(b[0], 2)}`, 'bad', '#gpbTable'),
+    b[1] && ansLine('อันดับถัดไป', `${b[1].title} ${_ansB(b[1], 0)}`, `GP ${_ansF(b[1], 2)}`, 'bad', '#gpbTable'),
+    !b.length && c.rows(0).length ? ansLine('GP เทียบเป้า', 'ไม่มีสาขาเกินเป้า', '', 'good', '#gpbTable') : null,
+    !b.length && c.rows(0).length ? c.rows(0).filter(r => _ansN(r, 2) != null).sort((x, y) => _ansN(x, 2) - _ansN(y, 2)).slice(0, 1)
+      .map(r => ansLine('GP % ต่ำสุด', `${r.title} ${_ansF(r, 2)}`, `GP ${_ansB(r, 1)}`, 'warn', '#gpbTable'))[0] : null,
+    t && ansLine(getBranch() ? 'GP ของสาขา' : 'GP ทั้งเครือ', `${_ansB(t, 1)} · ${_ansF(t, 2)}`, '', '', '#gpbTable')];
+};
+function phAnswerGo(i) {
+  const pg = phCurPage(), panel = pg && document.getElementById('tab-' + pg.tab), strip = pg && document.querySelector(`.ph-ans[data-tab="${pg.tab}"]`);
+  const l = strip && strip._lines && strip._lines[i]; if (!l || !l.go) return;
+  if (l.go.charAt(0) === '@') { switchTab(l.go.slice(1)); return; }        // '@tab' = the page that answers the line in full
+  let t = panel.querySelector(l.go); if (!t) return;
+  const src = t.closest('.ph-cl-src');                                     // a table shown as cards: its cards
+  if (src && src.previousElementSibling && src.previousElementSibling.matches('.ph-cl')) t = src.previousElementSibling;
+  try { t.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { /* off screen */ }
 }
 
 // ── หน้าที่เปิดล่าสุด (ฉัน): the last three pages opened on this device ──

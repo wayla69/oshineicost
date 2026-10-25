@@ -6,7 +6,7 @@
   <!-- Management report cover band. Collapsible (mobile starts collapsed —
        the reader wants the report, not the chrome): .collapsed hides the two
        .mgt-full rows and shows the slim one-line bar; print always expands. -->
-  <div id="mgtCover" class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
+  <div id="mgtCover" data-ans-after class="rounded-2xl p-8 mb-5 text-white relative overflow-hidden"
        style="background:#1f3a6b">
     <div id="mgtCoverSlim" class="mgt-slim no-print hidden items-center justify-between gap-3" style="display:none">
       <span class="text-sm font-semibold truncate" id="mgtSlimLabel">รายงานสรุปผู้บริหาร</span>
@@ -57,6 +57,18 @@
       </div>
     </div>
   </div>
+
+  <!-- DV5 (phone table review 2026-10-25): on a phone in แตะง่าย the printed report (32 screens) is not read on the screen - the page shows
+       the answer strip, the PDF and the owner's summary; "อ่านฉบับเต็มบนจอ" shows the report (index.html, #tab-mgtreport.mgt-ph-full) -->
+  <div id="mgtPhGate" class="mgt-ph-gate no-print card p-4 mb-4">
+    <p class="mgt-ph-t">รายงานฉบับเต็มสำหรับพิมพ์หรือส่งต่อ</p>
+    <div class="mgt-ph-acts">
+      <button type="button" class="shm-showall mgt-ph-pdf" onclick="printMgtReport()">เปิด PDF</button>
+      <button type="button" class="shm-showall" id="mgtPhSum" onclick="phShowSummary()">สรุปผู้บริหาร</button>
+      <button type="button" class="shm-showall" onclick="mgtPhFull(true)">อ่านฉบับเต็มบนจอ</button>
+    </div>
+  </div>
+  <button type="button" class="shm-showall mgt-ph-back no-print" onclick="mgtPhFull(false)">‹ กลับไปที่สรุป</button>
 
   <!-- data-force-light: the printable report keeps a white-paper look in dark
        mode — local token overrides below + charts pick it up via mkChart -->

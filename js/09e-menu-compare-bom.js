@@ -49,7 +49,7 @@ async function loadMenuCompare() {
 
 // Total ↔ per-head (ต่อหัว) cost view. Per-head = COGS ÷ covers, so a drop in
 // total cost that's only caused by fewer customers stops looking like a "win".
-let _mcPerHead = false;
+let _mcPerHead = true;                         // DV5: ต่อหัว by default (one table with the toggle)
 function mcSetCostMode(perHead) {
   _mcPerHead = perHead;
   document.getElementById('mcModeTotal')?.classList.toggle('gran-active', !perHead);
@@ -72,7 +72,7 @@ const MC_NOISE_QTY = 50;                       // Δ% on volumes below this = no
 // from the API instead of recomputing the raw (and here, un-guarded) ratio itself.
 const MC_RESIDUAL_RATIO = 0.01;
 let _mcCatSel = '';                            // category filter ('' = all)
-let _mcSort = { key: 'vol', dir: -1 };         // sort key + direction (-1 desc, 1 asc)
+let _mcSort = { key: 'cdb', dir: -1 };         // sort key + direction (-1 desc, 1 asc) · DV5: by the baht the cost differs, either way
 function _cmpPctSafe(a, b) {                   // Δ% of a vs b, guarding the residual-ratio blowup
   if (!b) return null;
   if (a && Math.min(Math.abs(a), Math.abs(b)) / Math.max(Math.abs(a), Math.abs(b)) < MC_RESIDUAL_RATIO) return null;
@@ -91,7 +91,7 @@ function mcSort(key) {
 function _mcApplySort(items) {
   const k = _mcSort.key, d = _mcSort.dir;
   const val = r => ({ vol: r._vol, qty_a: r.qty_a, qty_b: r.qty_b, qd: r._qd, mix: r._mix_b,
-    cogs_a: r.cogs_a, cogs_b: r.cogs_b, cd: r._cd }[k]);
+    cogs_a: r.cogs_a, cogs_b: r.cogs_b, cd: r._cd, cdb: r._cdb == null ? null : Math.abs(r._cdb) }[k]);
   items.sort((a, b) => { const x = val(a), y = val(b);
     if (x == null && y == null) return 0; if (x == null) return 1; if (y == null) return -1;
     return (x - y) * d; });
@@ -130,21 +130,47 @@ function mcRenderTable() {
   items.forEach(r => {
     r._mix_a = T.qty_a ? r.qty_a / T.qty_a : 0; r._mix_b = T.qty_b ? r.qty_b / T.qty_b : 0;
     r._vol = (r.qty_a || 0) + (r.qty_b || 0);
-    r._qd = _dpRaw(r.qty_a, r.qty_b); r._cd = _dpRaw(r.cogs_a, r.cogs_b);
+    // DV5: every change reads B against A (B − A, ÷ A) - the page's own words (เมนูใหม่ = มีใน B, หายไป = เหลือใน A) and its default
+    // (A = the month before, B = this month); it read A against B, so มาแรง listed the dishes that fell and Δ% had the opposite sign
+    r._qd = _dpRaw(r.qty_b, r.qty_a); r._cd = _dpRaw(r.cogs_b, r.cogs_a);
     r._noise = Math.min(r.qty_a || 0, r.qty_b || 0) < MC_NOISE_QTY;  // small base ⇒ Δ% unstable
+    // DV5: the cost difference in baht, B − A (per head in ต่อหัว: each period's cost ÷ its customers)
+    r._cdb = _mcPerHead ? (Ca && Cb ? (r.cogs_b || 0) / Cb - (r.cogs_a || 0) / Ca : null) : (r.cogs_b || 0) - (r.cogs_a || 0);
   });
   _mcApplySort(items);
   _mcRenderInsights(items);
   mcRenderMcInto('mcHead', 'mcBody', 'mcFoot', _mcPerHead, items, T, Ca, Cb);
-  mcRenderMcInto('mcHead2', 'mcBody2', 'mcFoot2', true, items, T, Ca, Cb);
   const catNote = _mcCatSel ? ` · กรองหมวด: ${esc(_mcCatSel)}` : '';
   const note = document.getElementById('mcCoversNote');
   if (note) note.textContent = (_mcPerHead
     ? `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — /หัว = ยอด ÷ ลูกค้า (ตัดผลของยอดขายที่เปลี่ยน)`
     : `แสดง ${fmtN(items.length)} เมนู · สัดส่วน = ส่วนแบ่งใน Top ที่แสดง`) + catNote;
-  const note2 = document.getElementById('mcCoversNote2');
-  if (note2) note2.textContent = `ลูกค้า A ${fmtN(Ca)} คน · B ${fmtN(Cb)} คน — ทุกคอลัมน์หารด้วยจำนวนลูกค้า (สัดส่วนเป็นอัตราส่วน จึงเท่ากับตารางที่ 1)` + catNote;
+  _mcAnswer(items, Ca, Cb);
 }
+// DV5 · which way is "the cost went up": from the earlier period to the later one (A is the earlier by default, but either may be)
+function _mcCostUp(dBA) {
+  const L = _mcLast || {}, a = ((L.a_range || [])[0]) || '', b = ((L.b_range || [])[0]) || '';
+  if (!dBA) return null;
+  return b >= a ? dBA > 0 : dBA < 0;                     // B − A > 0 with B the later period = the cost rose
+}
+const _mcUpInk = dBA => { const u = _mcCostUp(dBA); return u == null ? '' : u ? 'var(--bad-ink)' : 'var(--good-ink)'; };
+// DV5 · a baht difference: ±฿1.23 per head, ±฿12.3K in total
+function _mcBaht(v, ph) { return v == null ? '—' : (v > 0 ? '+' : v < 0 ? '−' : '') + '฿' + (ph ? Math.abs(v).toFixed(2) : fmt(Math.abs(v))); }
+// DV5 · the answer strip of เทียบเมนู A/B (js/09c-mobile.js): the two dishes whose cost differs most in baht, and the total. The page has its
+// own A / B periods, so the strip follows the branch (its other filter) and the page's own pickers (every render pushes again).
+function _mcAnswer(items, Ca, Cb) {
+  const ph = _mcPerHead, u = ph ? '/หัว' : '';
+  const top = items.filter(r => r._cdb).slice().sort((a, b) => Math.abs(b._cdb) - Math.abs(a._cdb));
+  const nm = r => (r.description || '').replace(/^\((?:A|B|T)\)\s*/, '');
+  const L = (r, k) => r && ansLine(k, `${nm(r)} ${_mcBaht(r._cdb, ph)}${u}`, `A ${ph ? '฿' + ((r.cogs_a || 0) / (Ca || 1)).toFixed(2) : '฿' + fmt(r.cogs_a || 0)} · B ${ph ? '฿' + ((r.cogs_b || 0) / (Cb || 1)).toFixed(2) : '฿' + fmt(r.cogs_b || 0)}`,
+    _mcCostUp(r._cdb) ? 'bad' : 'good', '#mcTable');
+  const T = _mcTotals(items), d = ph ? (Ca && Cb ? T.cogs_b / Cb - T.cogs_a / Ca : null) : T.cogs_b - T.cogs_a;
+  pageAnswer('menucompare', [L(top[0], 'ต้นทุนต่างกันมากสุด (B − A)'), L(top[1], 'อันดับถัดไป'),
+    d != null && ansLine(ph ? 'ต้นทุนบุฟเฟ่ต์ต่อหัว B − A' : 'ต้นทุนรวม B − A', `${_mcBaht(d, ph)}${u}`, `${fmtN(items.length)} เมนู · ลูกค้า A ${fmtN(Ca)} · B ${fmtN(Cb)}`, _mcCostUp(d) == null ? '' : _mcCostUp(d) ? 'bad' : 'good', '#mcTable')], 'branch');
+}
+// on a phone in แตะง่าย the table is a card list: the change in baht first
+if (typeof PAGE_CARDS === 'object' && !PAGE_CARDS.menucompare)
+  PAGE_CARDS.menucompare = [{ sel: '#mcTable', title: 'เมนู', sub: ['SKU'], keyCols: [['Δ ฿/หัว', 'Δ ต้นทุน ฿'], ['ต้นทุน/หัว A', 'ต้นทุน A'], ['ต้นทุน/หัว B', 'ต้นทุน B']], labels: ['ต่าง (B − A)', 'A', 'B'] }];
 // ph divides qty/cost by covers for the per-head table; mix-share is a ratio so
 // identical in both. Δ% is recomputed from displayed values (per-head deltas
 // differ from raw because covers differ between periods).
@@ -158,9 +184,10 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
   head.innerHTML = `<tr><th class="num">#</th><th>SKU</th><th>เมนู</th>
     ${sth(hq[0], 'qty_a')}${sth(hq[1], 'qty_b')}${sth('Δ%<span class="sub">จำนวน</span>', 'qd')}
     ${sth('สัดส่วน<span class="sub">B · Δpp</span>', 'mix')}
+    ${sth(ph ? 'Δ ฿/หัว<span class="sub">B − A</span>' : 'Δ ต้นทุน ฿<span class="sub">B − A</span>', 'cdb')}
     ${sth(hc[0], 'cogs_a')}${sth(hc[1], 'cogs_b')}${sth('Δ%<span class="sub">ต้นทุน</span>', 'cd')}<th></th></tr>`;
   if (!items.length) {
-    body.innerHTML = '<tr><td colspan="11" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วง/หมวดที่เลือก</td></tr>';
+    body.innerHTML = '<tr><td colspan="12" class="py-4 text-center text-slate-400">ไม่มีข้อมูลในช่วง/หมวดที่เลือก</td></tr>';
     foot.innerHTML = ''; return;
   }
   const vD = (x, C) => ph ? (C ? x / C : null) : x;          // divide by covers when per-head
@@ -182,20 +209,22 @@ function mcRenderMcInto(headId, bodyId, footId, ph, items, T, Ca, Cb) {
     <td class="max-w-xs truncate" title="${esc(r.description || '')}">${esc((r.description || '').replace(/^\((?:A|B|T)\)\s*/, ''))}${badge(r)}</td>
     <td class="num tabular font-semibold">${nQ(qa)}</td>
     <td class="num tabular font-semibold">${nQ(qb)}</td>
-    <td class="num tabular"${dimQ}>${_momSpan(dp(qa, qb), true)}</td>
+    <td class="num tabular"${dimQ}>${_momSpan(dp(qb, qa), true)}</td>
     <td class="num tabular"><div>${(r._mix_b * 100).toFixed(1)}%</div><div class="text-[10px]" style="color:${dpp >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dpp >= 0 ? '+' : ''}${dpp.toFixed(1)}pp</div></td>
+    <td class="num tabular font-semibold"${_mcUpInk(r._cdb) ? ` style="color:${_mcUpInk(r._cdb)}"` : ''}>${_mcBaht(r._cdb, ph)}</td>
     <td class="num tabular text-slate-500">${nM(ca)}</td>
     <td class="num tabular text-slate-500">${nM(cb)}</td>
-    <td class="num tabular">${_momSpan(dp(ca, cb), false)}</td>
+    <td class="num tabular">${_momSpan(dp(cb, ca), false)}</td>
     <td class="num text-indigo-500 text-[11px] whitespace-nowrap">ดูเชิงลึก ›</td></tr>`;
   }).join('');
   const tqa = vD(T.qty_a, Ca), tqb = vD(T.qty_b, Cb), tca = vD(T.cogs_a, Ca), tcb = vD(T.cogs_b, Cb);
   foot.innerHTML = `<tr><td></td><td></td><td>รวม ${fmtN(items.length)} เมนู</td>
     <td class="num tabular">${nQ(tqa)}</td><td class="num tabular">${nQ(tqb)}</td>
-    <td class="num tabular">${_momSpan(dp(tqa, tqb), true)}</td>
+    <td class="num tabular">${_momSpan(dp(tqb, tqa), true)}</td>
     <td class="num tabular">100%</td>
+    <td class="num tabular font-semibold">${_mcBaht(tca != null && tcb != null ? tcb - tca : null, ph)}</td>
     <td class="num tabular">${nM(tca)}</td><td class="num tabular">${nM(tcb)}</td>
-    <td class="num tabular">${_momSpan(dp(tca, tcb), false)}</td><td></td></tr>`;
+    <td class="num tabular">${_momSpan(dp(tcb, tca), false)}</td><td></td></tr>`;
 }
 // Cumulative cost-share Pareto: each period sorted by its own COGS desc, plotted
 // as cumulative % of that period's total. Concentration is share-based, so it's

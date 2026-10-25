@@ -30,14 +30,15 @@ MODES = MOB[MOB.index("PHONE DISPLAY MODES (PR-MA"):MOB.index("// ── Service
 REG = CORE[CORE.index("const _SUPPLY_CENTRE"):CORE.index("// ── end page registry")]
 
 # the brief's per-page defaults (with the lead's decisions of 2026-10-24 for the pages the brief did not name)
-FIT = ["mgtreport", "overall", "dailysales", "trend", "gpbranch", "pnlbranch", "cost", "buffetperf", "childbuffet", "menu", "menuactionboard",
+FIT = ["overall", "dailysales", "trend", "gpbranch", "pnlbranch", "cost", "buffetperf", "childbuffet", "menu", "menuactionboard",
        "menuopportunities", "menucompare", "feedback", "custtype", "timeflow", "opsreport", "discounts", "cashctl", "cancelbill", "staff", "modifiers",
        "pricezone", "closetime", "costhead", "coverage", "menuefficiency", "simhub", "profit", "benchmark", "pnl", "pnlbill", "orderhub|comp",
        "orderhub|issues", "orderhub|issuevar", "orderhub|adoption", "orderhub|queue", "orderhub|claims", "orderhub|persales", "bomcenter|fc",
        "bomcenter|price", "bomcenter|issue", "fmsg",
        "guest", "compare", "more", "heavyeater", "bomcost", "menuimpact", "branchbom", "ops", "report", "action", "checklist", "ordering",
        "ingpurchase", "ordersetup|pack", "orderhub|month", "bomcenter|rcheck", "bomcenter|overview"]
-TOUCH = ["branchstock|issue", "branchstock|order", "branchstock|recv", "branchstock|var", "branchstock|count", "franchise", "supplyhome", "launcher",
+# DV5 (phone table review 2026-10-25): รายงานผู้บริหาร opens in touch on a phone - the answer strip, the PDF and the summary
+TOUCH = ["mgtreport", "branchstock|issue", "branchstock|order", "branchstock|recv", "branchstock|var", "branchstock|count", "franchise", "supplyhome", "launcher",
          "home", "settings", "bomcenter|cal", "bomcenter|events", "bomcenter|zones", "bomcenter|codereq", "orderhub|central", "bomcenter|pricefile",
          "bomcenter|rec", "bomcenter|prep", "bomcenter|conv"]
 

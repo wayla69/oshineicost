@@ -859,6 +859,8 @@ function renderKpiHero(trendData, gpb, disc) {
     discTile +
     tile('คาดเดือนถัดไป', fc!=null?fmt(fc):'—', fcBadge, '#f59e0b', fcSub);
   wrap.classList.remove('hidden');
+  // DV5: these cards follow the top bar's period with เทียบช่วงก่อน · ปีก่อน, so the "ยอดรวมช่วงที่เลือก" cards below repeat them - one set shows
+  document.getElementById('kpiTotalsWrap')?.classList.toggle('hidden', !!HP);
 
   // ── Best / needs-attention branch — MTD-fair MoM (see renderBranchHilite below) ──
   if (gpb) renderBranchHilite();
@@ -870,6 +872,7 @@ function renderKpiHero(trendData, gpb, disc) {
 async function renderBranchHilite() {
   const hl = document.getElementById('kpiBranchHilite');
   if (!hl) return;
+  // DV5: while ข้อสังเกต is on the page these cards are hidden (index.html, #anomalyBanner:not(.hidden) ~ #kpiHeroWrap) - one highlights box
   // PR-PP2: the top bar's period (to date) against the same days of the period before (/api/period/sales by branch)
   let hp = _heroPeriod;
   if (!hp || !Array.isArray(hp.branches) || !hp.branches.length) {
