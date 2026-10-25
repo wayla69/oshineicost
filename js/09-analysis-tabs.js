@@ -1200,7 +1200,7 @@ function renderDiscCashiers() {
   if (!body || !_discData) return;
   const rows = (_discData.by_branch || []).filter(b => !getBranch() || b.branch === getBranch()).slice()
     .sort((a, b) => (b.over_policy ? 1 : 0) - (a.over_policy ? 1 : 0) || (b.excess_baht || 0) - (a.excess_baht || 0) || (b.total_discount || 0) - (a.total_discount || 0));
-  const keep = rows.filter(b => b.over_policy).length;
+  const keep = getBranch() ? rows.length : rows.filter(b => b.over_policy).length;   // one branch: no fold
   body.innerHTML = rows.map((b, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50 cursor-pointer"${dvMoreAttr('discCashierBody', i, rows.length, keep)} onclick="openDiscountBills({branch:'${jsAttr(b.branch || '')}', title:'บิลส่วนลด · ${jsAttr(b.branch || '')}'})" title="คลิกดูบิลส่วนลด">
       <td class="py-2 pr-3 font-medium">${b.over_policy ? '⚑ ' : ''}${esc(b.branch || '—')}</td>
       <td class="py-2 pr-3 text-right font-semibold" style="color:${b.over_policy ? 'var(--bad-ink)' : 'var(--text-muted)'}">${b.over_policy ? fmt(b.excess_baht || 0) : '0'}</td>
