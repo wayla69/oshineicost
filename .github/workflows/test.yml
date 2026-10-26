@@ -99,6 +99,11 @@ jobs:
         run: |
           npm install
           npx playwright install --with-deps chromium
+      - name: Prebuilt Tailwind sheet is up to date
+        # vendor/tailwind.build.css is compiled from index.html, tabs/ and js/ (tailwind.config.js); a new class
+        # without `npm run build:css` would render unstyled, so the merge is blocked instead (about 2 s)
+        working-directory: tests/e2e
+        run: npm run check:css
       - name: Run smoke
         working-directory: tests/e2e
         env:

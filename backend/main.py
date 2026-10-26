@@ -930,6 +930,8 @@ def _versioned_index_html() -> str:
         p = _JS_DIR / m.group(1)
         return f'data-lazy="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
     html = _re.sub(r'data-lazy="/js/([0-9a-z-]+\.js)"', sub_lazy, html)
+    # the prebuilt Tailwind sheet (vendor/tailwind.build.css, `npm run build:css`) carries its content hash too
+    html = html.replace('href="/vendor/tailwind.build.css"', f'href="{_tw_css_url()}"', 1)
     # the build this shell belongs to (= the service worker's BUILD): an open page compares it with
     # GET /api/meta/build and loads the new version after a deploy (js/01-core.js appUpdateCheck)
     html = html.replace('<head>', f'<head>\n<meta name="app-build" content="{_build_id()}">', 1)
@@ -992,9 +994,30 @@ def _index_hash() -> str:
         return "0"
 
 
+_TW_CSS = STATIC / "tailwind.build.css"
+_tw_css_cache: dict = {}
+
+
+def _tw_css_hash() -> str:
+    """The prebuilt Tailwind sheet's content hash (cached per mtime/size); "0" when it is missing."""
+    try:
+        st = _TW_CSS.stat()
+        key = (st.st_mtime_ns, st.st_size)
+        if _tw_css_cache.get("key") != key:
+            _tw_css_cache.update(key=key, h=hashlib.md5(_TW_CSS.read_bytes()).hexdigest()[:8])
+        return _tw_css_cache["h"]
+    except OSError:
+        return "0"
+
+
+def _tw_css_url() -> str:
+    """/vendor/tailwind.build.css?v=<hash>: the shell links it, the service worker precaches it (cache-first, ?v=)."""
+    return f"/vendor/tailwind.build.css?v={_tw_css_hash()}"
+
+
 def _build_id() -> str:
-    """One short hash over every js slice's hash + the tabs bundle + the shell: it changes
-    whenever any of them does, so the service worker's shell cache is retired on a deploy and
+    """One short hash over every js slice's hash + the tabs bundle + the shell + the Tailwind sheet: it
+    changes whenever any of them does, so the service worker's shell cache is retired on a deploy and
     an open page (meta app-build vs GET /api/meta/build) knows a new version exists."""
     parts = [_js_hash(p) for p in sorted(_JS_DIR.glob("*.js"))] if _JS_DIR.exists() else []
     try:
@@ -1002,6 +1025,7 @@ def _build_id() -> str:
     except Exception:
         pass
     parts.append(_index_hash())
+    parts.append(_tw_css_hash())
     return hashlib.md5("|".join(parts).encode("utf-8")).hexdigest()[:10]
 
 
@@ -1021,7 +1045,8 @@ def service_worker():
     the root so it controls the whole app."""
     if not _SW_FILE.exists():
         raise HTTPException(status_code=404, detail="not found")
-    body = _SW_FILE.read_text(encoding="utf-8").replace("__BUILD__", _build_id())
+    body = (_SW_FILE.read_text(encoding="utf-8").replace("__BUILD__", _build_id())
+            .replace("__TW_CSS__", _tw_css_url()))
     return _Response(content=body, media_type="application/javascript",
                      headers={"Cache-Control": "no-cache", "Service-Worker-Allowed": "/"})
 

@@ -37,7 +37,6 @@
     s.onload = function() { cb && cb(); };
     document.head.appendChild(s);
   }
-  _loadVendor('vendor/tailwind.js',                       'https://cdn.tailwindcss.com',                                                  'tailwind.js');
   _loadVendor('vendor/chart.umd.min.js',                  'https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js',            'chart.umd.min.js');
   _loadVendor('vendor/chartjs-plugin-datalabels.min.js',  'https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0',                 'chartjs-plugin-datalabels.min.js');
   _loadVendor('vendor/hammer.min.js',                     'https://cdn.jsdelivr.net/npm/hammerjs@2.0.8/hammer.min.js',                    'hammer.min.js');
@@ -2872,6 +2871,8 @@ body.php-open { overflow: hidden; }
 </style>
 <link rel="stylesheet" href="/docs/ui-kit/theme-vivid.css"><!-- theme B "Vivid" (VZ1, 2026-10-22): the components; last on purpose; drop it to go back to the formal look -->
 <link rel="stylesheet" href="/docs/ui-kit/theme-polish.css"><!-- PL3 (2026-10-23): screen polish after the role-by-role review; after theme-vivid.css on purpose -->
+<!-- Tailwind utilities, PREBUILT (2026-10-26): vendor/tailwind.build.css from tailwind.config.js (`npm run build:css` in tests/e2e after adding a class; CI checks it is current). It replaced the in-browser runtime vendor/tailwind.js, which injected its <style> HERE - last in <head>, after every sheet above and before the tab panels' own <style> blocks - so the cascade is unchanged. The server adds ?v=<content hash>. -->
+<link rel="stylesheet" href="/vendor/tailwind.build.css">
 </head>
 <body>
 
