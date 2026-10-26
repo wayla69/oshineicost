@@ -1965,7 +1965,8 @@ def _cost_riser_action(m0: dict, pword: str, th: bool) -> str:
     plate (check the price list) or the plates per head (check portioning)."""
     pdl, udl = m0.get("price_delta"), m0.get("usage_delta")
     if pdl is not None and udl is not None:
-        by_price = abs(pdl) >= abs(udl)
+        import ingredient_groups as IG                       # the one cause rule: the larger part in the net's direction
+        by_price = IG.net_driver({"price": pdl, "usage": udl}, pdl + udl) == "price"
 
         def sg(v):
             return ("+" if v > 0 else "−" if v < 0 else "") + f"฿{abs(v):.2f}"

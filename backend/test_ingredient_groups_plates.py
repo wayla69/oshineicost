@@ -215,3 +215,14 @@ def test_the_top_bars_period_gives_the_cost_views_windows(ig):  # noqa: F811
     assert k["period"]["cur"] == list(w["cur"])
     bad = ig.get(URL, params={"kind": "decade"})
     assert bad.status_code == 400 and bad.json()["detail"] == "ช่วงเวลาไม่ถูกต้อง"
+
+
+def test_the_plates_cause_is_the_net_driver():
+    # more customers, fewer plates each, plates down overall: the cause is the eating, the part in the net's direction
+    s = IG.split_plates(900, 1200, 1000, 1000)
+    assert s["total"] == pytest.approx(-100) and s["customers"] > 0 > s["plates_per_head"]
+    assert s["main"] == "plates_per_head" == IG.net_driver({k: s[k] for k in IG.PLATE_CAUSES}, s["total"], IG.NET_FLOOR_PLATES)
+    # plates up with fewer customers: the eating again
+    assert IG.split_plates(1100, 900, 1000, 1000)["main"] == "plates_per_head"
+    # plates up with more customers eating less each: the customers
+    assert IG.split_plates(1100, 1300, 1000, 1000)["main"] == "customers"

@@ -215,6 +215,20 @@ def test_the_impact_of_a_dish():
     assert MB.impact(1, 0, 0, 1000, 1, 0, 0, 1000) is None
 
 
+def test_the_dish_cause_is_the_net_driver():
+    import ingredient_groups as IG
+    # a dearer plate but far fewer plates per head: the cost per head fell, so the cause is the eating, not the price
+    r = MB.impact(50, 750, 50, 1000, 100, 1000, 100, 1000)
+    assert r["price"] > 0 > r["impact"] and r["eat"] < 0 and r["cause"] == "eat"
+    assert r["cause"] == IG.net_driver({"eat": r["eat"], "price": r["price"]}, r["impact"])
+    # more plates per head at a cheaper plate, the cost per head rose: the eating
+    r = MB.impact(200, 1800, 200, 1000, 100, 1000, 100, 1000)
+    assert r["impact"] > 0 and r["price"] < 0 and r["cause"] == "eat"
+    # a dearer plate and a few fewer plates, the cost per head rose: the price
+    r = MB.impact(90, 1350, 90, 1000, 100, 1000, 100, 1000)
+    assert r["impact"] > 0 and r["eat"] < 0 and r["cause"] == "price"
+
+
 # ── โอกาสเมนู ────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_opportunities_tier_fair_over_eating_in_baht_for_a_cost_role(mb):
     d = mb.get("/api/menu/opportunities", params=RANGE).json()
