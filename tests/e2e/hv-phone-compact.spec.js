@@ -57,6 +57,16 @@ function bahtAnswer() {
   return { period: PERIOD, groups: GROUPS.map(([slug, label]) => ({ slug, label })), chain, branches: NAMES.map(bahtRow), reasons: {} };
 }
 
+// the page has settled (phone-modes.spec.js, #483): the พอดีจอ frame has followed the last thing the page drew (data-ph-fit="ok") and nothing
+// on the page has changed for `quiet` ms - no fixed sleep
+async function settle(page, quiet = 400) {
+  await page.evaluate(() => { const w = /** @type {any} */ (window); if (w.__e2eMut) return; w.__e2eMut = performance.now();
+    new MutationObserver(() => { w.__e2eMut = performance.now(); }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true }); });
+  await expect.poll(() => page.evaluate(q => { const f = /** @type {HTMLElement|null} */ (document.querySelector('.ph-frame'));
+    return (!f || f.dataset.phFit === 'ok') && performance.now() - /** @type {any} */ (window).__e2eMut >= q; }, quiet),
+  { message: 'the page settles', timeout: 30_000, intervals: [100] }).toBe(true);
+}
+
 async function login(ctx) {
   if (process.env.E2E_USER && process.env.E2E_PASS) {
     const r = await ctx.request.post('/api/auth/login', { data: { username: process.env.E2E_USER, password: process.env.E2E_PASS } });
@@ -94,7 +104,7 @@ async function open(browser, { width = 390, mode = 'fit', view = 'plates', desk 
     await page.evaluate(async () => { await phOpenPage(() => switchTab('hvmonitor')); });
   }
   await page.waitForFunction(() => !!document.querySelector('#hvmCompact, #hvmTable, #hvpTable'), null, { timeout: 60_000 });
-  await page.waitForTimeout(900);
+  await settle(page);
   return { ctx, page, errors };
 }
 // every visible cell / row of the HVM panel ends inside the frame (the panel) and the screen; no table scrolls sideways in its box
@@ -153,7 +163,7 @@ for (const width of [390, 360]) {
         // ดูทั้งหมด: every row - cards in แตะง่าย, the table in พอดีจอ (inside the frame, nothing cut off)
         await page.locator('.hvc-all').click();
         await expect(page.locator('#hvmCompact')).toHaveCount(0);
-        await page.waitForTimeout(900);
+        await settle(page, 600);                                // the scroll to the list waits for the frame's re-fit
         if (mode === 'touch') {
           await expect.poll(() => page.locator('#tab-hvmonitor .ph-cl-card').count(), { timeout: 15_000 }).toBeGreaterThanOrEqual(N);
         } else {
@@ -212,7 +222,7 @@ for (const view of ['plates', 'baht']) {
       () => page.locator('.hvc-all').click(), () => page.locator('.hvc-back').click()]) {
       await page.evaluate(() => { /* @ts-ignore */ window.__lt = []; });
       await step();
-      await page.waitForTimeout(2500);
+      await settle(page, 600);
       worst.push(await page.evaluate(() => Math.max(0, /* @ts-ignore */ ...window.__lt)));
     }
     await cdp.send('Emulation.setCPUThrottlingRate', { rate: 1 });
