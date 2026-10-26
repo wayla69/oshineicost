@@ -428,6 +428,132 @@ def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
         params["branch_group"] = group
 
 
+# ─── Closed branches: who a CURRENT-PERIOD table leaves out ──────────────────
+# Owner 2026-10-26 ("Hide closed branches"): a branch that has closed (โคราช2, no
+# bills since 2025-12) kept showing as a row of 0 sales and "-100%" in every
+# branch table of the period on screen. THE rule, stated once:
+#   a branch is left out of a current-period table when it has no sale in the
+#   period on screen AND none in the PREVIOUS period (the year-ago period does not
+#   count: a shop closed since last year is not a row of 0 and -100 %). A branch
+#   marked closed (branches.active = 0) that DID sell in either stays a row
+#   (owner decision 2026-10-26: the rows add up to the chain total, e.g. โคราช2
+#   in Dec 2025); the mark alone counts only where there is no sales window
+#   (targets) or nobody sold in the windows at all.
+# The callers filter the rows after the totals are summed. The year-ago chain total
+# may then hold a hidden branch's sales: hidden_amount() gives the baht for the
+# table's footnote "รวมสาขาที่ปิดแล้ว ฿…" (no row). History and trend
+# views (monthly series, YoY history, exports) do not call this. A branch picker
+# lists the branches that are not closed (picker_closed_branches: marked closed,
+# or no bill in the last 90 days) and puts the closed ones behind its
+# "สาขาที่ปิดแล้ว" fold so their history stays reachable.
+PICKER_IDLE_DAYS = 90       # a picker drops a branch with history but no bill in the last 90 days of the data
+
+
+def _win_bounds(w):
+    """(from_day, to_day) as 'YYYY-MM-DD'; a month 'YYYY-MM' (or a pair of them) is its whole month(s)."""
+    a, b = (w, w) if isinstance(w, str) else (w[0], w[1])
+    a, b = str(a)[:10], str(b)[:10]
+    if len(a) == 7:
+        a += "-01"
+    if len(b) == 7:
+        b += "-31"                       # string compare on ISO days: -31 covers every month end
+    return a, b
+
+
+def _columns(con, table: str) -> set:
+    """The columns of `table` (empty when it does not exist): a slim database (a report generator's, a unit test's)
+    may hold no `active` column or no month table, and the rule then reads what is there."""
+    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
+def _traded_ids(con, windows) -> set:
+    """branch_ids with a sale in any of the windows: a bill (sales_transaction) on a day inside it, or a
+    month row (sales_sku_monthly) for a month it touches - the months before the bill table starts."""
+    out = set()
+    has_tx = "sold_at" in _columns(con, "sales_transaction")
+    has_month = "period_month" in _columns(con, "sales_sku_monthly")
+    for w in windows:
+        if not w or (not isinstance(w, str) and not (w[0] and w[1])):
+            continue
+        a, b = _win_bounds(w)
+        if has_tx:
+            out |= {r[0] for r in con.execute(
+                "SELECT b.branch_id FROM branches b WHERE EXISTS (SELECT 1 FROM sales_transaction t "
+                "WHERE t.branch_id=b.branch_id AND t.sold_at >= :a AND t.sold_at < date(:b,'+1 day'))",
+                {"a": a, "b": b})}
+        if has_month:
+            out |= {r[0] for r in con.execute(
+                "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month BETWEEN :a AND :b",
+                {"a": a[:7], "b": b[:7]})}
+    return out
+
+
+def closed_branches(con, windows=(), *, keep: Optional[str] = None, ids: bool = False) -> set:
+    """THE closed-branch rule for a current-period table: the names (ids=True: the branch_ids) of the branches
+    to leave out. `windows` = the period on screen and the PREVIOUS period (callers never pass the year-ago one): (from, to) day pairs
+    ('YYYY-MM-DD') or months ('YYYY-MM'; month_window() gives all time as one); an empty / None window is skipped.
+    A branch is left out when it traded in none of the windows - marked closed or not: a closed branch with a sale
+    in one of them stays a row. With no window, or when no branch at all traded in the windows (a period before
+    the data), only the closed mark (branches.active = 0) counts - a table is never emptied by this rule.
+    `keep` = the branch the page is filtered to (its branch= / the picker's closed-branch fold): never left out."""
+    act = "COALESCE(active,1)" if "active" in _columns(con, "branches") else "1"
+    rows = con.execute(f"SELECT branch_id, name, {act} AS active FROM branches WHERE name != 'ALL'").fetchall()
+    traded = _traded_ids(con, [w for w in (windows or ()) if w])
+    out = set()
+    for bid, name, active in rows:
+        if name == keep:
+            continue
+        if (bid not in traded) if traded else (not active):
+            out.add(bid if ids else name)
+    return out
+
+
+def month_window(month: Optional[str] = None, month_from: Optional[str] = None, month_to: Optional[str] = None):
+    """The month filter of a month-grain page as one closed_branches window ('YYYY-MM' pair); no filter = all time."""
+    if month:
+        return (month[:7], month[:7])
+    return ((month_from or "0000-01")[:7], (month_to or "9999-12")[:7])
+
+
+def hidden_amount(by_branch: dict, closed) -> Optional[dict]:
+    """The footnote of a table whose เทียบปีก่อน chain total holds the sales of branches it hides: by_branch = {name: baht of
+    the year-ago period}; -> {"amount", "branches"} for the hidden ones that sold, None when there are none."""
+    hit = {n: float(v or 0) for n, v in (by_branch or {}).items() if n in (closed or ()) and (v or 0) > 0}
+    if not hit:
+        return None
+    return {"amount": round(sum(hit.values()), 2), "branches": sorted(hit)}
+
+
+def drop_closed(rows, closed, key="branch"):
+    """The rows of a branch table without the closed branches. `key` = the row's branch field (a name or an id,
+    matching what `closed` holds) or a function row -> that value. Rows of other shapes pass unchanged."""
+    if not closed:
+        return list(rows)
+    get = key if callable(key) else (lambda r: r.get(key) if isinstance(r, dict) else r[key])
+    return [r for r in rows if get(r) not in closed]
+
+
+def picker_closed_branches(con) -> set:
+    """The branches a branch PICKER leaves out (behind its "สาขาที่ปิดแล้ว" fold): marked closed, or with sales in
+    the past but none in the last PICKER_IDLE_DAYS days of the data (anchored on the chain's newest bill, not on
+    today, so an old copy of the database keeps its list). A branch with no sales at all yet (a new one being set
+    up) stays in the picker."""
+    flagged = closed_branches(con)
+    if "sold_at" not in _columns(con, "sales_transaction"):
+        return flagged
+    last = con.execute("SELECT MAX(sold_at) FROM sales_transaction").fetchone()[0]
+    if not last:
+        return flagged
+    a = con.execute("SELECT date(:d, :off)", {"d": last[:10], "off": f"-{PICKER_IDLE_DAYS - 1} days"}).fetchone()[0]
+    idle = closed_branches(con, [(a, last[:10])])
+    month_rows = ("OR EXISTS (SELECT 1 FROM sales_sku_monthly m WHERE m.branch_id=b.branch_id)"
+                  if "branch_id" in _columns(con, "sales_sku_monthly") else "")
+    ever = {r[0] for r in con.execute(
+        "SELECT b.name FROM branches b WHERE EXISTS (SELECT 1 FROM sales_transaction t WHERE t.branch_id=b.branch_id) "
+        + month_rows)}
+    return flagged | (idle & ever)
+
+
 # ─── Buffet menu eras: the price list in force on a given day ────────────────
 # The Grand Menu went live on 2026-09-01 and REPLACED the old price list — the
 # old prices are not sold any more. The two lists are also quoted on different

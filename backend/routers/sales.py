@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query, Request
 from typing import Optional
-from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, closed_branches, closed_day_clause, drop_closed, hidden_amount, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -1139,6 +1139,11 @@ def sales_daily(
                 "ly_rev_per_head": round(y["rev"] / y["cust"], 1) if y and y["cust"] else None,
             })
         out.sort(key=lambda r: -r["revenue"])
+        # owner 2026-10-26: a branch with no sale here nor in the period before is not a row (rules.closed_branches; the year-ago
+        # period does not count); the totals below keep its sales, and the year-ago total's share of it is the footnote
+        _closed = closed_branches(con, [w["cur"], w["prev"] if w["has_prev"] else None], keep=branch)
+        ly_hidden = hidden_amount({nm: v["rev"] for nm, v in py.items()}, _closed)
+        out = drop_closed(out, _closed)
 
         def tot(d): return (sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values()),
                             sum(x["bills"] for x in d.values()))
@@ -1159,6 +1164,8 @@ def sales_daily(
                  "cust_mom_pct": pct(ccu, pcu) if pm else None, "cust_yoy_pct": pct(ccu, ycu) if py else None,
                  "rph_mom_pct": pct(cur_rph, prev_rph) if (pm and cur_rph is not None) else None,
                  "rph_yoy_pct": pct(cur_rph, yoy_rph) if (py and cur_rph is not None) else None}
+        if ly_hidden:      # the year-ago total holds sales of branches this table hides (closed since): the footnote, no row
+            total["ly_hidden"] = ly_hidden
 
         # trailing trend (chain total rev): `trend` periods ending at the current one (to date); the
         # earlier periods are whole calendar periods

@@ -163,7 +163,8 @@ for (const mode of ['touch', 'fit']) {
       const items = await sheet.locator('.phb-item').evaluateAll(es => es.map(e => ({ v: e.getAttribute('data-v'), h: e.getBoundingClientRect().height, on: e.getAttribute('aria-checked') })));
       expect(items[0]).toMatchObject({ v: '', on: 'true' });
       expect(items.slice(1).map(i => i.v).sort()).toEqual(opts.slice().sort());
-      expect(Math.min(...items.map(i => i.h))).toBeGreaterThanOrEqual(44);
+      // (a closed branch sits in the "สาขาที่ปิดแล้ว" fold, owner 2026-10-26: a row of 0 px until the fold opens - closed-branches.spec.js)
+      expect(Math.min(...items.filter(i => i.h > 0).map(i => i.h))).toBeGreaterThanOrEqual(44);
       await shot(page, `sheet_${mode}_${scheme}`);
       // the search narrows the list
       const pick = opts[Math.min(1, opts.length - 1)];

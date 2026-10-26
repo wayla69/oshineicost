@@ -2,7 +2,7 @@
 table-turnover family. Split out of routers/analysis.py on 2026-09-05, code moved verbatim."""
 from fastapi import Query
 from typing import Optional
-from rules import net_revenue_row, net_revenue_sum
+from rules import closed_branches, drop_closed, net_revenue_row, net_revenue_sum
 from core import _group_filter, _iso_week_sql, _month_range_filter, get_db, ttl_cache
 try:
     from .analysis import _build_period_filters
@@ -186,8 +186,9 @@ def heatmap_branch(
                 """,
                 params_easy,
             ).fetchall()
-        return [{"branch": r["branch"], "period": r["period"], "revenue": r["revenue"] or 0}
-                for r in sorted(easy_rows, key=lambda x: (x["branch"], x["period"]))]
+            closed = closed_branches(con, [_heat_span(month_from, month_to, date_from, date_to)])
+        return drop_closed([{"branch": r["branch"], "period": r["period"], "revenue": r["revenue"] or 0}
+                            for r in sorted(easy_rows, key=lambda x: (x["branch"], x["period"]))], closed)
 
     # ── DAILY / WEEKLY: Easy transaction-level ─────────────────────────────────
     period_expr = "DATE(st.sold_at)" if granularity == "daily" else _iso_week_sql('st.sold_at')
@@ -209,7 +210,15 @@ def heatmap_branch(
             """,
             params,
         ).fetchall()
-    return [dict(r) for r in rows]
+        closed = closed_branches(con, [_heat_span(month_from, month_to, date_from, date_to)])
+    return drop_closed([dict(r) for r in rows], closed)
+
+
+def _heat_span(month_from, month_to, date_from, date_to):
+    """The heat map's span as one closed-branch window (rules.closed_branches): the days, else the months; no filter = all time."""
+    a = (date_from or "")[:10] or (month_from or "")[:7]
+    b = (date_to or "")[:10] or (month_to or "")[:7]
+    return (a or "0000-01", b or "9999-12")
 
 
 # ============================================================================

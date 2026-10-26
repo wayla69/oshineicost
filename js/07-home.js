@@ -742,6 +742,7 @@ async function loadDailySales(force) {
       ${sameBase ? '' : `<td class="py-1.5 pr-2 text-right tabular-nums">${periodPctDelta(b.mom_pct, { title: r ? `${r.label_th} เทียบ ${r.prev_label_th}${b.mom_rev != null ? ' · ฿' + fmt(b.mom_rev) : ''}` : '' })}</td>`}
       <td class="py-1.5 text-right tabular-nums">${periodPctDelta(b.yoy_pct, { title: r ? `${r.label_th} เทียบ ${r.ly_label_th}${b.yoy_rev != null ? ' · ฿' + fmt(b.yoy_rev) : ''}` : '' })}</td>
     </tr>`).join('') || `<tr><td colspan="${sameBase ? 6 : 7}" class="py-4 text-center text-slate-400">ไม่มีข้อมูล</td></tr>`;
+  const dsCn = document.getElementById('dsClosedNote'); if (dsCn) dsCn.innerHTML = closedLyNote(t.ly_hidden);   // owner 2026-10-26: footnote, no row
   pageAnswer('dailysales', _dsAnswer(dsRows, chgOf, t, sameBase));         // DV5: the answer strip on a phone
   const tr = d.trend || [];
   const tLab = x => gran === 'year' ? String(+x.start.slice(0, 4) + 543)

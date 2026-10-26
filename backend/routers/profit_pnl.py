@@ -8,7 +8,7 @@ routers/reports.py.
 from fastapi import Query
 from typing import Optional
 import json as _json
-from rules import avg_ticket_sql, coverage_from_sums, coverage_sums_sql, food_cost_target, net_revenue_row
+from rules import avg_ticket_sql, closed_branches, drop_closed, month_window, coverage_from_sums, coverage_sums_sql, food_cost_target, net_revenue_row
 from core import (
     _bom_cogs_expr, _bom_costed_rev_expr, _cogs_case, _costed_rev_case, _group_filter,
     _ingredient_family, _iso_week_sql, _month_range_filter, _profit_filters, _tx_filters,
@@ -372,7 +372,7 @@ def gp_by_branch_month(
     daily Easy-tx revenue, same approach as /api/buffet/gp)."""
     if granularity not in ("day", "week", "month"):
         granularity = "month"
-    filters = ["b.name != 'ALL'", "COALESCE(b.active,1) = 1"]
+    filters = ["b.name != 'ALL'"]
     params: dict = {}
     _group_filter(filters, params, group)
     _month_range_filter(filters, params, month_from, month_to, month, col="ssm.period_month")
@@ -402,6 +402,9 @@ def gp_by_branch_month(
         """, params).fetchall()
 
         target = food_cost_target(con)   # ONE target (owner 2026-10-25), Settings → ค่าเริ่มต้น
+        # owner 2026-10-26: a branch with no sale in the months asked for is not a row (rules.closed_branches; was an inline
+        # active=1 filter that also took a closed branch's sales out of the chain total); no months = all time
+        closed_ids = closed_branches(con, [month_window(month, month_from, month_to)], ids=True)
 
     by_branch: dict = {}
     for r in rows:
@@ -442,6 +445,7 @@ def gp_by_branch_month(
         out_rows.append(b)
 
     out_rows.sort(key=lambda x: x["total_revenue"], reverse=True)
+    out_rows = drop_closed(out_rows, closed_ids, key="branch_id")
 
     grand_gp = grand_rev - grand_cogs
 
@@ -454,7 +458,7 @@ def gp_by_branch_month(
             return f"{iso[0]}-W{iso[1]:02d}"
 
         # Daily tx revenue per branch over the period
-        tx_filters = ["b.name != 'ALL'", "st.source = 'Easy'", "COALESCE(b.active,1) = 1"]
+        tx_filters = ["b.name != 'ALL'", "st.source = 'Easy'"]
         tx_params: dict = {}
         _group_filter(tx_filters, tx_params, group)
         _month_range_filter(tx_filters, tx_params, month_from, month_to, month,
@@ -774,9 +778,11 @@ def pnl_branches_deep(
             {tx_where}
             GROUP BY b.name
         """, tx_params).fetchall()
+        closed = closed_branches(con, [month_window(None, month_from, month_to)])   # owner 2026-10-26
 
     tx_map = {r["branch"]: dict(r) for r in tx_rows}
     out = []
+    sku_rows = drop_closed(sku_rows, closed)
     for r in sku_rows:
         d = dict(r)
         rev = (d.get("revenue_ex_vat") or 0)
@@ -1278,6 +1284,7 @@ def pnl_branch(
                                   JOIN branches b ON b.branch_id = ssm.branch_id {where}
                                   GROUP BY b.name, ssm.period_month""", params).fetchall():
             _bm.setdefault(_r["branch"], []).append(_r["m"])
+        closed = closed_branches(con, [month_window(month, month_from, month_to)], keep=branch)   # owner 2026-10-26
 
     def _month_share(m: str) -> float:
         """the share of month `m` that has closed: 1 for a finished month, days to the anchor ÷ days in the month else"""
@@ -1345,4 +1352,4 @@ def pnl_branch(
         "covers":           tot["covers"],
         "fixed_costs_set":  bool(fixed),
     }
-    return {"branches": out, "chain": chain}
+    return {"branches": drop_closed(out, closed), "chain": chain}     # the chain keeps a closed branch's sales of the window

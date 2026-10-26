@@ -3559,15 +3559,49 @@ function setPeriodPreset(preset) {
   if (w) gPeriodChartWin(w);
 }
 
+// Owner 2026-10-26 ("Hide closed branches"): the top bar's branch select lists the open branches; a closed one (backend
+// rules.picker_closed_branches: marked closed, or no bill in the last 90 days of the data) sits at the end under "สาขาที่ปิดแล้ว",
+// so its history is still one pick away (the phone's branch sheet folds the same options, js/09c-mobile.js _phbDraw).
+// `data` = /api/branches?include_inactive=true (each row with `closed`); keeps the select's first option (ทุกสาขา).
+function branchSelectFill(sel, data) {
+  if (!sel) return;
+  [...sel.querySelectorAll('optgroup')].forEach(g => g.remove());
+  while (sel.options.length > 1) sel.remove(1);
+  const opt = b => {
+    const o = document.createElement('option');
+    o.value = b.name; o.textContent = b.name;
+    o.dataset.type = b.branch_type || '';          // สาขาหลัก / แฟรนไชส์: the phone's branch sheet groups by it
+    if (b.closed) o.dataset.closed = '1';
+    return o;
+  };
+  const rows = data || [], closed = rows.filter(b => b.closed);
+  rows.filter(b => !b.closed).forEach(b => sel.appendChild(opt(b)));
+  if (closed.length) {
+    const g = document.createElement('optgroup');
+    g.label = 'สาขาที่ปิดแล้ว';
+    closed.forEach(b => g.appendChild(opt(b)));
+    sel.appendChild(g);
+  }
+}
+
+// Owner 2026-10-26: a table hides a branch with no sale in the period nor the one before, but its เทียบปีก่อน chain total still holds
+// that branch's sales of last year - the answer's ly_hidden {amount, branches} (rules.hidden_amount) is said once under the table,
+// never as a row. '' when there is none.
+function closedLyNote(h) {
+  if (!h || !(h.amount > 0)) return '';
+  const who = (h.branches || []).join(', ');
+  return `<p class="closed-ly-note text-xs mt-2" style="color:var(--text-muted)">ยอดปีก่อนรวมสาขาที่ปิดแล้ว ฿${fmt(h.amount)}${who ? ` (${esc(who)})` : ''}</p>`;
+}
+
 async function onGroupChange() {
   // Filter the branch dropdown to show only branches in the selected group
   const grp = getGroup();
-  const url = grp ? `${API}/api/branches?group=${grp}` : `${API}/api/branches`;
+  const url = grp ? `${API}/api/branches?include_inactive=true&group=${grp}` : `${API}/api/branches?include_inactive=true`;
   const data = await api(url);
   const sel = document.getElementById('selBranch');
   const prev = sel.value;
-  sel.innerHTML = '<option value="">ทุกสาขา</option>' +
-    data.map(b => `<option value="${esc(b.name)}" data-type="${esc(b.branch_type || '')}">${esc(b.name)}</option>`).join('');
+  sel.innerHTML = '<option value="">ทุกสาขา</option>';
+  branchSelectFill(sel, data);
   // keep existing branch if still valid; else reset
   sel.value = data.some(b => b.name === prev) ? prev : '';
   onFilterChange();

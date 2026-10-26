@@ -7,7 +7,7 @@ host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query, Request
 from typing import Optional
-from rules import closed_day_clause, latest_settled_day
+from rules import closed_branches, closed_day_clause, drop_closed, latest_settled_day, picker_closed_branches
 from rules import (VAT_DIVISOR, coverage_from_sums, coverage_sums_sql, effective_unit_cost_sql, food_cost_target,
                    needs_cost_sql, net_revenue_row, net_revenue_sum, scope_filter, tier_code_sql)
 from targets import targets_for_month
@@ -75,6 +75,8 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
                         "vs_avg_baht": round(trev - avg7, 0) if avg7 else None,
                         "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status})
         out.sort(key=lambda r: (r["vs_avg_baht"] is None, r["vs_avg_baht"] if r["vs_avg_baht"] is not None else 0, -r["revenue"]))
+        # owner 2026-10-26: a closed branch is not a row (rules.closed_branches: the focus day and the 7 days before it)
+        out = drop_closed(out, closed_branches(con, [(start.isoformat(), focus)], keep=branch))
     return {"date": focus, "days": days, "branches": out,
             "skipped_day": None if date else settled["skipped_day"], "skipped_bills": None if date else settled["skipped_bills"]}
 
@@ -117,7 +119,8 @@ def extra_cash(month: Optional[str] = Query(None), branch: Optional[str] = Query
         summary = {"net": (s["net"] or 0), "short_total": (s["short_total"] or 0),
                    "over_total": (s["over_total"] or 0), "short_days": (s["short_days"] or 0),
                    "day_branch": (s["day_branch"] or 0)}
-    return {"month": mon, "branches": branches, "worst_days": worst, "summary": summary}
+        closed = closed_branches(con, [(mon, mon)], keep=branch)     # owner 2026-10-26: rows only; the summary keeps the month
+    return {"month": mon, "branches": drop_closed(branches, closed), "worst_days": drop_closed(worst, closed), "summary": summary}
 
 
 @router.get("/api/extra/customer-type")
@@ -153,6 +156,7 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
                 FROM pos_customer_type_month x JOIN branches b ON b.branch_id=x.branch_id
                 WHERE {tw} AND x.period_month=:m GROUP BY b.name, x.type_name""",
             {**p, "m": mon}).fetchall()
+        closed = closed_branches(con, [(mon, mon)], keep=branch)     # owner 2026-10-26
     import re as _re
     _DELIV = _re.compile(r'grab|line|food\s*panda|foodpanda|delivery|robinhood|shopee|เดลิเวอรี|แกร็บ|ไลน์|ส่ง', _re.I)
     bmap: dict = {}
@@ -168,6 +172,7 @@ def extra_customer_type(month: Optional[str] = Query(None), branch: Optional[str
         by_branch.append({**e, "delivery_pct": round(e["delivery_cust"] / cu * 100, 1) if cu else 0,
                           "net_pct": round(e["net"] / tn_guard * 100, 1) if tn else 0})
     by_branch.sort(key=lambda r: -(r["net"] or 0))
+    by_branch = drop_closed(by_branch, closed)
     return {"month": mon, "types": rows, "total_customers": tc, "total_net": tn,
             "by_branch": by_branch, "count_caveat": True}
 
@@ -293,7 +298,8 @@ def extra_cancel_bills(month: Optional[str] = Query(None), branch: Optional[str]
         cbills = (s["bills"] or 0) if s else 0
         summary = {"bills": cbills, "amount": (s["amount"] or 0) if s else 0, "valid_bills": valid,
                    "cancel_rate": round(cbills / (valid + cbills) * 100, 2) if (valid + cbills) else None}
-    return {"month": mon, "branches": branches, "reasons": reasons, "summary": summary}
+        closed = closed_branches(con, [(mon, mon)], keep=branch)     # owner 2026-10-26: rows only; the summary keeps the month
+    return {"month": mon, "branches": drop_closed(branches, closed), "reasons": reasons, "summary": summary}
 
 
 @router.get("/api/extra/cash/detail")
@@ -415,6 +421,11 @@ def extra_closing_time(branch: Optional[str] = Query(None), group: Optional[str]
             f"""SELECT b.name branch, MAX(t.sold_at) last_sold, COUNT(*) total_bills
                 FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
                 WHERE {tw} GROUP BY b.name""", p).fetchall()}
+        # owner 2026-10-26: a closed branch is not a freshness row nor a "missing" branch of every day. The picker's set
+        # (rules.picker_closed_branches: marked closed, or no bill in the last 90 days), so a branch whose sync stalls
+        # for a few weeks still shows here as behind / inactive.
+        for _nm in picker_closed_branches(con) - {branch}:
+            last_rows.pop(_nm, None)
 
         # ── Single-day mode ──────────────────────────────────────────────────
         if date:
