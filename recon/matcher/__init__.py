@@ -35,6 +35,8 @@ from ._shared import (  # noqa: F401
     _CHANNEL_CATEGORY,
     _CATEGORY_SOURCE,
     method_config,
+    lane_lag_days,
+    max_lag_days,
     _cfg,
     _within_tol,
     _provider_bank,
@@ -70,6 +72,7 @@ from .buckets import (  # noqa: F401
     external_buckets,
     _apply_transfer_any,
     channel_move_deltas,
+    channel_move_day_deltas,
     _external_buckets_daily,
 )
 
@@ -107,6 +110,7 @@ from .credit import (  # noqa: F401
     _credit_bank_candidates,
     _carried_bank_line_ids,
     credit_three_way,
+    month_claimed_bank_line_ids,
 )
 
 from .category import (  # noqa: F401
@@ -167,6 +171,9 @@ __all__ = [
     '_CHANNEL_CATEGORY',
     '_CATEGORY_SOURCE',
     'method_config',
+    'lane_lag_days',
+    'max_lag_days',
+    'month_claimed_bank_line_ids',
     '_cfg',
     '_within_tol',
     '_provider_bank',
@@ -196,6 +203,7 @@ __all__ = [
     'external_buckets',
     '_apply_transfer_any',
     'channel_move_deltas',
+    'channel_move_day_deltas',
     '_external_buckets_daily',
     '_POINT_SERIES_KW',
     'point_pos_total',

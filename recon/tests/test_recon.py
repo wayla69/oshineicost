@@ -19,6 +19,8 @@ from recon.seed_payment_map import normalize, classify          # noqa: E402
 from recon.parsers import parse_grab_report                      # noqa: E402
 import recon.main as main                                        # noqa: E402
 import recon.core as core   # get_db() reads core._DB_PATH; main._DB_PATH is a copy
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from approval_helpers import make_approvable                     # noqa: E402
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
@@ -209,7 +211,8 @@ def test_v2_accept_clears_todo_and_allows_close(client):
         assert ch1[key]["variance"] == ch0[key]["variance"]
 
     # close flow: run-match → accepted lanes' discrepancies born resolved → approve OK
-    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06",
+                                             "created_by": "prep"}).json()["session_id"]
     client.post(f"/api/sessions/{sid}/run-match")
     discs = client.get(f"/api/sessions/{sid}/discrepancies",
                        params={"resolution": "all"}).json()
@@ -242,7 +245,9 @@ def test_v2_pos_codes_breakdown(client):
 def test_manager_token_gates_approve(client, monkeypatch):
     """Two-tier close: with OSHINEI_MANAGER_TOKEN set, approving needs the code;
     staff transitions (draft/in_review) stay open."""
-    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06",
+                                             "created_by": "prep"}).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
     assert client.patch(f"/api/sessions/{sid}/status",
                         data={"status": "in_review"}).status_code == 200
@@ -262,6 +267,7 @@ def test_aud4_sod_preparer_cannot_approve(client, monkeypatch):
     sid = client.post("/api/sessions",
                       json={"branch_id": 4, "period_month": "2026-06", "created_by": "alice"}
                       ).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
     h = {"X-Manager-Token": "mgr-1234"}
     same = client.patch(f"/api/sessions/{sid}/status",
@@ -316,6 +322,7 @@ def test_aud5_close_snapshot_frozen_on_approve(client, monkeypatch):
     sid = client.post("/api/sessions",
                       json={"branch_id": 4, "period_month": "2026-06", "created_by": "alice"}
                       ).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr")
     r = client.patch(f"/api/sessions/{sid}/status",
                      data={"status": "approved", "approved_by": "bob"},
@@ -1938,7 +1945,13 @@ def test_approval_gate_and_period_lock(client):
 
     for d in open_discs:
         client.patch(f"/api/discrepancies/{d['id']}/resolve", json={"resolution": "accepted", "resolved_by": "t"})
-    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 200
+    # 2026-10: an unknown approver is refused (SoD can't be checked) …
+    assert client.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}).status_code == 409
+    # … and 't' resolved items, so 't' prepared the month: 'mgr' approves
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "t"}).status_code == 409
+    assert client.patch(f"/api/sessions/{sid}/status",
+                        data={"status": "approved", "approved_by": "mgr"}).status_code == 200
     assert client.post(f"/api/sessions/{sid}/run-match").status_code == 423        # locked
     # Reopen gate (control fix): unlocking a signed-off month needs a reason (≥10 chars)
     assert client.patch(f"/api/sessions/{sid}/status",
@@ -2543,7 +2556,8 @@ def test_deposit_slip_endpoints_validation_and_lock(client):
     slips = client.get("/api/deposit-slips", params={"branch_id": 4, "period_month": "2026-06"}).json()
     assert len(slips) == 1 and slips[0]["amount"] == 120
     # closed month → 423
-    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06",
+                                             "created_by": "prep"}).json()["session_id"]
     client.post(f"/api/sessions/{sid}/run-match")
     c = sqlite3.connect(db)
     c.execute("UPDATE recon_discrepancies SET resolution='accepted' WHERE session_id=?", (sid,))
@@ -3083,6 +3097,7 @@ def test_ic_structural_control_fixes(client, monkeypatch):
     sid = client.post("/api/sessions",
                       json={"branch_id": 5, "period_month": "2026-06", "created_by": "alice"}
                       ).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     monkeypatch.setenv("OSHINEI_MANAGER_TOKEN", "mgr-1234")
     h = {"X-Manager-Token": "mgr-1234"}
     assert client.patch(f"/api/sessions/{sid}/status",

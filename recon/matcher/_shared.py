@@ -127,6 +127,32 @@ def _cfg(cfgs: dict, category: str, bank: str | None = None) -> dict:
     return cfgs.get((category, bank)) or cfgs.get((category, "*")) or {}
 
 
+def lane_lag_days(conn, category: str, bank: str | None = None) -> int:
+    """How many days into the NEXT month a lane's matcher reads bank credits
+    (recon_method_config.lag_days, else the engine default the matcher uses)."""
+    v = _cfg(method_config(conn), category, bank).get("lag_days")
+    if v is not None:
+        return max(0, int(v))
+    if category == "CASH":
+        return DEF_CASH_LAG
+    if category == "LINEMAN":
+        return DEF_LINEMAN_LAG
+    if category in ("CREDIT", "GRAB"):
+        return DEF_PAYOUT_LAG
+    return 1                                       # QR / TRANSFER: next-day settlement
+
+
+def max_lag_days(conn) -> int:
+    """The widest next-month window any matcher reads (every configured lag and
+    every engine default) — a bank line dated within this many days of the 1st
+    may belong to LAST month's result."""
+    lags = [DEF_CASH_LAG, DEF_PAYOUT_LAG, DEF_LINEMAN_LAG]
+    for r in method_config(conn).values():
+        if r.get("lag_days") is not None:
+            lags.append(int(r["lag_days"]))
+    return max(lags)
+
+
 def _within_tol(ext: float, pos: float, tol_abs: float | None = None) -> bool:
     # An explicit lane override is a strict absolute tolerance (no % fallback):
     # the owner sets e.g. ฿10 for cash slips and means exactly that.

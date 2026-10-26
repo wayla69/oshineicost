@@ -9,6 +9,7 @@ from ..core import _ATTACH_DIR
 from ..core import _DAY_RE
 from ..core import _actor
 from ..core import _assert_period_open
+from ..core import _assert_bank_line_open
 from ..core import _audit
 from ..core import _override_channel
 from ..core import _statement_code_overrides
@@ -162,8 +163,7 @@ async def preview_upload(
     prov, rows, skipped, raw = _parse_or_422(source_type, raw, provider, file.filename)
     detected = _detect_branch_from_rows(source_type, rows)   # by bank account # / acquirer MID
     with get_db() as conn:
-        dup_lines = sum(1 for r in rows if _bank_line_exists(conn, branch_id, r)) \
-            if source_type == "bank" else 0
+        dup_lines = sum(1 for r in rows if _line_exists(conn, source_type, branch_id, r))
     return {
         "provider":     prov,
         "row_count":    len(rows),
@@ -172,8 +172,8 @@ async def preview_upload(
         # confirm refuses a statement/Grab/LINE MAN doc with no row in period_month
         # and any doc with a row in an approved/closed month
         "row_months":   _row_months(source_type, rows),
-        # bank lines already saved from another upload (re-downloaded statement) —
-        # confirm skips these
+        # lines already saved from another upload (re-downloaded statement / a
+        # re-exported Grab, LINE MAN or card report) — confirm skips these
         "duplicate_lines": dup_lines,
         "preview":      rows[:50],
         "columns":      list(rows[0].keys()) if rows else [],
@@ -300,6 +300,57 @@ def _bank_line_exists(conn, branch_id: int, row: dict, exclude_upload: int | Non
           acct, acct, exclude_upload)).fetchone() is not None
 
 
+def _platform_line_exists(conn, source_type: str, branch_id: int, row: dict,
+                          exclude_upload: int | None = None) -> bool:
+    """A Grab / LINE MAN order with the same order_id and order_date is already
+    saved for this branch (a re-exported report: different bytes, same orders).
+    Rows without an order id are never matched."""
+    oid = str(row.get("order_id") or "").strip()
+    if not oid or not row.get("order_date"):
+        return False
+    table = _LINE_TABLE[source_type]
+    return conn.execute(f"""
+        SELECT 1 FROM {table} l
+        JOIN recon_uploads u ON u.upload_id = l.upload_id AND u.status = 'confirmed'
+        WHERE l.branch_id=? AND TRIM(COALESCE(l.order_id,''))=? AND l.order_date=?
+          AND l.upload_id IS NOT ?
+        LIMIT 1
+    """, (branch_id, oid, str(row["order_date"])[:10], exclude_upload)).fetchone() is not None
+
+
+def _cc_line_exists(conn, branch_id: int, row: dict, exclude_upload: int | None = None) -> bool:
+    """A card settlement line with the same settlement date, merchant id, batch,
+    card type and gross is already saved for this branch (a re-exported
+    settlement report). A line with neither a merchant id nor a batch number is
+    never matched — two genuine same-day same-gross rows would be indistinguishable."""
+    mid = str(row.get("merchant_id") or "").strip()
+    batch = str(row.get("batch_no") or "").strip()
+    if not row.get("settlement_date") or not (mid or batch):
+        return False
+    return conn.execute("""
+        SELECT 1 FROM recon_cc_lines l
+        JOIN recon_uploads u ON u.upload_id = l.upload_id AND u.status = 'confirmed'
+        WHERE l.branch_id=? AND l.settlement_date=?
+          AND TRIM(COALESCE(l.merchant_id,''))=? AND TRIM(COALESCE(l.batch_no,''))=?
+          AND UPPER(TRIM(COALESCE(l.card_type,'')))=?
+          AND ABS(COALESCE(l.gross_amount,0) - ?) < 0.005
+          AND l.upload_id IS NOT ?
+        LIMIT 1
+    """, (branch_id, str(row["settlement_date"])[:10], mid, batch,
+          str(row.get("card_type") or "").strip().upper(),
+          float(row.get("gross_amount") or 0), exclude_upload)).fetchone() is not None
+
+
+def _line_exists(conn, source_type: str, branch_id: int, row: dict,
+                 exclude_upload: int | None = None) -> bool:
+    """Line-level duplicate check for every source type (see the per-type rules)."""
+    if source_type == "bank":
+        return _bank_line_exists(conn, branch_id, row, exclude_upload)
+    if source_type == "credit_card":
+        return _cc_line_exists(conn, branch_id, row, exclude_upload)
+    return _platform_line_exists(conn, source_type, branch_id, row, exclude_upload)
+
+
 def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
                 branch_id: int, period_month: str, provider: str = "",
                 actor: str = "staff") -> dict:
@@ -346,11 +397,12 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
                  f"ไม่ใช่เดือนที่เลือก ({period_month}) — เลือกเดือนให้ตรงกับเอกสารแล้วอัปโหลดใหม่")
     _assert_months_open(conn, branch_id, months)
 
-    # Line-level overlap (bank): a re-downloaded statement has different bytes
-    # but the same movements — skip lines already saved instead of doubling.
+    # Line-level overlap: a re-downloaded statement or a re-exported Grab / LINE MAN
+    # / card report has different bytes but the same lines — skip lines already
+    # saved for the branch instead of doubling them.
     dup_lines = 0
-    if source_type == "bank" and rows:
-        kept = [r for r in rows if not _bank_line_exists(conn, branch_id, r)]
+    if rows:
+        kept = [r for r in rows if not _line_exists(conn, source_type, branch_id, r)]
         dup_lines = len(rows) - len(kept)
         if not kept:
             raise HTTPException(
@@ -382,7 +434,7 @@ def _ingest_one(conn, source_type: str, raw: bytes, filename: str,
     dkey = _DATE_COL[source_type]
     return {"upload_id": upload_id, "rows_saved": len(rows),
             "skipped_rows": skipped, "provider": prov,
-            "duplicate_lines": dup_lines,   # bank lines skipped as already saved
+            "duplicate_lines": dup_lines,   # lines skipped as already saved (any type)
             "row_months": months,
             # saved rows dated outside the picked month (T+1 deposits, a payout on the 1st):
             # they count in their own month — the drop-zone result names them
@@ -646,6 +698,16 @@ def delete_upload(upload_id: int, request: Request):
         # its lines count in the months of their OWN dates — those must be open too
         _assert_months_open(conn, up["branch_id"],
                             _upload_line_months(conn, up["source_type"], upload_id))
+        # its bank credits may be what a signed-off PREVIOUS month rests on (a
+        # deposit on the 1st that banked last month's 31st) — those can't go
+        if up["source_type"] == "bank":
+            cache: dict = {}
+            for ln in conn.execute("SELECT id, txn_date FROM recon_bank_lines WHERE upload_id=?",
+                                   (upload_id,)).fetchall():
+                try:
+                    _assert_bank_line_open(conn, up["branch_id"], ln["id"], ln["txn_date"], cache)
+                except HTTPException as e:
+                    raise HTTPException(423, f"ลบเอกสารนี้ไม่ได้ — {e.detail}")
         conn.execute("DELETE FROM recon_uploads WHERE upload_id=?", (upload_id,))
         # Record the file hash too, so a deleted source document stays traceable in the
         # audit log (it may be referenced by an earlier close snapshot's manifest).
@@ -681,6 +743,11 @@ def reassign_upload_branch(upload_id: int, body: _UploadBranchBody, request: Req
         line_months = _upload_line_months(conn, up["source_type"], upload_id)
         _assert_months_open(conn, up["branch_id"], line_months)
         _assert_months_open(conn, body.branch_id, line_months)
+        if up["source_type"] == "bank":         # leaving the source branch = a delete there
+            cache: dict = {}
+            for ln in conn.execute("SELECT id, txn_date FROM recon_bank_lines WHERE upload_id=?",
+                                   (upload_id,)).fetchall():
+                _assert_bank_line_open(conn, up["branch_id"], ln["id"], ln["txn_date"], cache)
 
         table = _LINE_TABLE[up["source_type"]]
         dup = _find_dup_file(conn, body.branch_id, up["source_type"], up["file_hash"],
@@ -696,13 +763,13 @@ def reassign_upload_branch(upload_id: int, body: _UploadBranchBody, request: Req
             raise HTTPException(
                 409, f"เอกสารนี้เป็นของสาขา '{detected.get('detected_branch_name')}' "
                      f"(ตรวจจาก {detected.get('detected_key')}) ไม่ใช่สาขาที่เลือก")
-        if up["source_type"] == "bank":
-            overlap = sum(1 for r in lines
-                          if _bank_line_exists(conn, body.branch_id, r, exclude_upload=upload_id))
-            if overlap:
-                raise HTTPException(
-                    409, f"สาขาปลายทางมีรายการเดียวกันนี้อยู่แล้ว {overlap} รายการ "
-                         "— ย้ายแล้วจะนับซ้ำ")
+        overlap = sum(1 for r in lines
+                      if _line_exists(conn, up["source_type"], body.branch_id, r,
+                                      exclude_upload=upload_id))
+        if overlap:
+            raise HTTPException(
+                409, f"สาขาปลายทางมีรายการเดียวกันนี้อยู่แล้ว {overlap} รายการ "
+                     "— ย้ายแล้วจะนับซ้ำ")
 
         moved = conn.execute(
             f"UPDATE {table} SET branch_id=? WHERE upload_id=?",
@@ -722,6 +789,20 @@ _ATTACH_MAX = 10 * 1024 * 1024
 _ATTACH_EXT = (".jpg", ".jpeg", ".png", ".webp", ".gif", ".pdf", ".heic")
 
 
+# The served Content-Type comes from the stored file's EXTENSION (allow-list) —
+# never from the client's multipart content_type, which an uploader controls
+# (text/html on a ".png" would render as a page in the app's origin: stored XSS).
+_ATTACH_MIME = {
+    ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".png": "image/png",
+    ".webp": "image/webp", ".gif": "image/gif", ".pdf": "application/pdf",
+    ".heic": "image/heic",
+}
+
+
+def _attach_mime(name: str | None) -> str:
+    return _ATTACH_MIME.get(Path(name or "").suffix.lower(), "application/octet-stream")
+
+
 @router.get("/api/attachments")
 def list_attachments(branch_id: int, day: str):
     if not _DAY_RE.match(day or ""):
@@ -734,11 +815,14 @@ def list_attachments(branch_id: int, day: str):
 
 
 @router.post("/api/attachments", dependencies=[Depends(require_write_token)])
-async def create_attachment(branch_id: int = Form(...), day: str = Form(...),
+async def create_attachment(request: Request, branch_id: int = Form(...), day: str = Form(...),
                             category: str = Form(""), note: str = Form(""),
                             uploaded_by: str = Form(""), file: UploadFile = File(...)):
     if not _DAY_RE.match(day or ""):
         raise HTTPException(400, "day must be in 'YYYY-MM-DD' format.")
+    with get_db() as conn:                    # same lock as delete: no new evidence on a signed month
+        _validate_master_branch(conn, branch_id)
+        _assert_period_open(conn, branch_id, day[:7])
     fn = (file.filename or "").strip()
     if not fn.lower().endswith(_ATTACH_EXT):
         raise HTTPException(415, "Only images (jpg/png/webp/gif/heic) or PDF are accepted.")
@@ -762,8 +846,8 @@ async def create_attachment(branch_id: int = Form(...), day: str = Form(...),
                 "INSERT INTO recon_attachment"
                 "(branch_id,day,category,file_name,mime,size_bytes,file_path,note,uploaded_by) "
                 "VALUES(?,?,?,?,?,?,?,?,?)",
-                (branch_id, day, (category or None), fn, file.content_type,
-                 len(raw), rel_path, (note or None), (uploaded_by or None)))
+                (branch_id, day, (category or None), fn, _attach_mime(fn),
+                 len(raw), rel_path, (note or None), _actor(request, uploaded_by, default="") or None))
             conn.commit()
     except Exception:
         dest.unlink(missing_ok=True)
@@ -782,9 +866,15 @@ def get_attachment_file(att_id: int):
     fp = _ATTACH_DIR / r["file_path"] if r["file_path"] else None
     if not fp or not fp.exists():
         raise HTTPException(404, "file missing from storage")
-    return Response(content=fp.read_bytes(),
-                    media_type=r["mime"] or "application/octet-stream",
-                    headers={"Content-Disposition": _inline_disposition(r["file_name"])})
+    # Type from the stored file's extension, not the stored (client-supplied) mime
+    # of older rows. Images and PDFs open in the browser; anything else downloads.
+    mime = _attach_mime(r["file_path"] or r["file_name"])
+    disp = _inline_disposition(r["file_name"])
+    if mime == "application/octet-stream":
+        disp = "attachment" + disp[len("inline"):]
+    return Response(content=fp.read_bytes(), media_type=mime,
+                    headers={"Content-Disposition": disp,
+                             "X-Content-Type-Options": "nosniff"})
 
 
 def _inline_disposition(file_name: str | None) -> str:
@@ -845,7 +935,7 @@ def list_deposit_slips(branch_id: int, period_month: str):
 
 
 @router.post("/api/deposit-slips", dependencies=[Depends(require_write_token)])
-def upsert_deposit_slip(body: DepositSlip):
+def upsert_deposit_slip(body: DepositSlip, request: Request):
     """One slip per (branch, sale_day) — POSTing again replaces the amount."""
     if not _DAY_RE.match(body.sale_day or ""):
         raise HTTPException(400, "sale_day must be in 'YYYY-MM-DD' format.")
@@ -853,6 +943,7 @@ def upsert_deposit_slip(body: DepositSlip):
         raise HTTPException(400, "deposit_day must be in 'YYYY-MM-DD' format.")
     if body.amount <= 0:
         raise HTTPException(400, "amount must be positive.")
+    actor = _actor(request, body.created_by)
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         _assert_period_open(conn, body.branch_id, body.sale_day[:7])
@@ -864,10 +955,10 @@ def upsert_deposit_slip(body: DepositSlip):
                 UPDATE recon_deposit_slip SET amount=?, deposit_day=?, attachment_id=?,
                     note=?, created_by=?, created_at=datetime('now') WHERE id=?
             """, (body.amount, body.deposit_day, body.attachment_id,
-                  body.note or None, body.created_by or "staff", old["id"]))
+                  body.note or None, actor, old["id"]))
             slip_id = old["id"]
             if float(old["amount"]) != body.amount:
-                _audit(conn, "deposit_slip", slip_id, "update", body.created_by or "staff",
+                _audit(conn, "deposit_slip", slip_id, "update", actor,
                        [{"field": "amount", "old": old["amount"], "new": body.amount}])
         else:
             cur = conn.execute("""
@@ -875,16 +966,16 @@ def upsert_deposit_slip(body: DepositSlip):
                     (branch_id, sale_day, deposit_day, amount, attachment_id, note, created_by)
                 VALUES (?,?,?,?,?,?,?)
             """, (body.branch_id, body.sale_day, body.deposit_day, body.amount,
-                  body.attachment_id, body.note or None, body.created_by or "staff"))
+                  body.attachment_id, body.note or None, actor))
             slip_id = cur.lastrowid
-            _audit(conn, "deposit_slip", slip_id, "create", body.created_by or "staff",
+            _audit(conn, "deposit_slip", slip_id, "create", actor,
                    [{"field": "amount", "old": None, "new": body.amount}])
         conn.commit()
     return {"id": slip_id, "sale_day": body.sale_day, "amount": body.amount}
 
 
 @router.delete("/api/deposit-slips/{slip_id}", dependencies=[Depends(require_write_token)])
-def delete_deposit_slip(slip_id: int):
+def delete_deposit_slip(slip_id: int, request: Request):
     with get_db() as conn:
         row = conn.execute(
             "SELECT branch_id, sale_day FROM recon_deposit_slip WHERE id=?", (slip_id,)).fetchone()
@@ -892,7 +983,7 @@ def delete_deposit_slip(slip_id: int):
             raise HTTPException(404, "deposit slip not found")
         _assert_period_open(conn, row["branch_id"], row["sale_day"][:7])
         conn.execute("DELETE FROM recon_deposit_slip WHERE id=?", (slip_id,))
-        _audit(conn, "deposit_slip", slip_id, "delete", "staff")
+        _audit(conn, "deposit_slip", slip_id, "delete", _actor(request))
         conn.commit()
     return {"deleted": slip_id}
 

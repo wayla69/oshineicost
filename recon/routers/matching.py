@@ -11,6 +11,8 @@ from ..core import _PERIOD_RE
 from ..core import _POS_DAY_UNAVAILABLE
 from ..core import _actor
 from ..core import _assert_period_open
+from ..core import _assert_bank_line_open
+from ..core import _assert_bank_line_release_ok
 from ..core import _audit
 from ..core import _validate_master_branch
 from ..core import _validate_period
@@ -22,6 +24,7 @@ from ..matcher import category_reconciliation
 from ..matcher import lane_ext_lines
 from ..matcher import lane_lines
 from ..matcher import lane_pos_days
+from ..matcher import lane_lag_days
 from ..matcher import map_bank_suggestions
 from ..matcher import payout_matching
 from ..matcher import payout_reconciliation
@@ -36,6 +39,8 @@ from fastapi import HTTPException
 from fastapi import Request
 from pydantic import BaseModel
 import json
+from datetime import date as _date
+from datetime import timedelta as _timedelta
 
 router = APIRouter()
 
@@ -185,6 +190,12 @@ def manual_list(branch_id: int, category: str, bank: str, period_month: str):
         has_pos = _has_table(conn, "pos_payment_day")      # written by the dashboard sync
         pos = lane_pos_days(conn, branch_id, period_month, category, bank) if has_pos else []
         ext = lane_ext_lines(conn, branch_id, period_month, category, bank)
+        # The lane's settlement window into next month (day 31 banked on the 1st):
+        # those lines can be ticked too, flagged so the drawer can say so.
+        win_end = _next_month_cutoff(period_month, lane_lag_days(conn, category, bank))
+        ext += [{**l, "next_month": True}
+                for l in lane_ext_lines(conn, branch_id, _next_month(period_month), category, bank)
+                if str(l["date"])[:10] < win_end]
 
         matches, consumed = [], {}
         for m in conn.execute(
@@ -206,6 +217,18 @@ def manual_list(branch_id: int, category: str, bank: str, period_month: str):
         return {"branch_id": branch_id, "category": category, "bank": bank,
                 "period_month": period_month, "pos_days": pos, "ext_lines": ext,
                 "matches": matches, "pos_available": has_pos}
+
+
+def _next_month(period_month: str) -> str:
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    return f"{y + 1}-01" if m == 12 else f"{y}-{m + 1:02d}"
+
+
+def _next_month_cutoff(period_month: str, lag_days: int) -> str:
+    """First day AFTER a lane's window: the 1st of next month + lag_days."""
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    first = _date(y + 1, 1, 1) if m == 12 else _date(y, m + 1, 1)
+    return (first + _timedelta(days=max(0, int(lag_days or 0)))).isoformat()
 
 
 @router.post("/api/manual", dependencies=[Depends(require_write_token)])
@@ -270,7 +293,13 @@ def manual_create(body: ManualMatch, request: Request):
             if amt > remaining + 0.5:
                 raise HTTPException(
                     409, f"{day}: amount {amt:.0f} exceeds remaining {remaining:.0f}.")
-        # Each ticked line: this branch, this month, free to book — amount from the DB.
+        # Each ticked line: this branch, this month (or the lane's settlement window
+        # into next month: day 31's cash banked on the 1st), free to book — amount
+        # from the DB. The line's own month must be open, and a bank credit a signed-
+        # off previous month rests on can't be re-booked here.
+        win_end = _next_month_cutoff(body.period_month,
+                                     lane_lag_days(conn, body.category, body.bank))
+        lock_cache: dict = {}
         lines = []
         for tbl, eid in refs:
             dcol, acol = _EXT_COLS[tbl]
@@ -278,8 +307,14 @@ def manual_create(body: ManualMatch, request: Request):
                              f"FROM {tbl} WHERE id=?", (eid,)).fetchone()
             if not r:
                 raise HTTPException(404, f"ไม่พบรายการเอกสาร {tbl}#{eid}")
-            if r["branch_id"] != body.branch_id or str(r["d"] or "")[:7] != body.period_month:
+            d = str(r["d"] or "")[:10]
+            if r["branch_id"] != body.branch_id or not (
+                    d[:7] == body.period_month or (d[:7] > body.period_month and d < win_end)):
                 raise HTTPException(400, f"รายการเอกสาร #{eid} ไม่ใช่ของสาขา/เดือนนี้")
+            if tbl == "recon_bank_lines":
+                _assert_bank_line_open(conn, body.branch_id, eid, d, lock_cache)
+            elif d[:7] != body.period_month:
+                _assert_period_open(conn, body.branch_id, d[:7])
             if r["match_status"] == "manual":
                 raise HTTPException(409, f"รายการเอกสาร #{eid} ถูกจับคู่ด้วยมือไปแล้ว — ยกเลิกคู่เดิมก่อน")
             if r["match_status"] == "excluded":
@@ -328,6 +363,7 @@ def manual_delete(match_id: int, request: Request):
         if not m:
             raise HTTPException(404)
         _assert_period_open(conn, m["branch_id"], m["period_month"])
+        released = []
         for ln in conn.execute("SELECT ext_table, ext_id FROM recon_manual_match_line WHERE match_id=?",
                                (match_id,)).fetchall():
             tbl, eid = ln["ext_table"], ln["ext_id"]
@@ -336,8 +372,19 @@ def manual_delete(match_id: int, request: Request):
             if conn.execute("SELECT 1 FROM recon_manual_match_line WHERE ext_table=? AND ext_id=? "
                             "AND match_id<>?", (tbl, eid, match_id)).fetchone():
                 continue                         # another match still books this line
+            dcol = _EXT_COLS[tbl][0]
+            lr = conn.execute(f"SELECT {dcol} AS d FROM {tbl} WHERE id=?", (eid,)).fetchone()
+            d = str(lr["d"] or "")[:10] if lr else ""
+            if d[:7] and d[:7] != m["period_month"]:
+                _assert_period_open(conn, m["branch_id"], d[:7])   # a next-month line
             conn.execute(f"UPDATE {tbl} SET match_status=? WHERE id=? AND match_status='manual'",
                          (_status_before_manual(conn, tbl, eid), eid))
+            if tbl == "recon_bank_lines":
+                released.append((eid, d))
+        # Back in the matchers: a signed-off previous month must not start claiming
+        # it (its figures would move). Refused → nothing above is committed.
+        for eid, d in released:
+            _assert_bank_line_release_ok(conn, m["branch_id"], eid, d)
         conn.execute("DELETE FROM recon_manual_match_line WHERE match_id=?", (match_id,))
         conn.execute("DELETE FROM recon_manual_match WHERE match_id=?", (match_id,))
         # The row is gone after this — the audit row carries its scope and content.
@@ -529,6 +576,7 @@ class ChannelMove(BaseModel):
     amount:        float
     note:          str | None = None
     created_by:    str | None = None
+    day:           str | None = None    # the sale day the mis-entry was on (YYYY-MM-DD)
 
 
 @router.get("/api/channel-move")
@@ -558,6 +606,9 @@ def channel_move_create(body: ChannelMove, request: Request):
         raise HTTPException(400, "ช่องต้นทางและปลายทางต้องไม่ใช่ช่องเดียวกัน")
     if not (body.amount and body.amount > 0):
         raise HTTPException(400, "จำนวนเงินต้องมากกว่า 0")
+    day = (body.day or "").strip() or None
+    if day and not (_DAY_RE.match(day) and day.startswith(body.period_month)):
+        raise HTTPException(400, f"วันที่ต้องเป็นวันในเดือน {body.period_month} (YYYY-MM-DD)")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
         conn.execute("BEGIN IMMEDIATE")              # duplicate check + insert as one step
@@ -585,16 +636,17 @@ def channel_move_create(body: ChannelMove, request: Request):
             raise HTTPException(400, "ช่อง/ธนาคารปลายทางไม่ถูกต้อง")
         cur = conn.execute(
             "INSERT INTO recon_channel_move "
-            "(branch_id,period_month,from_category,from_bank,to_category,to_bank,amount,note,created_by) "
-            "VALUES (?,?,?,?,?,?,?,?,?)",
+            "(branch_id,period_month,from_category,from_bank,to_category,to_bank,amount,note,created_by,day) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?)",
             (body.branch_id, body.period_month, fc, fb, tc, tb,
-             round(body.amount, 2), body.note, actor))
+             round(body.amount, 2), body.note, actor, day))
         _audit(conn, "channel_move", cur.lastrowid, "create", actor,
                [{"field": "move", "old": f"{fc}·{fb}", "new": f"{tc}·{tb}"},
-                {"field": "amount", "old": None, "new": round(body.amount, 2)}])
+                {"field": "amount", "old": None, "new": round(body.amount, 2)}]
+               + ([{"field": "day", "old": None, "new": day}] if day else []))
         conn.commit()
         return {"id": cur.lastrowid, "from": [fc, fb], "to": [tc, tb],
-                "amount": round(body.amount, 2)}
+                "amount": round(body.amount, 2), "day": day}
 
 
 @router.delete("/api/channel-move/{move_id}", dependencies=[Depends(require_write_token)])

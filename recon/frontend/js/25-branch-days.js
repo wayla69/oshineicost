@@ -330,7 +330,7 @@ async function ignoreLine(id){
 async function applySugg(qi,btn){
   const q=((DATA&&DATA.setup_questions)||[])[qi], s=q&&q.suggestion; if(!s)return;
   await busy('map-'+qi,btn,async()=>{
-    try{await api(`/api/payment-map/${s.map_id}`,{method:'PATCH',body:{category:s.category,bank:s.bank}});
+    try{await lockedOk(`/api/payment-map/${s.map_id}`,{method:'PATCH',body:{category:s.category,bank:s.bank}});
         toast('บันทึกแล้ว');route();}catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
   });
 }
@@ -343,8 +343,8 @@ async function applyMapper(qi,btn){
       // มีแถวใน map แล้ว (เช่น bank=UNKNOWN) → PATCH; ยังไม่มีเลย → POST สร้างใหม่
       const all=await api('/api/payment-map');
       const hit=all.find(m=>m.payment_code_norm===code);
-      if(hit) await api(`/api/payment-map/${hit.id}`,{method:'PATCH',body:{category:cat,bank:bank}});
-      else    await api('/api/payment-map',{method:'POST',body:{payment_code_norm:code,category:cat,bank:bank,reconcile:1}});
+      if(hit) await lockedOk(`/api/payment-map/${hit.id}`,{method:'PATCH',body:{category:cat,bank:bank}});
+      else    await lockedOk('/api/payment-map',{method:'POST',body:{payment_code_norm:code,category:cat,bank:bank,reconcile:1}});
       toast(`ตั้งค่า ${code} → ${cat}·${bank} แล้ว`);route();
     }catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
   });

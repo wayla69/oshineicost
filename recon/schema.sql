@@ -455,7 +455,8 @@ CREATE TABLE IF NOT EXISTS recon_channel_move (
     amount        REAL    NOT NULL,
     note          TEXT,
     created_by    TEXT,
-    created_at    TEXT    DEFAULT (datetime('now'))
+    created_at    TEXT    DEFAULT (datetime('now')),
+    day           TEXT                -- sale day of the mis-entry; NULL = legacy (lands on the lane's last POS day)
 );
 CREATE INDEX IF NOT EXISTS idx_rcm_scope ON recon_channel_move(branch_id, period_month);
 
