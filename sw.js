@@ -21,6 +21,9 @@
 'use strict';
 
 const BUILD = '__BUILD__';
+// the prebuilt Tailwind sheet with its ?v=<content hash> (backend/main.py fills it in): precached on install, so a new
+// build's first offline open still has its styles (it replaced the in-browser runtime vendor/tailwind.js, 2026-10-26)
+const TW_CSS = '__TW_CSS__';
 const SHELL = 'oshinei-shell-' + BUILD;
 const API = 'oshinei-api-v1';
 const API_MAX = 80;
@@ -35,7 +38,7 @@ const API_OK = [
 const SHELL_PREFIX = /^\/(js\/|vendor\/|docs\/ui-kit\/|pwa\/|tabs\.html)/;
 
 self.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/', '/pwa/manifest.json']).catch(() => {})).then(() => self.skipWaiting()));
+  e.waitUntil(caches.open(SHELL).then((c) => c.addAll(['/', '/pwa/manifest.json', TW_CSS]).catch(() => {})).then(() => self.skipWaiting()));
 });
 
 self.addEventListener('activate', (e) => {

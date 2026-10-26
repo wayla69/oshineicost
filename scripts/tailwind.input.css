@@ -1,0 +1,4 @@
+/* Input of `npm run build:css` (tests/e2e/package.json) -> vendor/tailwind.build.css. See tailwind.config.js. */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
