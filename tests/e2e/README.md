@@ -34,3 +34,10 @@ when the `E2E_BASE_URL` repo variable is set.
 
 The backend Python tests (`backend/`) and the recon suite (`recon/tests/`)
 also run automatically on every push/PR.
+
+## Tailwind CSS (prebuilt)
+This package also pins the Tailwind CLI (`tailwindcss` 3.4.17, the version the old in-browser runtime
+`vendor/tailwind.js` was). The app links the prebuilt `vendor/tailwind.build.css`; after adding a Tailwind
+class to `index.html`, `tabs/` or `js/`, run `npm run build:css` here and commit the sheet. CI runs
+`npm run check:css` in the e2e job and fails when the committed sheet is out of date. Config:
+`tailwind.config.js` (repo root); build: `scripts/build-tailwind.js`.
