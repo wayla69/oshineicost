@@ -30,7 +30,6 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from feedback_host import branch_rows, get_db, require_write_token, scope_branch
-import auth as _auth
 from routers.feedback import _ensure as _ensure_feedback, _thai_today, insert_reviews
 
 router = APIRouter()
@@ -91,9 +90,14 @@ def _rate_ok(key: str, limit: int) -> bool:
 
 
 def _client_ip(request: Request) -> str:
-    # Fly-Client-IP (set by Fly's proxy), else the socket peer - never the first
-    # X-Forwarded-For hop, which the guest's own browser/script can write to dodge RATE_PER_IP
-    return _auth.client_ip(request)
+    # Fly-Client-IP (set by Fly's proxy, which replaces any value a client sends), else the
+    # socket peer - never the first X-Forwarded-For hop, which the guest's own browser/script
+    # can write to dodge RATE_PER_IP. Same rule as auth.client_ip (the module does not import
+    # the host directly - feedback_host.py is its only seam, test_feedback_kit.py).
+    fly = (request.headers.get("fly-client-ip") or "").strip()
+    if fly:
+        return fly
+    return request.client.host if request.client else "?"
 
 
 _URL_BAD_CHARS = set("\"'<>\\`")
