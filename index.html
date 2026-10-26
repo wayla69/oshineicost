@@ -2424,15 +2424,23 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the top bar of a page: the title on one line, the "ข้อมูลถึง" chip short, then the mode toggle, the tools, the search and the avatar */
   body.ph-on #phModeBtn, body.ph-on #phTbSearch, body.ph-on #phTbAv { display: inline-flex; }
   body.ph-on .top-bar { gap: 6px; padding: 6px 8px; align-items: center; }
-  body.ph-on .top-bar .topbar-scope { flex: 1 1 0%; min-width: 0; gap: 6px; row-gap: 10px; }   /* 10 px between the chip rows: each chip keeps its own 44 px tap area (owner 2026-10-25) */
-  body.ph-on .topbar-scope .page-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
+  /* owner 2026-10-26 ("ท… ▾" at 360 px): TWO rows - the title beside the tools, then "⚠ ถึง 24 ต.ค." with the two chips the full width of the bar.
+     The scope zone's box goes (display: contents) so its children line up in the top bar itself: the title first, the tools, a line break
+     (::after), then the note, the chips and (unfolded) the rest. The chips stay one no-wrap row (#472); 5 + 5 px around the break keep the
+     tools (44 px) and the chips' 44 px tap areas apart. Before, the chips shared the scope column left of the tools: 144 px at 360. */
+  body.ph-on .top-bar, body.ph-on.tb-folded .top-bar { flex-wrap: wrap; justify-content: flex-start; row-gap: 5px; }
+  body.ph-on .top-bar > * { order: 1; }
+  body.ph-on .top-bar::after { content: ''; order: 2; flex: 0 0 100%; height: 0; }
+  body.ph-on .top-bar .topbar-scope { display: contents; }
+  body.ph-on .topbar-scope > * { order: 3; }
+  body.ph-on .topbar-scope > .page-title { order: 0; flex: 1 1 0%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
+  body.ph-on .topbar-actions { order: 4; }
   body.ph-on #dataCoverageNote { font-size: 12px !important; padding: 2px 8px !important; }
   body.ph-on #dataCoverageNote .dcn-x { display: none; }
   body.ph-on .top-bar .tb-fold { align-self: center; margin-left: 0; min-width: 44px; min-height: 44px; padding: 0 8px !important; }
   body.ph-on #tbFoldBtn > span:not(#tbFoldChev) { display: none; }
-  body.ph-on.tb-folded .top-bar { flex-wrap: nowrap; }
   /* a page with its own filters (switchTab hides the whole scope zone, the title with it): on the phone the title and the chip stay */
-  body.ph-on .top-bar .topbar-scope:is(.hidden, .invisible) { display: flex !important; visibility: visible; }
+  body.ph-on .top-bar .topbar-scope:is(.hidden, .invisible) { display: contents !important; visibility: visible; }
   body.ph-on .top-bar .topbar-scope:is(.hidden, .invisible) > :not(.page-title):not(#dataCoverageNote) { display: none !important; }
   /* fit: the frame. Its width and zoom are set by phFitLayout; the area around it gives up its side padding and never scrolls sideways */
   body.ph-on.ph-fit .content-area { padding-left: 4px; padding-right: 4px; overflow-x: hidden; }
