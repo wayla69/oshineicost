@@ -85,8 +85,10 @@ function _hvmCompactOn() { return _hvmPhone() && !_hvm.full; }
 function hvmFull(on) {
   _hvm.full = !!on; _hvm.more = !!on;
   if (_hvmView() === 'plates') hvpRender(); else hvmRender();
-  const el = document.getElementById(on ? 'hvmBody' : 'hvmCompact');
-  if (el) try { el.scrollIntoView({ block: 'start' }); } catch (e) { /* off screen */ }
+  // scrolled to once the frame has fitted the new rows (its re-fit runs 250 ms after a change): scrolling now would lay the whole table
+  // out once more at the old width (172 ms of 4x CPU)
+  setTimeout(() => { const el = document.getElementById(on ? 'hvmBody' : 'hvmCompact');
+    if (el) try { el.scrollIntoView({ block: 'start' }); } catch (e) { /* off screen */ } }, document.body.classList.contains('ph-fit') ? 400 : 0);
 }
 const _hvmBackBtn = () => _hvmPhone() && _hvm.full ? '<button type="button" class="hvm-more hvc-back ph-tz-unit" onclick="hvmFull(false)">ย่อรายการ</button>' : '';
 function _hvcRow(r) {
@@ -96,7 +98,7 @@ function _hvcRow(r) {
 }
 // head = [the row's name, the figure]; chain = the top row (or null); items = the rest ({v} = the sort figure); split = the 5 up + 5 down
 function _hvcHtml(head, chain, items, split, n) {
-  let h = `<div id="hvmCompact" class="hvc ph-tz-unit" role="list"><div class="hvc-h" aria-hidden="true"><span>${head[0]}</span><span>${head[1]}</span><span>สาเหตุหลัก</span></div>`;
+  let h = `<div id="hvmCompact" class="hvc ph-tz-unit" role="list"><div class="hvc-h" aria-hidden="true"><span>${head[0]}</span><span>${head[1]}</span><span>สาเหตุ</span></div>`;
   if (chain) h += _hvcRow(chain);
   if (split) {
     const up = items.filter(x => x.v > 0).sort((a, b) => b.v - a.v).slice(0, HVC_SIDE), dn = items.filter(x => x.v < 0).sort((a, b) => a.v - b.v).slice(0, HVC_SIDE);

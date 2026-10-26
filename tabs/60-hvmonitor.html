@@ -90,7 +90,7 @@
     /* owner 2026-10-26 · a phone: the compact list (hvmCompactHtml / hvpCompactHtml) - one line per row, 44 px to tap: สาขา · the figure · the cause */
     .hvc { display: flex; flex-direction: column; border: 1px solid var(--border); border-radius: var(--r-md); overflow: hidden; background: var(--bg-card); }
     .hvc-h, .hvc-r { display: grid; grid-template-columns: minmax(0, 1fr) auto 3.6em 12px; align-items: center; column-gap: 10px; padding: 0 10px 0 12px; }
-    .hvc-h { min-height: 28px; font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--bg-subtle); }
+    .hvc-h { min-height: 28px; white-space: nowrap; font-size: 12px; font-weight: 600; color: var(--text-secondary); background: var(--bg-subtle); }
     .hvc-h > span:nth-child(2), .hvc-h > span:nth-child(3) { text-align: right; }
     .hvc-r { position: relative; box-sizing: border-box; width: 100%; min-height: 44px; border: 0; border-top: 1px solid var(--border); background: transparent; font: inherit; color: var(--text-primary); text-align: left; cursor: pointer; }
     .hvc-r:hover { background: var(--bg-hover); }
