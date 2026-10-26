@@ -40,9 +40,27 @@ async function login(page) {
   }
 }
 
+// the page has settled: no request in flight, the พอดีจอ frame has followed the last thing the page drew (data-ph-fit="ok", set by
+// js/09c-mobile.js after each fit) and nothing on the page has changed for `quiet` ms. A late redraw (a second load, a re-fit of the frame
+// that moves the rows) lands before the next step reads the page, not in the middle of it - no fixed sleep.
+const INFLIGHT = new WeakMap();
+async function settle(page, quiet = 400) {
+  await page.evaluate(() => { const w = /** @type {any} */ (window); if (w.__e2eMut) return; w.__e2eMut = performance.now();
+    new MutationObserver(() => { w.__e2eMut = performance.now(); }).observe(document.body, { childList: true, subtree: true, characterData: true, attributes: true }); });
+  const inflight = INFLIGHT.get(page) || new Set();
+  await expect.poll(async () => inflight.size === 0 && await page.evaluate((q) => { const f = /** @type {HTMLElement|null} */ (document.querySelector('.ph-frame'));
+    return (!f || f.dataset.phFit === 'ok') && performance.now() - /** @type {any} */ (window).__e2eMut >= q; }, quiet),
+  { message: 'the page settles (no request in flight, the frame fitted, no change for ' + quiet + ' ms)', timeout: 30_000, intervals: [100] }).toBe(true);
+}
+
 async function phoneShell(browser) {
   const ctx = await browser.newContext(PHONE);
   const page = await ctx.newPage();
+  const inflight = new Set();
+  INFLIGHT.set(page, inflight);
+  page.on('request', r => inflight.add(r));
+  page.on('requestfinished', r => inflight.delete(r));
+  page.on('requestfailed', r => inflight.delete(r));
   const errors = [];
   page.on('console', m => { if (m.type() === 'error' && !IGNORE.some(re => re.test(m.text()))) errors.push(m.text()); });
   page.on('pageerror', e => errors.push('pageerror: ' + e.message));
@@ -58,7 +76,7 @@ async function openPage(page, p) {
   await page.waitForFunction(() => document.body.classList.contains('ph-fit') && !!document.querySelector('.ph-frame'), null, { timeout: 60_000 });
   // the page's rows (or its empty state) have drawn and the frame has followed them
   await page.waitForFunction(() => { const f = document.querySelector('.ph-frame'); return f && !/กำลังโหลด/.test(f.innerText) && f.innerText.replace(/\s/g, '').length > 30; }, null, { timeout: 60_000 });
-  await page.waitForTimeout(1200);
+  await settle(page);
 }
 
 for (const p of PAGES) {
@@ -97,12 +115,13 @@ for (const p of PAGES) {
     await expect(page.locator('#msSheet')).not.toHaveClass(/open/);
 
     // a double tap: that table at 100 % (text >= 12 px drawn, as wide as the screen), no sheet; again: back
-    await expect(cell).toBeVisible();                                  // a page that redraws its rows (a second load) has settled again
+    await settle(page);                                                // a page that redraws its rows (a second load) has settled again
+    await expect(cell).toBeVisible();
     await cell.scrollIntoViewIfNeeded();
     const box = await cell.boundingBox();
     await page.mouse.dblclick(box.x + box.width / 2, box.y + box.height / 2);
     await expect(page.locator('.ph-z100')).toHaveCount(1);
-    await page.waitForTimeout(400);
+    await settle(page);
     const z = await page.evaluate(DRAWN, '.ph-z100');
     expect(z.min, `smallest text of ${name} at 100 %`).toBeGreaterThanOrEqual(12);
     const zr = await page.evaluate(() => { const r = document.querySelector('.ph-z100').getBoundingClientRect(); return { left: r.left, right: r.right, vw: innerWidth, doc: document.documentElement.scrollWidth }; });
@@ -118,7 +137,7 @@ for (const p of PAGES) {
     // แตะง่าย is one tap away, remembered for this page; the touch layout keeps its 12 px floor
     await page.click('#phModeBtn');
     await page.waitForFunction(() => !document.body.classList.contains('ph-fit'));
-    await page.waitForTimeout(1500);
+    await settle(page);
     expect(await page.textContent('#phModeL')).toBe('แตะง่าย');
     const touch = await page.evaluate(DRAWN, '#tab-' + p.tab);
     expect(touch.min).toBeGreaterThanOrEqual(12);
