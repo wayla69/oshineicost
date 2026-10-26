@@ -2477,11 +2477,15 @@ function _wideApply(t) {
   if (!head || head.cells.length < 8) return;
   const n = head.cells.length, body = t.tBodies[0] ? [...t.tBodies[0].rows] : [];
   const sig = n + ':' + body.length + ':' + (body[0] ? body[0].cells.length : 0) + ':' + _wideIsOpen(t.id);
-  const fresh = !!(body[0] && body[0].cells[0] && !body[0].cells[0].classList.contains('tbl-stick'));   // rows rebuilt (a sort, a reload)
+  const cfg = _WIDE_TABLES[t.id] || {};
+  // rows rebuilt (a sort, a reload): the first pinned column of the first row has lost its mark. That column is the table's own
+  // (cfg.stick) - วิเคราะห์เมนู pins column 3, so reading column 0 found it unmarked on every pass and the fold bar was rewritten every
+  // 250 ms for as long as the page was open (each rewrite woke this observer again and kept the phone frame from ever settling)
+  const sc = (cfg.stick || [0])[0], c0 = body[0] && body[0].cells[sc];
+  const fresh = !!(c0 && body[0].cells.length === n && !c0.classList.contains('tbl-stick'));
   if (t.dataset.wideSig === sig && !fresh) return;       // nothing changed since the last pass
   t.dataset.wideSig = sig;
   t.classList.add('tbl-wide');
-  const cfg = _WIDE_TABLES[t.id] || {};
   const regular = body.every(r => r.cells.length === n || r.cells.length === 1);   // 1 = an empty / loading row
   const rows = [...(t.tHead ? t.tHead.rows : [])].filter(r => r.cells.length === n).concat(body.filter(r => r.cells.length === n));
   // the name column: the first, or the second when the first is only a rank number
