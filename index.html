@@ -2670,6 +2670,11 @@ body.ph-on .gp-chips .gp-branch-chip:not([hidden]) { flex: 0 1 auto; min-width: 
 .phb-item[aria-checked="true"] { font-weight: 700; color: var(--accent); }
 .phb-item[aria-checked="true"]::after { content: '✓'; font-size: 16px; }
 .phb-empty { padding: 12px; font-size: 14px; color: var(--text-secondary); }
+/* owner 2026-10-26 "Hide closed branches": the closed branches fold, last in the sheet (a 44 px tap target to open it) */
+.phb-closed > summary.phb-gh { display: flex; align-items: center; min-height: 44px; margin: 8px 0 0; cursor: pointer; list-style: none; }
+.phb-closed > summary.phb-gh::-webkit-details-marker { display: none; }
+.phb-closed > summary.phb-gh::after { content: '▾'; margin-left: 6px; }
+.phb-closed[open] > summary.phb-gh::after { content: '▴'; }
 /* the sheet: the top bar's #gPeriod moved in while open, laid out as stacked rows (kinds, the stepper, จาก–ถึง) */
 .php-back { position: fixed; inset: 0; z-index: 70; display: flex; align-items: flex-end; justify-content: center; background: rgba(15, 23, 42, .45); }
 .php-back[hidden] { display: none; }

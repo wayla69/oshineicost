@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 import periods as P
 from core import get_db, ttl_cache
-from rules import VAT_DIVISOR, net_revenue_sum, scope_filter
+from rules import VAT_DIVISOR, closed_branches, drop_closed, net_revenue_sum, scope_filter
 
 router = APIRouter()
 
@@ -67,6 +67,20 @@ def _sales(con, where, params, s, e, by_branch=False):
     return one(r) if r and r["bills"] else None
 
 
+def _closed(con, w, branch, base=None):
+    """owner 2026-10-26 "Hide closed branches": the branches a by-branch table of window `w` leaves out (rules.closed_branches:
+    marked closed, or no sale in the period on screen nor in its bases); `base` = an explicit comparison window."""
+    wins = [w["cur"], w["prev"] if w.get("has_prev") else None, w["ly"] if w.get("has_ly") else None]
+    return closed_branches(con, wins + ([base] if base else []), keep=branch)
+
+
+def _drop_closed_rows(out, con, w, branch, base=None):
+    """An answer {.., "branches": [rows]} without the closed branches' rows (the chain figures keep their sales)."""
+    if isinstance(out, dict) and out.get("branches"):
+        out["branches"] = drop_closed(out["branches"], _closed(con, w, branch, base))
+    return out
+
+
 @router.get("/api/period/sales")
 @ttl_cache
 def period_sales(kind: str = Query("month"), pick: Optional[str] = Query(None),
@@ -95,6 +109,7 @@ def period_sales(kind: str = Query("month"), pick: Optional[str] = Query(None),
                 branches.append({"branch": nm, "cur": c, "prev": p, "ly": y,
                                  "rev_prev_pct": P.pct(c["revenue"], p["revenue"]) if p else None,
                                  "rev_ly_pct": P.pct(c["revenue"], y["revenue"]) if y else None})
+            branches = drop_closed(branches, _closed(con, w, branch))
     pct = {}
     if cur:
         for k in ("revenue", "customers", "bills", "rev_per_head", "avg_ticket"):
@@ -297,7 +312,7 @@ def period_cost(kind: str = Query("month"), pick: Optional[str] = Query(None),
         w = _win(con, kind, pick, date_from, date_to, where, params)
         if not w:
             return {"period": None, "cur": None, "prev": None, "ly": None, "branches": [], "reasons": {}}
-        return PC.compare(con, w, branch, group, by_branch=bool(by_branch))
+        return _drop_closed_rows(PC.compare(con, w, branch, group, by_branch=bool(by_branch)), con, w, branch)
 
 
 # ── High Value Product Monitor (owner 2026-10-25): key-ingredient cost per head by branch ─────────────────────────
@@ -319,7 +334,7 @@ def ingredient_groups_cost(kind: str = Query("month"), pick: Optional[str] = Que
         if not w:
             return {"period": None, "groups": [{"slug": s, "label": IG.LABELS[s]} for s in IG.SLUGS],
                     "chain": None, "branches": [], "reasons": {}}
-        return IG.compute(con, w, branch, group)
+        return _drop_closed_rows(IG.compute(con, w, branch, group), con, w, branch)
 
 
 _SPIKE_KIND = {"day": "day", "week": "week", "mtd": "month", "month": "month", "range": "range"}
@@ -361,7 +376,8 @@ def ingredient_groups_plates(period: str = Query("day"), date: Optional[str] = Q
         if base_from or base_to:
             bs, be = _plates_base(base_from, base_to, w["cur"], w["anchor"])
             base = (bs.isoformat(), be.isoformat())
-        out = IG.compute_plates(con, w, branch, group, base=base)
+        out = _drop_closed_rows(IG.compute_plates(con, w, branch, group, base=base), con, dict(w, has_ly=False), branch,
+                                base=base or (w["prev"] if w.get("has_prev") else None))
         # the section's own week picker (W vs W): the Mon–Sun weeks the day-level data holds, up to the last closed day
         out["weeks"] = P.iso_weeks(_day_floor(con), w["anchor"])
         out["latest_day"] = w["anchor"]

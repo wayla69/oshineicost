@@ -440,17 +440,11 @@ async function initDataCoverageNote() {
 async function loadBranches() {
   if (isPinnedSession()) return;       // a pinned login never reads the branch list (its filter is a hidden field)
   try {
-    const data = await api(`${API}/api/branches`);
+    const data = await api(`${API}/api/branches?include_inactive=true`);
     const sel = document.getElementById('selBranch');
     const prev = sel.value;
-    // Keep only the "All Branches" placeholder, rebuild the rest
-    while (sel.options.length > 1) sel.remove(1);
-    data.forEach(b => {
-      const opt = document.createElement('option');
-      opt.value = b.name; opt.textContent = b.name;
-      opt.dataset.type = b.branch_type || '';        // สาขาหลัก / แฟรนไชส์: the phone's branch sheet groups by it
-      sel.appendChild(opt);
-    });
+    // Keep only the "All Branches" placeholder, rebuild the rest: the open branches, then the closed ones behind "สาขาที่ปิดแล้ว"
+    branchSelectFill(sel, data);
     // Restore previous selection if still valid; otherwise show all branches
     if (prev && data.some(b => b.name === prev)) sel.value = prev;
     else sel.value = '';
@@ -1038,7 +1032,7 @@ async function loadGroupBreakdown() {
   if (!el) return;
   try {
     const [branches, summaryMaster, summaryFranchise] = await Promise.all([
-      api(`${API}/api/branches?include_inactive=true`),
+      api(`${API}/api/branches`),            // the open branches (closed ones: rules.picker_closed_branches, owner 2026-10-26)
       api(`${API}/api/summary?${new URLSearchParams({
         group: 'master',
         ...(getMonthFrom() ? {month_from: getMonthFrom()} : {}),

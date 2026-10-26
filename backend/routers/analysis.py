@@ -11,7 +11,7 @@ registered by main.py right after this one). URLs unchanged.
 from fastapi import HTTPException, Query, Request, Response
 import datetime as _sph_dt
 from typing import Dict, List, Optional
-from rules import avg_ticket_sql, food_cost_status_th, food_cost_target, month_projection, net_revenue_row, net_revenue_sum
+from rules import avg_ticket_sql, closed_branches, drop_closed, food_cost_status_th, month_window, food_cost_target, month_projection, net_revenue_row, net_revenue_sum
 from targets import attainment
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price)
@@ -638,6 +638,10 @@ def analysis_branches(
             """,
             params_tx,
         ).fetchall()
+        # owner 2026-10-26: a closed branch is not a benchmark row (rules.closed_branches over the window on screen); the page
+        # asks this endpoint for the period and for each of its bases, so a branch that traded in a base still has its base row
+        closed = closed_branches(con, [(date_from, date_to) if (date_from and date_to) else month_window(month, month_from, month_to)])
+        easy_rows = drop_closed(easy_rows, closed)
 
     merged: dict = {}
     for r in easy_rows:
@@ -1346,6 +1350,10 @@ def analysis_health(
             """,
             params_tx,
         ).fetchall()
+        # owner 2026-10-26: the score is the latest month's standing against the month before - a branch closed in both
+        # (or marked closed) is not scored (rules.closed_branches); its old last month read as "the latest" (โคราช2 15 %)
+        _sm = max((r["month"] for r in easy_rows), default=None)
+        closed = closed_branches(con, [(_P.shift("month", _sm + "-01", -1)[:7], _sm)] if _sm else [])
 
     branch_month_h: dict = {}
     for r in easy_rows:
@@ -1411,7 +1419,7 @@ def analysis_health(
             "growth_pct":        round(growth_pct, 1),
         })
     out.sort(key=lambda x: -x["score"])
-    return out
+    return drop_closed(out, closed)
 
 
 # ===========================================================================
@@ -1709,6 +1717,11 @@ def analysis_forecast_branches(group: Optional[str] = Query(None)):
                     ON st.branch_id = b.branch_id AND st.source = 'Easy'
                 {allbr_where} GROUP BY b.name""", params,
         ).fetchall()
+        # owner 2026-10-26: a closed branch (rules.closed_branches over the month and the month before) is neither a forecast
+        # row nor a "ไม่มียอด" warning - it has closed, not gone missing
+        closed = closed_branches(con, [period, prior], keep=params.get("branch"))
+        allbr = [r for r in allbr if r["branch"] not in closed]
+        cur = [r for r in cur if r["branch"] not in closed]
 
     active_names = {r["branch"] for r in cur}
     inactive = [{"branch": r["branch"], "last_sale": r["last_sale"]}

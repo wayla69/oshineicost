@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import VAT_DIVISOR, discount_base_row, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, closed_branches, discount_base_row, drop_closed, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, month_projection, tier_codes_between, tier_label
 from targets import attainment, target_revenue_total, targets_for_month
 from core import (
@@ -1933,6 +1933,9 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
             "vs_target_pct": round(rev / t["revenue_target"] * 100, 1) if has_t else None,
         })
     branches.sort(key=lambda x: -x["revenue"])
+    # owner 2026-10-26: a branch marked closed is not a league row (rules.closed_branches); share_pct stays of the chain total
+    branches = drop_closed(branches, closed_branches(con, [(cs, ce), (ps, pe) if has_prev else None, (ys, ye) if has_yoy else None],
+                                                     keep=branch))
     prev_rank_map = {nm: i + 1 for i, (nm, _) in
                      enumerate(sorted(prev_b.items(), key=lambda kv: -(kv[1]["rev"] or 0)))}
     for i, b in enumerate(branches):

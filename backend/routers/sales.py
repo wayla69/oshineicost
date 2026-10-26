@@ -6,7 +6,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 # `globals().update(getattr(main, …))` bootstrap is gone (Phase 2, 2026-09).
 from fastapi import Query, Request
 from typing import Optional
-from rules import VAT_DIVISOR, closed_day_clause, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, closed_branches, closed_day_clause, drop_closed, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
@@ -1139,6 +1139,8 @@ def sales_daily(
                 "ly_rev_per_head": round(y["rev"] / y["cust"], 1) if y and y["cust"] else None,
             })
         out.sort(key=lambda r: -r["revenue"])
+        # owner 2026-10-26: a closed branch (flagged, or no sale here nor in either base) is not a row; the totals below keep its sales
+        out = drop_closed(out, closed_branches(con, [w["cur"], w["prev"] if w["has_prev"] else None, w["ly"] if w["has_ly"] else None], keep=branch))
 
         def tot(d): return (sum(x["rev"] for x in d.values()), sum(x["cust"] for x in d.values()),
                             sum(x["bills"] for x in d.values()))

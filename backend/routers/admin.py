@@ -9,7 +9,7 @@ from core import get_db
 from core import invalidate_cache
 from core import require_write_token
 from targets import targets_for_month
-from rules import FOOD_COST_TARGET_MAX, FOOD_COST_TARGET_MIN, valid_food_cost_target
+from rules import FOOD_COST_TARGET_MAX, FOOD_COST_TARGET_MIN, closed_branches, drop_closed, picker_closed_branches, valid_food_cost_target
 
 # the @ttl_cache endpoints whose answer carries or uses rules.food_cost_target (besides home_brief / report_management)
 FOOD_COST_TARGET_CACHED = ("gp_by_branch_month", "buffet_performance", "food_cost_trend", "cost_recalibration",
@@ -34,18 +34,24 @@ def list_branches(
     group: Optional[str] = Query(None, description="'master' | 'franchise' | None"),
     include_inactive: bool = Query(False),
 ):
-    """All branch names (excluding the synthetic ALL branch). Optionally filter by branch_type."""
+    """All branch names (excluding the synthetic ALL branch). Optionally filter by branch_type.
+    The default list is a branch PICKER's: the closed branches are left out (rules.picker_closed_branches -
+    marked closed, or no bill in the last 90 days of the data). include_inactive=true lists every branch, each
+    with `closed`, so a picker can put the closed ones behind its "สาขาที่ปิดแล้ว" fold and settings can edit them."""
     sql = "SELECT branch_id, name, COALESCE(branch_type,'master') AS branch_type, COALESCE(active,1) AS active FROM branches WHERE name != 'ALL'"
     params: list = []
-    if not include_inactive:
-        sql += " AND COALESCE(active,1) = 1"
     if group:
         sql += " AND COALESCE(branch_type,'master') = ?"
         params.append(group)
     sql += " ORDER BY name"
     with get_db() as con:
         rows = con.execute(sql, params).fetchall()
-    return [{"id": r["branch_id"], "name": r["name"], "branch_type": r["branch_type"], "active": bool(r["active"])} for r in rows]
+        closed = picker_closed_branches(con)
+    if not include_inactive:
+        return [{"id": r["branch_id"], "name": r["name"], "branch_type": r["branch_type"], "active": bool(r["active"])}
+                for r in rows if r["name"] not in closed]
+    return [{"id": r["branch_id"], "name": r["name"], "branch_type": r["branch_type"], "active": bool(r["active"]),
+             "closed": r["name"] in closed} for r in rows]
 
 
 class BranchTypeUpdate(BaseModel):
@@ -257,7 +263,10 @@ def get_targets(month: Optional[str] = Query(None)):
             month = (row["m"] if row else None) or ""
         if not month:
             return []
-        return targets_for_month(con, month)
+        # owner 2026-10-26: a branch marked closed has no target row (its auto target was last year's sales of a shop that
+        # no longer trades). Only the flag here (no sales window): a target is typed ahead for a month nobody has sold in yet,
+        # and a new branch must be able to get one before its first bill.
+        return drop_closed(targets_for_month(con, month), closed_branches(con))
 
 
 @router.get("/api/targets/suggest")

@@ -563,16 +563,20 @@ function _phbEnsure() {
   document.body.appendChild(sh);
   return sh;
 }
-// the list: ทุกสาขา first, then the branches (by group when the list holds both), filtered by the search text
+// the list: ทุกสาขา first, then the open branches (by group when the list holds both), filtered by the search text; the closed
+// branches (owner 2026-10-26 "Hide closed branches": #selBranch's "สาขาที่ปิดแล้ว" options, data-closed) sit last in a fold of their
+// own, open when one of them is the branch on screen or the search finds one, so a closed branch's history stays reachable
 function _phbDraw() {
   const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById('selBranch')), list = document.getElementById('phbList');
   if (!sel || sel.tagName !== 'SELECT' || !list) return;
   const inp = /** @type {HTMLInputElement|null} */ (document.getElementById('phbSearch'));
   const norm = s => (typeof pgNorm === 'function' ? pgNorm(s) : String(s || '').toLowerCase().replace(/\s+/g, ''));
   const q = norm(inp ? inp.value : ''), cur = sel.value;
-  const opts = [...sel.options], all = opts.find(o => !o.value), rows = opts.filter(o => o.value && (!q || norm(o.value).includes(q)));
+  const opts = [...sel.options], all = opts.find(o => !o.value);
+  const hits = opts.filter(o => o.value && (!q || norm(o.value).includes(q)));
+  const rows = hits.filter(o => !o.dataset.closed), shut = hits.filter(o => o.dataset.closed);
   const item = (v, label) => `<button type="button" class="phb-item" role="radio" aria-checked="${v === cur}" data-v="${esc(v)}">${esc(label)}</button>`;
-  const types = new Set(opts.filter(o => o.value).map(o => o.dataset.type || 'master'));
+  const types = new Set(opts.filter(o => o.value && !o.dataset.closed).map(o => o.dataset.type || 'master'));
   let html = !q && all ? item('', all.textContent || 'ทุกสาขา') : '';
   if (types.size > 1) {
     [['master', 'สาขาหลัก'], ['franchise', 'แฟรนไชส์']].forEach(([t, h]) => {
@@ -580,6 +584,11 @@ function _phbDraw() {
       if (g.length) html += `<p class="phb-gh">${h}</p>` + g.map(o => item(o.value, o.textContent || o.value)).join('');
     });
   } else html += rows.map(o => item(o.value, o.textContent || o.value)).join('');
+  if (shut.length) {
+    const open = !!q || shut.some(o => o.value === cur);
+    html += `<details class="phb-closed"${open ? ' open' : ''}><summary class="phb-gh">สาขาที่ปิดแล้ว (${shut.length})</summary>`
+      + shut.map(o => item(o.value, o.textContent || o.value)).join('') + '</details>';
+  }
   list.innerHTML = html || '<p class="phb-empty">ไม่พบสาขาที่ค้นหา</p>';
 }
 function phBranchOpen() {
