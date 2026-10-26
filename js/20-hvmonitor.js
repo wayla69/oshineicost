@@ -151,7 +151,7 @@ function _hvmVs() {
 }
 const _hvmDelta = v => periodPctDelta(v, { upGood: false, title: _hvmVs() });
 // owner 2026-10-25 · the base value after the change ("▲3.2% · เดิม ฿15.0"): the same days of the period before
-const _hvmWas = (v, f) => v == null || !isFinite(Number(v)) ? '' : `<span class="hvm-b"> · เดิม ${f(v)}</span>`;
+const _hvmWas = (v, f) => v == null || !isFinite(Number(v)) ? '' : `<span class="hvm-b"><span class="hvm-bs"> · </span>เดิม ${f(v)}</span>`;
 
 // ── the head: the title and its help follow the view; the view toggle (cost roles); the 9 chips + CSV ──
 function hvmRenderHead() {
@@ -610,7 +610,7 @@ const _hvpS = v => v == null || !isFinite(Number(v)) ? '—' : `${v > 0 ? '+' : 
 // up = 'good' (customers) | 'bad' (plates per head of a costly ingredient) | '' (plates: neither). Two parts = two children (the phone card's figure / sub).
 function _hvpDelta(v, up, title, was, word) {
   const t = title ? ` title="${esc(title)}"` : '';
-  const b = was == null ? '' : `<span class="hvm-b"> · ${word || 'เดิม'} ${was}</span>`;
+  const b = was == null ? '' : `<span class="hvm-b"><span class="hvm-bs"> · </span>${word || 'เดิม'} ${was}</span>`;
   if (v == null || !isFinite(Number(v))) return `<div class="hvm-d" data-ph-line=""${t}><span style="color:var(--text-muted)">—</span>${b}</div>`;
   v = Number(v);
   const ink = v === 0 || !up ? 'var(--text-secondary)' : (v > 0) === (up === 'good') ? 'var(--good-ink)' : 'var(--bad-ink)';
