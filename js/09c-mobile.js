@@ -75,6 +75,7 @@ async function phBoot() {
   if (_phKind() === 'franchise') { await phOpenFranchise(); return; }
   phShowHome();
 }
+function phRetryBoot() { const b = document.getElementById('phRetry'); if (b) b.disabled = true; phBoot(); }
 // PR-F1: the franchise owner's หน้าแรก IS ร้านของฉัน - the login opens on the page itself (no launcher of one tile); the bottom
 // navigation keeps หน้าแรก (this page) and ฉัน
 function phOpenFranchise() { _phDept = ''; return phOpenPage(() => switchTab('franchise')); }
@@ -215,6 +216,13 @@ function phRenderHome() {
   const host = document.getElementById('phv-home'); if (!host) return;
   const kind = _phKind();
   if (kind === 'franchise') { phOpenFranchise(); return; }            // PR-F1: no launcher of one tile
+  if (typeof deptVisible !== 'function') {
+    // audit 2026-10: js/18-launcher.js did not load (a dropped connection) - the home views need its deptVisible / lnchDateLabel, so
+    // a retry button instead of a ReferenceError and a blank screen
+    host.innerHTML = `<div class="ph-body" style="padding:24px 16px;text-align:center"><p class="ph-empty">โหลดหน้าแรกไม่สำเร็จ</p>`
+      + `<button type="button" class="fm-btn fm-primary" id="phRetry" style="min-height:44px;padding:0 20px" onclick="phRetryBoot()">โหลดไม่สำเร็จ · ลองใหม่</button></div>`;
+    return;
+  }
   host.innerHTML = kind === 'branch' ? _phBranchHome() : _phCentreHome();
   try { navBadgesApply(); navBadgesRefresh(false); } catch (e) { /* PR-D4: no launcher slice, no counts */ }
   phLoadTasks();

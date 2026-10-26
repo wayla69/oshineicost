@@ -28,13 +28,25 @@ PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 32
 CODE = "13-01-009"
 
 
+def _shipped_rest(con, oid, skip=CODE):  # noqa: F811
+    """The order's OTHER shipped lines, received in full: the receive form sends every line the warehouse shipped, and
+    orders.receive refuses a save that leaves one out (audit 2026-10). In stock mode the order carries more than the crab."""
+    out = []
+    for c, pu, cf in con.execute("SELECT ingredient_code, processed_units, confirmed_units FROM bc_order_line"
+                                 " WHERE order_id=? AND ingredient_code<>?", (oid, skip)):
+        sent = float(pu if pu is not None else (cf or 0))
+        if sent > 0:
+            out.append({"code": c, "received_units": sent})
+    return out
+
+
 def _received(con, short=0):  # noqa: F811
     oid, sug, q = _submitted(con)
     HB.process(con, oid, [], "wh")
     ln = {"code": CODE, "received_units": q - short}
     if short:
         ln["reason"] = "short"
-    OR.receive(con, 1, oid, [ln], "udon", receipt_date="2026-10-07", ack=True)
+    OR.receive(con, 1, oid, [ln] + _shipped_rest(con, oid), "udon", receipt_date="2026-10-07", ack=True)
     con.commit()
     return oid, q - short
 

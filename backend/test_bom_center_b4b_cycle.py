@@ -181,8 +181,9 @@ def test_an_old_partial_close_is_still_read_and_labelled(con):  # noqa: F811
     assert steps["end_count"]["status"] == "done" and "รายการเดิม" in steps["end_count"]["branches"][0]["detail"]
 
 
-def test_the_count_that_closes_a_period_is_a_full_count_of_every_item(con):  # noqa: F811
+def test_the_count_that_closes_a_period_is_a_full_count_of_every_item(con, monkeypatch):  # noqa: F811
     """Owner 2026-10-13: a count becomes นับครั้งแรก / นับสิ้นเดือน only when EVERY item of the sheet has a value (0 is a value, blank is not)."""
+    monkeypatch.setattr(ST, "bkk_today", lambda: NOV2)              # the 1 Nov count is not in the future (audit 2026-10 date rule)
     start_counts(con)
     everything = [it for z in ST.sheet(con, 1)["zones"] for it in z["items"]]
     assert len(everything) >= 2
