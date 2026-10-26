@@ -2428,7 +2428,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
      The scope zone's box goes (display: contents) so its children line up in the top bar itself: the title first, the tools, a line break
      (::after), then the note, the chips and (unfolded) the rest. The chips stay one no-wrap row (#472); 5 + 5 px around the break keep the
      tools (44 px) and the chips' 44 px tap areas apart. Before, the chips shared the scope column left of the tools: 144 px at 360. */
-  body.ph-on .top-bar, body.ph-on.tb-folded .top-bar { flex-wrap: wrap; justify-content: flex-start; row-gap: 5px; }
+  body.ph-on .top-bar, body.ph-on.tb-folded .top-bar { flex-wrap: wrap; justify-content: flex-start; row-gap: 5px; padding-bottom: 9px; }   /* 9 px: the chips' tap area (8 px under them) stays inside the bar */
   body.ph-on .top-bar > * { order: 1; }
   body.ph-on .top-bar::after { content: ''; order: 2; flex: 0 0 100%; height: 0; }
   body.ph-on .top-bar .topbar-scope { display: contents; }

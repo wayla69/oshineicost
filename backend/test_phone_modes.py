@@ -227,7 +227,11 @@ def test_me_starts_with_the_last_three_pages():
 
 def test_the_top_bar_title_is_one_line_and_the_coverage_chip_short():
     css = HTML[HTML.index("PHONE DISPLAY MODES (PR-MA"):]
-    assert "body.ph-on .topbar-scope .page-title { flex: 1 1 auto; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" in css
+    assert "body.ph-on .topbar-scope > .page-title { order: 0; flex: 1 1 0%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" in css
+    # owner 2026-10-26 ("ท… ▾" at 360 px): two rows - the title beside the tools, then the note and the two chips the full width of the bar
+    assert "body.ph-on .top-bar .topbar-scope { display: contents; }" in css
+    assert "body.ph-on .top-bar::after { content: ''; order: 2; flex: 0 0 100%; height: 0; }" in css
+    assert "body.ph-on.tb-folded .top-bar { flex-wrap: nowrap; }" not in css
     assert "body.ph-on #dataCoverageNote .dcn-x { display: none; }" in css
     main = _src("js/03-tabs-main.js")
     assert '<span class="dcn-x">ข้อมูล</span>ถึง ${d} ${TH_MON[m-1]}<span class="dcn-x"> ${y+543}</span>' in main

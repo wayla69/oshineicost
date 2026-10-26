@@ -104,7 +104,9 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user =
     await page.evaluate(t => switchTab(t), tab);
   }
   if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
-  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 });
+  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix, #hvmCompact'), null, { timeout: 60_000 });
+  // owner 2026-10-26: a phone opens on the compact list (hv-phone-compact.spec.js); these cases read the full list behind ดูทั้งหมด
+  if (opts.isMobile && await page.locator('#hvmCompact').count()) { await page.locator('.hvc-all').click(); await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 }); }
   await page.waitForFunction(() => { const c = document.getElementById('gpRangeChip'); return !!c && !c.hidden; }, null, { timeout: 60_000 }).catch(() => {});
   await page.waitForTimeout(900);
   return { ctx, page, errors, urls };

@@ -9,7 +9,7 @@
 //     the W-vs-W week picker (Mon–Sun, ISO numbers; a week by default) and "เดิม" under each figure.
 // Both follow the top bar's branch; the top bar's period drives บาท always and จำนวนจาน when its picker reads ตามแถบด้านบน (a period change
 // on the top bar sets it so). A row of one ingredient opens the sheet (now / prev / ly and the menus).
-let _hvm = { slug: 'salmon', sort: 'chg', dir: -1, d: null, seq: 0, key: '', pk: '', view: 'baht', more: false, full: false };
+let _hvm = { slug: 'salmon', sort: 'chg', dir: -1, d: null, seq: 0, key: '', pk: '', view: 'baht', more: false, full: false, fq: '' };
 const HVM_FLOOR = 1000;       // a branch row whose change is under ฿1,000 either way folds behind ดูทั้งหมด
 const HVP_FLOOR = 20;         // the plates view: a branch whose plates from eating moved under 20 either way folds
 const HVM_CAUSE = { customers: 'ลูกค้า', plates_per_head: 'กินต่อหัว', cost_per_plate: 'ต้นทุน/จาน' };
@@ -37,7 +37,9 @@ async function loadHvMonitor(force) {
   // the period part of the top bar (not the branch): a change of it sets the plates view to follow the bar
   const pk = q.split('&').filter(x => !/^(branch|group)=/.test(x)).join('&');
   if (_hvm.pk && pk !== _hvm.pk && _hvpW.a) { _hvpW = { a: '', b: '' }; _hvpSaveW(); }
-  _hvm.pk = pk;
+  // a phone's full list (ดูทั้งหมด) stays open across the chips, the views and a revisit; a new period or branch starts short again
+  if (_hvm.fq && q !== _hvm.fq) _hvm.full = false;
+  _hvm.pk = pk; _hvm.fq = q;
   hvmRenderHead();
   if (_hvmView() === 'plates') { hvpLoad(force); return; }
   if (!force && _hvm.key === q && _hvm.d) { hvmRender(); return; }
@@ -49,7 +51,7 @@ async function loadHvMonitor(force) {
   try { d = await api(`${API}/api/cost/ingredient-groups?${q}`); } catch (e) { return; }
   if (seq !== _hvm.seq) return;
   _hvm.d = d;
-  _hvm.more = false; _hvm.full = false;
+  _hvm.more = !!_hvm.full;
   if (_hvmView() !== 'baht') return;
   periodChip(periodOf(d), true);
   hvmRender();
@@ -58,12 +60,12 @@ async function loadHvMonitor(force) {
 function hvmSetGroup(slug) {
   _hvm.slug = slug;
   try { localStorage.setItem('oshinei_hvm_slug', slug); } catch (e) { /* no storage */ }
-  _hvm.sort = 'chg'; _hvm.dir = -1; _hvm.more = false; _hvm.full = false;
+  _hvm.sort = 'chg'; _hvm.dir = -1; _hvm.more = !!_hvm.full;    // a phone's full list (ดูทั้งหมด) stays open across the chips and the views
   if (_hvmView() === 'plates') hvpRender(); else hvmRender();
 }
 function hvmSetView(v) {
   if (!hvmCostView() || (v !== 'baht' && v !== 'plates') || v === _hvm.view) return;
-  _hvm.view = v; _hvm.more = false; _hvm.full = false;
+  _hvm.view = v; _hvm.more = !!_hvm.full;
   try { localStorage.setItem('oshinei_hvm_view', v); } catch (e) { /* no storage */ }
   loadHvMonitor();
 }
@@ -449,7 +451,7 @@ function hvmOpenCell(i, slug) {
   let cum = '';
   if (i >= 0 && !_hvmOneBranch(_hvm.d)) {
     const tot = b => _hvmCauseOf(b.cells[slug]).total, rs = _hvmSorted(_hvm.d.branches, tot, -1), at = rs.indexOf(row), v = at >= 0 ? _hvmCum(rs, tot)[at] : null;
-    if (v != null) cum = `<div class="hvm-cause-part">สะสม (ส่วนที่เพิ่มขึ้น) ${Math.round(v)}%</div>`;
+    if (v != null) cum = `<div class="hvm-cause-cum">สะสม (ส่วนที่เพิ่มขึ้น) ${Math.round(v)}%</div>`;
   }
   const cause = `<div class="hvm-sh-sec"><div class="hvm-sh-h">สาเหตุที่เปลี่ยน · เทียบช่วงก่อน</div><div class="hvm-cause">${hvmCauseHtml(c)}${cum}</div></div>`;
   const html = `<p class="hvm-sh-range">${esc(periodSpan(r))}</p>${figs}${notes}${cause}<div class="hvm-sh-sec"><div class="hvm-sh-h">เมนูของกลุ่มนี้</div><div id="hvmMenus"><p class="hvm-muted">กำลังโหลด…</p></div></div>`;
@@ -545,7 +547,7 @@ function _hvpQuery() {
 function hvpLoad(force) {
   const q = _hvpQuery(), pr = _hvpPair();
   if (!force && q === _hvp.key && (_hvp.d || _hvp.err)) { hvpRender(); return; }
-  _hvp.key = q; _hvp.d = null; _hvp.err = ''; _hvm.more = false; _hvm.full = false;
+  _hvp.key = q; _hvp.d = null; _hvp.err = ''; _hvm.more = !!_hvm.full;
   const seq = ++_hvp.seq;
   hvpRender();
   api(`${API}/api/sales/ingredient-groups-plates?${q}`).then(d => {
@@ -678,7 +680,7 @@ function hvpOpenRow(i) {
   const cause = k.total == null ? `<p class="hvm-muted">${esc(k.reason || '—')}</p>`
     : `<div class="hvm-cause">${k.main ? `<div class="hvm-cause-main">สาเหตุหลัก: ${_HVP_CAUSE[k.main]}</div>` : ''}<div class="hvm-cause-tot">จานที่เปลี่ยน ${_hvpS(k.total)}${k.total_pct != null ? ` (${k.total_pct > 0 ? '+' : k.total_pct < 0 ? '−' : ''}${Math.abs(k.total_pct).toFixed(1)}%)` : ''}</div>`
       + ['plates_per_head', 'customers'].map(x => `<div class="hvm-cause-part">จาก${_HVP_CAUSE[x]} ${_hvpS(k[x])}</div>`).join('')
-      + (cum != null ? `<div class="hvm-cause-part">สะสม (จานส่วนเกินจากกินต่อหัว) ${Math.round(cum)}%</div>` : '') + '</div>';
+      + (cum != null ? `<div class="hvm-cause-cum">สะสม (จานส่วนเกินจากกินต่อหัว) ${Math.round(cum)}%</div>` : '') + '</div>';
   _hvmSheet(`${i < 0 ? 'ทั้งเครือ' : row.branch} · ${_hvmLabel(slug)}`,
     `<p class="hvm-sh-range">${esc(_hvpVs(d).txt)}</p>${figs}<div class="hvm-sh-sec"><div class="hvm-sh-h">สาเหตุที่เปลี่ยน · เทียบ${bw}</div>${cause}</div>`);
 }
