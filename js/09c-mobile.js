@@ -637,7 +637,8 @@ function phBranchPick(v) {
 // on this device (localStorage, oshinei_phmode).
 const _PH_FIT_MIN = 760, _PH_FIT_MAX = 900, _PH_FIT_DEF = 820, _PH_FIT_TEXT = 12, _PH_FIT_FLOOR = 5.5, _PH_MODE_KEY = 'oshinei_phmode';
 // .ph-tz-unit (PR-TD): a card's own control row counter-zoomed as ONE unit, so its period track, its select and its buttons keep one height
-const _PH_TZ_SEL = '.ph-tz-unit, .ui-q, select, input[type="month"], input[type="date"], input[type="search"], input[type="text"], input:not([type]), .subtab-btn, .gran-btn, .wt-seg button, [role="tab"], .wt-find, .bmc-pager button';
+// .section-title (2026-10-26): a card's heading is counter-zoomed with its "?" as one unit, so it reads at 15 px with the "?" right after it
+const _PH_TZ_SEL = '.ph-tz-unit, .section-title, .ui-q, select, input[type="month"], input[type="date"], input[type="search"], input[type="text"], input:not([type]), .subtab-btn, .gran-btn, .wt-seg button, [role="tab"], .wt-find, .bmc-pager button';
 let _phFitT = null, _phFitPanel = null, _phFitObs = null, _phFitKey = '';
 const _phZoomOK = (() => { try { return CSS.supports('zoom', '0.5'); } catch (e) { return false; } })();
 // the page on screen: its tab, its pane (a supply tab) and, for a page with two views, which one is showing

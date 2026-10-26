@@ -639,6 +639,9 @@ body.dark .subtab-btn.active { background: rgba(20,32,56,0.95); }
   background:#7f9cc9;
   border-radius: 2px;
 }
+/* a heading's "?" group (a span holding them, e.g. ช่วงที่เทียบ + คำอธิบาย): one unit, 8 px apart, an empty slot takes no room */
+.section-title > span:has(> .ui-q) { display: inline-flex; align-items: center; gap: 8px; vertical-align: middle; }
+.section-title > span:has(> .ui-q) > span:empty { display: none; }
 
 /* ════════════════════════════════════════════════════════════
    TABLES
@@ -1501,8 +1504,24 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .content-area [class*="text-[9"], .content-area [class*="text-[10"], .content-area [class*="text-[11"],
   .content-area [style*="font-size:9"], .content-area [style*="font-size:10"], .content-area [style*="font-size:11"],
   .content-area [style*="font-size: 9"], .content-area [style*="font-size: 10"], .content-area [style*="font-size: 11"],
-  .content-area th, .content-area th .sub, .content-area .section-title, .content-area .kpi-label,
+  .content-area th, .content-area th .sub, .content-area .kpi-label,
   .content-area .pill, .content-area .badge-up, .content-area .badge-down { font-size: 12px !important; }
+  /* a card's heading (.section-title) is the card's name, not a 12 px label: 15 px on a phone (as the summary's .ms-section-title). Owner 2026-10-26
+     (High Value Product Monitor, 390 px): the heading read at ~6 px in พอดีจอ (12 px x the frame's ~0.5 scale) and its "?" floated away from it.
+     On a phone the heading is plain text flow, not a flex row: the words wrap instead of shrinking and each "?" follows the last word (in a flex row
+     a wrapped title took the whole width and pushed the "?" to the far edge, or the "?" dropped to a line of its own). The marker (theme-vivid's
+     22 px chip) hangs in the left padding, so a second line starts under the first word. In พอดีจอ the heading is counter-zoomed to this size with
+     its "?" (js/09c-mobile.js _PH_TZ_SEL). */
+  .content-area .section-title { display: block; position: relative; padding-left: 32px; min-height: 22px;
+    font-size: 15px !important; line-height: 22px; letter-spacing: 0; overflow-wrap: anywhere; text-wrap: pretty; }
+  .content-area .section-title::before { position: absolute; left: 0; top: 11px; transform: translateY(-50%); margin: 0; }   /* centred on the first line, whatever the theme draws */
+  .content-area .section-title .ui-q { vertical-align: middle; margin: -3px 0 -3px 4px; }
+  /* two "?" side by side (ช่วงที่เทียบ, คำอธิบาย): 16 px apart, so their 44 px tap areas (the ::after, 8 px around) touch and never overlap.
+     A wrapper of "?" (a span holding them, below) is one unit; text-wrap: pretty takes the last word down with a "?" rather than
+     leaving the "?" alone on the last line (where it is not supported, the "?" may start the next line). */
+  .content-area .section-title .ui-q ~ .ui-q { margin-left: 12px; }
+  .content-area .section-title > span:has(> .ui-q) { gap: 16px; margin-left: 4px; }
+  .content-area .section-title > span:has(> .ui-q) .ui-q { margin: -3px 0; }
   #clusterBar { flex-wrap: wrap; height: auto; }
   .cluster-tab, .gran-btn { font-size: 12px; }
   /* วัตถุดิบและใบสั่งซื้อ: a branch login works this bar with a thumb */
@@ -1625,6 +1644,9 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   .ui-q::after { content: ''; position: absolute; inset: -8px; border-radius: 50%; }
   body.ph-fit .ph-frame .ui-q { width: 24px; height: 24px; min-width: 24px; min-height: 24px; font-size: 13px; }   /* beside the frame's scaled text */
   body.ph-fit .ph-frame .ui-q::after { inset: -10px; }
+  /* a card heading is counter-zoomed to touch size in the frame (.ph-tz): its "?" are the touch "?" (28 px, 44 px tap area) beside 15 px text */
+  body.ph-fit .ph-frame .section-title .ui-q { width: 28px; height: 28px; min-width: 28px; min-height: 28px; font-size: 15px; }
+  body.ph-fit .ph-frame .section-title .ui-q::after { inset: -8px; }
 }
 .ui-help-back { position: fixed; inset: 0; z-index: 10000; background: var(--help-back, rgba(15,23,42,.45)); display: flex; align-items: center; justify-content: center; padding: 16px; }
 .ui-help-box { width: 100%; max-width: 560px; max-height: 88vh; overflow: auto; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);
@@ -2461,7 +2483,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the filters, the period pickers, the chips and the "?" inside the frame keep their touch size (counter-zoomed by phFitLayout) */
   /* PR-TD: the "?" keeps its 28 px circle (its ::after is the 44 px tap area); a .ph-tz-unit row (a card's own control row, counter-zoomed as one
      so its controls share one height) sizes its own controls */
-  body.ph-on.ph-fit .ph-frame .ph-tz:not(.ui-q, .ph-tz-unit) { min-height: 44px; min-width: 44px; box-sizing: border-box; }
+  body.ph-on.ph-fit .ph-frame .ph-tz:not(.ui-q, .ph-tz-unit, .section-title) { min-height: 44px; min-width: 44px; box-sizing: border-box; }
   /* the desktop layout at the frame's width: Tailwind's sm: and md: columns (keyed to the viewport, so off on a phone) apply in the frame */
   body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-2, .md\:grid-cols-2) { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   body.ph-on.ph-fit .ph-frame :is(.sm\:grid-cols-3, .md\:grid-cols-3) { grid-template-columns: repeat(3, minmax(0, 1fr)); }
