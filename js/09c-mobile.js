@@ -696,6 +696,7 @@ function _phModeBtnSync(pg, fit) {
 function _phFitOff(panel) {
   if (_phFitObs) { _phFitObs.disconnect(); _phFitObs = null; }
   panel.classList.remove('ph-frame', 'ph-measure');
+  delete panel.dataset.phFit;
   ['width', 'zoom', 'transform', 'transform-origin', 'margin-bottom', 'margin-right'].forEach(k => panel.style.removeProperty(k));
   panel.querySelectorAll('[data-phf]').forEach(el => { el.style.removeProperty('font-size'); delete el.dataset.phf; });
   panel.querySelectorAll('.ph-tz').forEach(el => { el.classList.remove('ph-tz'); el.style.removeProperty('zoom'); });
@@ -709,7 +710,9 @@ function _phFitOff(panel) {
 function _phFitWatch(panel) {
   if (_phFitObs) _phFitObs.disconnect();
   let t = null;
-  _phFitObs = new MutationObserver(() => { clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) { phFitLayout(panel); phAnswerSchedule(); } }, 250); });
+  // data-ph-fit: "wait" while a re-fit is pending (the page has drawn something since the last fit), "ok" once the frame has followed it -
+  // the frame's readiness, read by the phone tests instead of a fixed wait (an attribute: it does not wake this observer)
+  _phFitObs = new MutationObserver(() => { panel.dataset.phFit = 'wait'; clearTimeout(t); t = setTimeout(() => { if (_phFitPanel === panel && document.body.classList.contains('ph-fit')) { phFitLayout(panel); phAnswerSchedule(); } }, 250); });
   _phFitObs.observe(panel, { childList: true, subtree: true, characterData: true });
 }
 function _phAvail() {
@@ -732,8 +735,9 @@ function phFitLayout(panel) {
   if (!panel || !panel.isConnected) return;
   // a table / chart shown at 100 % (phZoomToggle) holds its zoom against the frame's scale of that moment: re-fitting the frame
   // under it (a late part of the page drawing) measured the zoomed element too, widened the frame (799 -> 833 px on วิเคราะห์เมนู)
-  // and left the 100 % view at 96 % - 12 px text drawn at 11.5 px. The frame is fitted again when the 100 % view closes.
-  if (panel.querySelector('.ph-z100')) return;
+  // and left the 100 % view at 96 % - 12 px text drawn at 11.5 px. The frame is fitted again when the 100 % view closes. Text the page
+  // draws while the 100 % view is open still gets its 12 px floor (no width changes: the floor only raises text under 12 px).
+  if (panel.querySelector('.ph-z100')) { _phFitFloor(panel); panel.dataset.phFit = 'ok'; return; }
   _phRowNums(panel);                                                                // PR-MB: no row-number column on a phone (before the width is read)
   const avail = _phAvail();
   const cap = Math.floor(avail * _PH_FIT_TEXT / _PH_FIT_FLOOR);                 // wider than this, 12 px text would read under 5.5 px
@@ -755,6 +759,7 @@ function phFitLayout(panel) {
   _phFitTables(panel, s);
   _phFitFloor(panel);
   _phChartsCrisp(panel, s);
+  panel.dataset.phFit = 'ok';
 }
 // PR-MB · a chart in the frame is drawn for the size it is SHOWN at: its canvas holds (drawn width x device pixel ratio) pixels, so it is
 // sharp at rest (scale s) and again at 100 % after a double tap (scale 1) - not a scaled bitmap. scale 0 = back to the browser's own ratio.
@@ -816,7 +821,8 @@ function _phFitFloor(panel) {
     if (!svg) { if (fs && fs < _PH_FIT_TEXT) { el.style.setProperty('font-size', _PH_FIT_TEXT + 'px', 'important'); el.dataset.phf = '1'; } return; }
     try {
       const m = el.getScreenCTM(); if (!m) return;
-      const drawn = fs * Math.hypot(m.b, m.d) * (_phZoomOK ? 1 : s);          // getScreenCTM is in screen px; a transform frame scales on top
+      let drawn = fs * Math.hypot(m.b, m.d) * (_phZoomOK ? 1 : s);            // getScreenCTM is in screen px; a transform frame scales on top
+      if (el.closest('.ph-z100')) { if (!_phZoomOK) return; drawn *= s; }   // drawn inside a 100 % view: its size at rest is s x that
       if (drawn && drawn < _PH_FIT_FLOOR) { el.style.setProperty('font-size', (fs * _PH_FIT_FLOOR / drawn + 0.05).toFixed(2) + 'px', 'important'); el.dataset.phf = '1'; }
     } catch (e) { /* not drawn */ }
   });
