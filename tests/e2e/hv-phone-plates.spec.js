@@ -104,7 +104,10 @@ async function open(browser, opts, { tab, mode = 'fit', scheme = 'light', user =
     await page.evaluate(t => switchTab(t), tab);
   }
   if (tab === 'dailysales') await page.waitForFunction(() => !!document.querySelector('#dsSpike .sp-sec-old'), null, { timeout: 60_000 });   // DV3: the card, no plates section
-  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 });
+  if (tab === 'hvmonitor') await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix, #hvmCompact'), null, { timeout: 60_000 });
+  // owner 2026-10-26: a phone opens on the compact list (hv-phone-compact.spec.js); these cases read the full list behind ดูทั้งหมด
+  if (opts.isMobile && await page.locator('#hvmCompact').count()) { await page.locator('.hvc-all').click(); await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvpTable, #hvpMatrix'), null, { timeout: 60_000 });
+    await page.waitForTimeout(600); await page.evaluate(() => { const c = document.querySelector('.content-area'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }); }
   await page.waitForFunction(() => { const c = document.getElementById('gpRangeChip'); return !!c && !c.hidden; }, null, { timeout: 60_000 }).catch(() => {});
   await page.waitForTimeout(900);
   return { ctx, page, errors, urls };
@@ -327,7 +330,7 @@ for (const [name, opts, mode] of CASES) {
       await expect(page.locator('#hvmChips .gran-btn.gran-active')).toHaveText('แซลมอน');
       // back to บาท: the cost view and its answer line
       await page.locator('#hvmView .gran-btn[data-v="baht"]').click();
-      await page.waitForFunction(() => !!document.getElementById('hvmTable'));
+      await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmCompact'));   // a phone: a new period starts on the compact list again
       await expect(page.locator('#hvmTitle')).toHaveText('ต้นทุนวัตถุดิบหลักต่อหัว · ทุกสาขา');
       expect(errors).toEqual([]);
       await ctx.close();
