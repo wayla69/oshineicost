@@ -417,7 +417,7 @@ function _discPatternDrillAttr(grp) {
   else opts = {};
   opts.sort = 'pct';
   opts.title = 'บิลส่วนลดกลุ่ม · ' + grp;
-  return `onclick='openDiscountBills(${JSON.stringify(opts).replace(/'/g, "&#39;")})'`;
+  return `onclick="openDiscountBills(${esc(JSON.stringify(opts))})"`;
 }
 
 let _staffByBranch = true;   // default: split each cashier per branch (no merging)
@@ -727,7 +727,7 @@ async function loadCouponSeries(params, gen) {
   body.innerHTML = s.map((r, i) => {
     const w = Math.round(100 * (r.amount || 0) / maxAmt);
     const inactive = !r.active;
-    return `<tr class="border-t border-slate-100 cursor-pointer hover:bg-amber-50/50" onclick="openCouponDrill(${r.id}, ${JSON.stringify(r.name).replace(/"/g, '&quot;')})">
+    return `<tr class="border-t border-slate-100 cursor-pointer hover:bg-amber-50/50" onclick="openCouponDrill(${r.id}, ${esc(JSON.stringify(r.name))})">
       <td class="num tabular text-slate-400">${i + 1}</td>
       <td class="font-medium">${esc(r.name)}${inactive ? ' <span class="text-[10px] text-slate-400">(ปิดใช้)</span>' : ''}${r.code && r.code !== r.name ? `<div class="text-[10px] text-slate-400">${esc(r.code)}</div>` : ''}</td>
       <td class="num tabular text-slate-500">${fmtN(r.uses)}</td>
@@ -857,7 +857,7 @@ async function loadDiscountAlerts(params, gen) {
     const dot = f.severity === 'high' ? '#dc2626' : '#f59e0b';
     const opts = Object.assign({ sort: 'discount' }, f.drill || {});
     if (!opts.title) opts.title = 'บิลส่วนลด · ' + (opts.branch || '');
-    const drillAttr = f.drill ? `onclick='openDiscountBills(${JSON.stringify(opts).replace(/'/g, "&#39;")})'` : '';
+    const drillAttr = f.drill ? `onclick="openDiscountBills(${esc(JSON.stringify(opts))})"` : '';
     const clk = f.drill ? 'cursor-pointer hover:bg-slate-50' : '';
     return `<div class="flex items-start gap-2 py-2 px-2 border-b border-slate-50 rounded ${clk}" ${drillAttr}>
       <span style="width:9px;height:9px;border-radius:50%;background:${dot};flex:none;margin-top:5px"></span>
