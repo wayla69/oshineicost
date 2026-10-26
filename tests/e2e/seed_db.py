@@ -45,15 +45,15 @@ def _supply_rows(path):
 
 
 def _closed_branch(path):
-    """Owner 2026-10-26 "Hide closed branches" (closed-branches.spec.js): a branch marked closed that sold only in the month
-    before the latest one - before the rule, ยอดขายรายวัน showed it as a row of 0 sales and -100 %."""
+    """Owner 2026-10-26 "Hide closed branches" (closed-branches.spec.js): a branch marked closed whose last bills are two months
+    before the latest one - no sale in the month on screen nor in its bases, so ยอดขายรายวัน has no row for it."""
     import sqlite3
     con = sqlite3.connect(path)
     con.execute("INSERT INTO branches(branch_id,name,branch_type,active) VALUES(9,'สาขาปิดทดสอบ','master',0)")
     for d in conftest.DAYS:
         con.execute("INSERT INTO sales_transaction(branch_id,receipt_no,sold_at,customer_count,food_subtotal,drink_subtotal,"
                     "other_subtotal,discount,service_charge,total_inc_vat,source) VALUES(9,?,?,4,900,100,0,0,0,1070.0,'Easy')",
-                    (f"E2E-CLOSED-{d}", f"{conftest.PREV_MONTH}-{d}T12:00:00"))
+                    (f"E2E-CLOSED-{d}", f"{conftest.EARLY_MONTH}-{d}T12:00:00"))
     con.commit()
     con.close()
 

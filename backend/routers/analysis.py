@@ -1350,8 +1350,8 @@ def analysis_health(
             """,
             params_tx,
         ).fetchall()
-        # owner 2026-10-26: the score is the latest month's standing against the month before - a branch closed in both
-        # (or marked closed) is not scored (rules.closed_branches); its old last month read as "the latest" (โคราช2 15 %)
+        # owner 2026-10-26: the score is the latest month's standing against the month before - a branch with no sale in
+        # either is not scored (rules.closed_branches); its old last month read as "the latest" (โคราช2 15 %)
         _sm = max((r["month"] for r in easy_rows), default=None)
         closed = closed_branches(con, [(_P.shift("month", _sm + "-01", -1)[:7], _sm)] if _sm else [])
 

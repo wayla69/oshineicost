@@ -1,6 +1,6 @@
 // @ts-check
 // Owner 2026-10-26 "Hide closed branches": on a 390 x 844 phone, ยอดขายรายวัน has no row of 0 sales for a closed branch (the fixture's
-// สาขาปิดทดสอบ: marked closed, bills only in the month before the latest - before the rule a 0 / -100 % row), the answer strip does not
+// สาขาปิดทดสอบ: marked closed, its last bills two months before the latest - no sale in the month on screen nor in its bases), the answer strip does not
 // name it, and the branch sheet keeps it reachable behind its "สาขาที่ปิดแล้ว" fold (the top bar's select: the same option under an
 // optgroup). A pick from the fold reloads the page for it, so its history stays one tap away.
 const { test, expect } = require('@playwright/test');

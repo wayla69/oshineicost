@@ -215,12 +215,9 @@ def heatmap_branch(
 
 
 def _heat_span(month_from, month_to, date_from, date_to):
-    """The heat map's span as one closed-branch window (rules.closed_branches): the days, else the months; None = all time
-    (then only the closed flag hides a branch)."""
+    """The heat map's span as one closed-branch window (rules.closed_branches): the days, else the months; no filter = all time."""
     a = (date_from or "")[:10] or (month_from or "")[:7]
     b = (date_to or "")[:10] or (month_to or "")[:7]
-    if not (a or b):
-        return None
     return (a or "0000-01", b or "9999-12")
 
 

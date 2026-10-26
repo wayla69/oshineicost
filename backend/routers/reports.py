@@ -1933,7 +1933,7 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
             "vs_target_pct": round(rev / t["revenue_target"] * 100, 1) if has_t else None,
         })
     branches.sort(key=lambda x: -x["revenue"])
-    # owner 2026-10-26: a branch marked closed is not a league row (rules.closed_branches); share_pct stays of the chain total
+    # owner 2026-10-26: a branch with no sale here nor in a base is not a league row (rules.closed_branches)
     branches = drop_closed(branches, closed_branches(con, [(cs, ce), (ps, pe) if has_prev else None, (ys, ye) if has_yoy else None],
                                                      keep=branch))
     prev_rank_map = {nm: i + 1 for i, (nm, _) in

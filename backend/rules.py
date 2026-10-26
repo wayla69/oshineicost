@@ -432,14 +432,16 @@ def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
 # Owner 2026-10-26 ("Hide closed branches"): a branch that has closed (โคราช2, no
 # bills since 2025-12) kept showing as a row of 0 sales and "-100%" in every
 # branch table of the period on screen. THE rule, stated once:
-#   a branch is left out of a current-period table when it is marked closed
-#   (branches.active = 0), or when it has no sale in the period on screen AND
-#   none in the period(s) it is compared with.
-# Only the ROWS go: a chain total keeps whatever the branch sold in the period
-# (the callers filter the rows after the totals are summed). History and trend
-# views (monthly series, YoY history, exports) do not call this, so a closed
-# branch stays where the past matters. A branch picker lists the branches that
-# are not closed; closed_branch_rows() gives the ones behind the picker's
+#   a branch is left out of a current-period table when it has no sale in the
+#   period on screen AND none in the period(s) it is compared with. A branch
+#   marked closed (branches.active = 0) that DID sell in one of them stays a row
+#   (owner decision 2026-10-26: the rows add up to the chain total, e.g. โคราช2
+#   in Dec 2025); the mark alone counts only where there is no sales window
+#   (targets) or nobody sold in the windows at all.
+# The callers filter the rows after the totals are summed. History and trend
+# views (monthly series, YoY history, exports) do not call this. A branch picker
+# lists the branches that are not closed (picker_closed_branches: marked closed,
+# or no bill in the last 90 days) and puts the closed ones behind its
 # "สาขาที่ปิดแล้ว" fold so their history stays reachable.
 PICKER_IDLE_DAYS = 90       # a picker drops a branch with history but no bill in the last 90 days of the data
 
@@ -486,11 +488,11 @@ def _traded_ids(con, windows) -> set:
 def closed_branches(con, windows=(), *, keep: Optional[str] = None, ids: bool = False) -> set:
     """THE closed-branch rule for a current-period table: the names (ids=True: the branch_ids) of the branches
     to leave out. `windows` = the period on screen and the period(s) it is compared with: (from, to) day pairs
-    ('YYYY-MM-DD') or months ('YYYY-MM'); an empty / None window is skipped. A branch is closed when
-    branches.active = 0, or when it traded in none of the windows. When no branch at all traded in the
-    windows (a period before the data, a blank window) only the flag counts - a table is never emptied
-    by this rule. `keep` = the branch the page is filtered to (its branch= / the picker's closed-branch fold):
-    asked for by name, it is never left out."""
+    ('YYYY-MM-DD') or months ('YYYY-MM'; month_window() gives all time as one); an empty / None window is skipped.
+    A branch is left out when it traded in none of the windows - marked closed or not: a closed branch with a sale
+    in one of them stays a row. With no window, or when no branch at all traded in the windows (a period before
+    the data), only the closed mark (branches.active = 0) counts - a table is never emptied by this rule.
+    `keep` = the branch the page is filtered to (its branch= / the picker's closed-branch fold): never left out."""
     act = "COALESCE(active,1)" if "active" in _columns(con, "branches") else "1"
     rows = con.execute(f"SELECT branch_id, name, {act} AS active FROM branches WHERE name != 'ALL'").fetchall()
     traded = _traded_ids(con, [w for w in (windows or ()) if w])
@@ -498,18 +500,16 @@ def closed_branches(con, windows=(), *, keep: Optional[str] = None, ids: bool = 
     for bid, name, active in rows:
         if name == keep:
             continue
-        if not active or (traded and bid not in traded):
+        if (bid not in traded) if traded else (not active):
             out.add(bid if ids else name)
     return out
 
 
 def month_window(month: Optional[str] = None, month_from: Optional[str] = None, month_to: Optional[str] = None):
-    """The month filter of a month-grain page as one closed_branches window ('YYYY-MM' pair); None = all time."""
+    """The month filter of a month-grain page as one closed_branches window ('YYYY-MM' pair); no filter = all time."""
     if month:
         return (month[:7], month[:7])
-    if month_from or month_to:
-        return ((month_from or "0000-01")[:7], (month_to or "9999-12")[:7])
-    return None
+    return ((month_from or "0000-01")[:7], (month_to or "9999-12")[:7])
 
 
 def drop_closed(rows, closed, key="branch"):

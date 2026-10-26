@@ -402,8 +402,8 @@ def gp_by_branch_month(
         """, params).fetchall()
 
         target = food_cost_target(con)   # ONE target (owner 2026-10-25), Settings → ค่าเริ่มต้น
-        # owner 2026-10-26: the closed branches are not rows (rules.closed_branches; was an inline active=1 filter that also
-        # took their sales out of the chain total); the window = the months asked for (none = all time: the flag only)
+        # owner 2026-10-26: a branch with no sale in the months asked for is not a row (rules.closed_branches; was an inline
+        # active=1 filter that also took a closed branch's sales out of the chain total); no months = all time
         closed_ids = closed_branches(con, [month_window(month, month_from, month_to)], ids=True)
 
     by_branch: dict = {}
