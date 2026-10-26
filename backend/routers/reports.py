@@ -4210,5 +4210,5 @@ def report_management_xlsx(
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": attachment(fname)},
+        headers={"Content-Disposition": f"attachment; filename={fname}"},   # ASCII by construction (management_<period>_<tag>)
     )
