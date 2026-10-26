@@ -433,12 +433,15 @@ def scope_filter(filters: list, params: dict, branch: Optional[str] = None,
 # bills since 2025-12) kept showing as a row of 0 sales and "-100%" in every
 # branch table of the period on screen. THE rule, stated once:
 #   a branch is left out of a current-period table when it has no sale in the
-#   period on screen AND none in the period(s) it is compared with. A branch
-#   marked closed (branches.active = 0) that DID sell in one of them stays a row
+#   period on screen AND none in the PREVIOUS period (the year-ago period does not
+#   count: a shop closed since last year is not a row of 0 and -100 %). A branch
+#   marked closed (branches.active = 0) that DID sell in either stays a row
 #   (owner decision 2026-10-26: the rows add up to the chain total, e.g. โคราช2
 #   in Dec 2025); the mark alone counts only where there is no sales window
 #   (targets) or nobody sold in the windows at all.
-# The callers filter the rows after the totals are summed. History and trend
+# The callers filter the rows after the totals are summed. The year-ago chain total
+# may then hold a hidden branch's sales: hidden_amount() gives the baht for the
+# table's footnote "รวมสาขาที่ปิดแล้ว ฿…" (no row). History and trend
 # views (monthly series, YoY history, exports) do not call this. A branch picker
 # lists the branches that are not closed (picker_closed_branches: marked closed,
 # or no bill in the last 90 days) and puts the closed ones behind its
@@ -487,7 +490,7 @@ def _traded_ids(con, windows) -> set:
 
 def closed_branches(con, windows=(), *, keep: Optional[str] = None, ids: bool = False) -> set:
     """THE closed-branch rule for a current-period table: the names (ids=True: the branch_ids) of the branches
-    to leave out. `windows` = the period on screen and the period(s) it is compared with: (from, to) day pairs
+    to leave out. `windows` = the period on screen and the PREVIOUS period (callers never pass the year-ago one): (from, to) day pairs
     ('YYYY-MM-DD') or months ('YYYY-MM'; month_window() gives all time as one); an empty / None window is skipped.
     A branch is left out when it traded in none of the windows - marked closed or not: a closed branch with a sale
     in one of them stays a row. With no window, or when no branch at all traded in the windows (a period before
@@ -510,6 +513,15 @@ def month_window(month: Optional[str] = None, month_from: Optional[str] = None, 
     if month:
         return (month[:7], month[:7])
     return ((month_from or "0000-01")[:7], (month_to or "9999-12")[:7])
+
+
+def hidden_amount(by_branch: dict, closed) -> Optional[dict]:
+    """The footnote of a table whose เทียบปีก่อน chain total holds the sales of branches it hides: by_branch = {name: baht of
+    the year-ago period}; -> {"amount", "branches"} for the hidden ones that sold, None when there are none."""
+    hit = {n: float(v or 0) for n, v in (by_branch or {}).items() if n in (closed or ()) and (v or 0) > 0}
+    if not hit:
+        return None
+    return {"amount": round(sum(hit.values()), 2), "branches": sorted(hit)}
 
 
 def drop_closed(rows, closed, key="branch"):

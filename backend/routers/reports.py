@@ -16,7 +16,7 @@ from fastapi.responses import StreamingResponse
 from typing import Optional
 import json as _json
 import io as _io
-from rules import VAT_DIVISOR, closed_branches, discount_base_row, drop_closed, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
+from rules import VAT_DIVISOR, closed_branches, discount_base_row, drop_closed, hidden_amount, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, TIER_EXTRA, month_projection, tier_codes_between, tier_label
 from targets import attainment, target_revenue_total, targets_for_month
 from core import (
@@ -1933,16 +1933,18 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
             "vs_target_pct": round(rev / t["revenue_target"] * 100, 1) if has_t else None,
         })
     branches.sort(key=lambda x: -x["revenue"])
-    # owner 2026-10-26: a branch with no sale here nor in a base is not a league row (rules.closed_branches)
-    branches = drop_closed(branches, closed_branches(con, [(cs, ce), (ps, pe) if has_prev else None, (ys, ye) if has_yoy else None],
-                                                     keep=branch))
+    # owner 2026-10-26: a branch with no sale here nor in the period before is not a league row (rules.closed_branches; the
+    # year-ago period does not count); ly_hidden = the year-ago sales of the branches left out (the footnote)
+    _closed = closed_branches(con, [(cs, ce), (ps, pe) if has_prev else None], keep=branch)
+    ly_hidden = hidden_amount({nm: r["rev"] for nm, r in yoy_b.items()}, _closed)
+    branches = drop_closed(branches, _closed)
     prev_rank_map = {nm: i + 1 for i, (nm, _) in
                      enumerate(sorted(prev_b.items(), key=lambda kv: -(kv[1]["rev"] or 0)))}
     for i, b in enumerate(branches):
         b["rank"] = i + 1
         pr = prev_rank_map.get(b["branch"])
         b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
-    return {"branches": branches}
+    return {"branches": branches, **({"branches_ly_hidden": ly_hidden} if ly_hidden else {})}
 
 
 def _cph_split(q_cur, cost_cur, q_prev, cost_prev, covers_cur, covers_prev) -> dict:
@@ -3428,6 +3430,8 @@ def report_management(
         "has_yoy": has_yoy,
         "headline": headline,
         "branches": branches,
+        # owner 2026-10-26: the year-ago chain total's sales of branches the league hides (the footnote; absent = none)
+        **({"branches_ly_hidden": ctx["branches_ly_hidden"]} if ctx.get("branches_ly_hidden") else {}),
         "gp": gp,
         "food_cost_target": ctx["food_cost_target"],
         "leak": leak,

@@ -1,7 +1,8 @@
 """Owner 2026-10-26 "Hide closed branches": ONE rule (rules.closed_branches) decides who a current-period branch table leaves
-out - a branch with no sale in the period on screen AND none in its comparison period(s). A branch marked closed
-(branches.active = 0) that sold in one of them stays a row (owner decision 2026-10-26: the rows add up to the chain total);
-the mark alone counts only where there is no sales window (targets) or nobody sold at all. A branch picker lists the open
+out - a branch with no sale in the period on screen AND none in the PREVIOUS period (the year-ago one does not count). A
+branch marked closed (branches.active = 0) that sold in either stays a row (owner decision 2026-10-26: the rows add up to the
+chain total); the mark alone counts only where there is no sales window (targets) or nobody sold at all. A year-ago chain
+total that holds a hidden branch's sales says so once, as a footnote amount (ly_hidden / branches_ly_hidden), never a row. A branch picker lists the open
 branches; the closed ones (rules.picker_closed_branches) come with closed=true under include_inactive, for the
 "สาขาที่ปิดแล้ว" fold, so their history stays reachable.
 
@@ -10,6 +11,8 @@ The module adds three branches to the session fixture and takes them out again a
            hidden from a window where neither it nor its base has a bill)
   IdleY    open (active 1), a month row in 2025-12 only (has history, idle > 90 days: a picker leaves it out)
   NewZ     open, no sales at all yet (a branch being set up: the picker keeps it)
+  YearAgoV marked closed, bills only a year before the latest month (2025-05-31 and 3 on 2025-06-02): year-ago-only sales ->
+           hidden from the latest month, its ฿3,000 the year-ago total's footnote
 """
 import sqlite3
 from pathlib import Path
@@ -19,7 +22,8 @@ import pytest
 from conftest import EARLY_MONTH, LATEST_MONTH, PREV_MONTH
 
 HERE = Path(__file__).parent
-CLOSED, IDLE, NEW = "ClosedX", "IdleY", "NewZ"
+CLOSED, IDLE, NEW, YAGO = "ClosedX", "IdleY", "NewZ", "YearAgoV"
+LY_DAY = f"{int(LATEST_MONTH[:4]) - 1}{LATEST_MONTH[4:]}-02"
 
 
 @pytest.fixture(scope="module")
@@ -27,19 +31,23 @@ def shops(client, app_db):
     import core
     con = sqlite3.connect(str(app_db))
     con.executemany("INSERT INTO branches(branch_id,name,branch_type,active) VALUES(?,?,?,?)",
-                    [(91, CLOSED, "master", 0), (92, IDLE, "master", 1), (93, NEW, "franchise", 1)])
+                    [(91, CLOSED, "master", 0), (92, IDLE, "master", 1), (93, NEW, "franchise", 1), (94, YAGO, "master", 0)])
     for i in range(3):
         con.execute("INSERT INTO sales_transaction(branch_id,receipt_no,sold_at,customer_count,food_subtotal,drink_subtotal,"
                     "other_subtotal,discount,service_charge,total_inc_vat,source) VALUES(91,?,?,4,900,100,0,0,0,1070.0,'Easy')",
                     (f"CX-{i}", f"{PREV_MONTH}-02T1{i}:00:00"))
+    for i, at in enumerate([f"{LY_DAY[:4]}-05-31T12:00:00"] + [f"{LY_DAY}T1{k}:00:00" for k in range(3)]):
+        con.execute("INSERT INTO sales_transaction(branch_id,receipt_no,sold_at,customer_count,food_subtotal,drink_subtotal,"
+                    "other_subtotal,discount,service_charge,total_inc_vat,source) VALUES(94,?,?,4,900,100,0,0,0,1070.0,'Easy')",
+                    (f"YV-{i}", at))
     con.execute("INSERT INTO sales_sku_monthly(branch_id,period_month,sku_id,qty,subtotal_ex_vat,tax_total,total_inc_vat,source)"
                 " VALUES(92,'2025-12',3,5,500,35,535,'Easy')")
     con.commit()
     core.invalidate_cache(rebuild_cost=False)
     yield con
-    con.execute("DELETE FROM sales_transaction WHERE branch_id IN (91,92,93)")
-    con.execute("DELETE FROM sales_sku_monthly WHERE branch_id IN (91,92,93)")
-    con.execute("DELETE FROM branches WHERE branch_id IN (91,92,93)")
+    con.execute("DELETE FROM sales_transaction WHERE branch_id IN (91,92,93,94)")
+    con.execute("DELETE FROM sales_sku_monthly WHERE branch_id IN (91,92,93,94)")
+    con.execute("DELETE FROM branches WHERE branch_id IN (91,92,93,94)")
     con.commit(); con.close()
     core.invalidate_cache(rebuild_cost=False)
 
@@ -73,9 +81,9 @@ def test_a_closed_branch_with_no_sale_in_the_period_nor_its_base_is_hidden_unles
 
 def test_no_window_or_an_empty_one_counts_only_the_flag(shops):
     import rules
-    assert rules.closed_branches(shops) == {CLOSED}
-    assert rules.closed_branches(shops, ["2031-01"]) == {CLOSED}                          # nobody traded: never empties a table
-    assert rules.closed_branches(shops, [None, ("", "")]) == {CLOSED}
+    assert rules.closed_branches(shops) == {CLOSED, YAGO}
+    assert rules.closed_branches(shops, ["2031-01"]) == {CLOSED, YAGO}                    # nobody traded: never empties a table
+    assert rules.closed_branches(shops, [None, ("", "")]) == {CLOSED, YAGO}
 
 
 def test_a_slim_database_without_the_flag_or_the_month_table_reads_what_is_there():
@@ -90,6 +98,12 @@ def test_a_slim_database_without_the_flag_or_the_month_table_reads_what_is_there
     assert rules.picker_closed_branches(con) == set()                    # B has no history: a new branch stays
 
 
+def test_hidden_amount_is_the_year_ago_sales_of_the_hidden_branches_only():
+    import rules
+    assert rules.hidden_amount({"A": 100.0, "B": 50.4, "C": 0}, {"B", "C"}) == {"amount": 50.4, "branches": ["B"]}
+    assert rules.hidden_amount({"A": 100.0}, {"B"}) is None and rules.hidden_amount({}, set()) is None
+
+
 def test_drop_closed_keeps_order_and_reads_names_ids_or_a_key():
     import rules
     rows = [{"branch": "A", "id": 1}, {"branch": "B", "id": 2}, {"branch": "C", "id": 3}]
@@ -102,7 +116,7 @@ def test_drop_closed_keeps_order_and_reads_names_ids_or_a_key():
 def test_the_picker_set_is_flagged_or_idle_with_history(shops):
     import rules
     got = rules.picker_closed_branches(shops)
-    assert CLOSED in got and IDLE in got and NEW not in got and "BranchA" not in got
+    assert CLOSED in got and IDLE in got and YAGO in got and NEW not in got and "BranchA" not in got
 
 
 # ── endpoints: three current-period tables ───────────────────────────────────
@@ -123,6 +137,33 @@ def test_daily_sales_shows_a_closed_branch_that_sold_in_the_base_so_the_rows_add
     assert round(sum(r["mom_rev"] or 0 for r in d["branches"]), 2) == d["total"]["prev"]["revenue"]
     one = client.get("/api/sales/daily", params={"gran": "month", "branch": CLOSED, "date": f"{PREV_MONTH}-15"}).json()
     assert _names(one["branches"]) == [CLOSED]                                          # reachable through the picker's fold
+
+
+def test_year_ago_only_sales_hide_the_row_and_the_year_ago_total_carries_a_footnote(client, shops):
+    d = client.get("/api/sales/daily?gran=month").json()                                # latest month 1-3 vs May 1-3 vs a year back
+    assert d["has_ly"] and YAGO not in _names(d["branches"])                            # sold only a year ago: no row
+    assert CLOSED in _names(d["branches"])                                              # sold in the previous period: a row
+    assert d["total"]["ly_hidden"] == {"amount": 3000.0, "branches": [YAGO]}             # 3 bills x 1,070 / 1.07
+    assert round(sum(r["yoy_rev"] or 0 for r in d["branches"]) + d["total"]["ly_hidden"]["amount"], 2) == d["total"]["ly"]["revenue"]
+    j = client.get("/api/reports/management", params={"period": "monthly", "month": LATEST_MONTH, "mtd": "1"}).json()
+    assert YAGO not in _names(j["branches"])
+    s = client.get("/api/period/sales", params={"kind": "month", "pick": f"{LATEST_MONTH}-03", "by_branch": 1}).json()
+    assert YAGO not in _names(s["branches"]) and s["ly_hidden"]["branches"] == [YAGO]
+
+
+def test_no_footnote_when_nothing_is_hidden(client, shops):
+    d = client.get("/api/sales/daily", params={"gran": "month", "date": f"{PREV_MONTH}-03"}).json()
+    assert "ly_hidden" not in d["total"]
+
+
+def test_the_footnote_is_drawn_under_the_table_never_as_a_row():
+    core = (HERE.parent / "js" / "01-core.js").read_text(encoding="utf-8")
+    home = (HERE.parent / "js" / "07-home.js").read_text(encoding="utf-8")
+    mob = (HERE.parent / "js" / "09c-mobile.js").read_text(encoding="utf-8")
+    tab = (HERE.parent / "tabs" / "02-dailysales.html").read_text(encoding="utf-8")
+    assert "function closedLyNote(" in core and "รวมสาขาที่ปิดแล้ว" in core
+    assert 'id="dsClosedNote"' in tab and "closedLyNote(t.ly_hidden)" in home
+    assert "closedLyNote(j.branches_ly_hidden)" in mob
 
 
 def test_the_branch_heat_map_shows_a_closed_branch_only_in_a_span_it_traded_in(client, shops):

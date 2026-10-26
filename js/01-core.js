@@ -3584,6 +3584,15 @@ function branchSelectFill(sel, data) {
   }
 }
 
+// Owner 2026-10-26: a table hides a branch with no sale in the period nor the one before, but its เทียบปีก่อน chain total still holds
+// that branch's sales of last year - the answer's ly_hidden {amount, branches} (rules.hidden_amount) is said once under the table,
+// never as a row. '' when there is none.
+function closedLyNote(h) {
+  if (!h || !(h.amount > 0)) return '';
+  const who = (h.branches || []).join(', ');
+  return `<p class="closed-ly-note text-xs mt-2" style="color:var(--text-muted)">ยอดปีก่อนรวมสาขาที่ปิดแล้ว ฿${fmt(h.amount)}${who ? ` (${esc(who)})` : ''}</p>`;
+}
+
 async function onGroupChange() {
   // Filter the branch dropdown to show only branches in the selected group
   const grp = getGroup();

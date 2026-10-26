@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query
 
 import periods as P
 from core import get_db, ttl_cache
-from rules import VAT_DIVISOR, closed_branches, drop_closed, net_revenue_sum, scope_filter
+from rules import VAT_DIVISOR, closed_branches, drop_closed, hidden_amount, net_revenue_sum, scope_filter
 
 router = APIRouter()
 
@@ -69,8 +69,9 @@ def _sales(con, where, params, s, e, by_branch=False):
 
 def _closed(con, w, branch, base=None):
     """owner 2026-10-26 "Hide closed branches": the branches a by-branch table of window `w` leaves out (rules.closed_branches:
-    marked closed, or no sale in the period on screen nor in its bases); `base` = an explicit comparison window."""
-    wins = [w["cur"], w["prev"] if w.get("has_prev") else None, w["ly"] if w.get("has_ly") else None]
+    no sale in the period on screen nor in the period before - the year-ago one does not count); `base` = an explicit
+    comparison window (the plates view's own base)."""
+    wins = [w["cur"], w["prev"] if w.get("has_prev") else None]
     return closed_branches(con, wins + ([base] if base else []), keep=branch)
 
 
@@ -99,7 +100,7 @@ def period_sales(kind: str = Query("month"), pick: Optional[str] = Query(None),
         cur = _sales(con, where, params, *w["cur"])
         prev = _sales(con, where, params, *w["prev"]) if w["has_prev"] else None
         ly = _sales(con, where, params, *w["ly"]) if w["has_ly"] else None
-        branches = []
+        branches, ly_hidden = [], None
         if by_branch:
             bc = _sales(con, where, params, *w["cur"], by_branch=True)
             bp = _sales(con, where, params, *w["prev"], by_branch=True) if w["has_prev"] else {}
@@ -109,14 +110,19 @@ def period_sales(kind: str = Query("month"), pick: Optional[str] = Query(None),
                 branches.append({"branch": nm, "cur": c, "prev": p, "ly": y,
                                  "rev_prev_pct": P.pct(c["revenue"], p["revenue"]) if p else None,
                                  "rev_ly_pct": P.pct(c["revenue"], y["revenue"]) if y else None})
-            branches = drop_closed(branches, _closed(con, w, branch))
+            _cl = _closed(con, w, branch)
+            ly_hidden = hidden_amount({nm: y["revenue"] for nm, y in bl.items()}, _cl)
+            branches = drop_closed(branches, _cl)
     pct = {}
     if cur:
         for k in ("revenue", "customers", "bills", "rev_per_head", "avg_ticket"):
             pct[k] = {"prev": P.pct(cur[k], prev[k]) if prev else None, "ly": P.pct(cur[k], ly[k]) if ly else None}
         pct["discount_pct"] = {"prev": P.pp(cur["discount_pct"], prev["discount_pct"]) if prev else None,
                                "ly": P.pp(cur["discount_pct"], ly["discount_pct"]) if ly else None}
-    return {"period": P.public(w), "cur": cur, "prev": prev, "ly": ly, "change": pct, "branches": branches}
+    out = {"period": P.public(w), "cur": cur, "prev": prev, "ly": ly, "change": pct, "branches": branches}
+    if ly_hidden:
+        out["ly_hidden"] = ly_hidden          # the year-ago total's sales of branches the table hides (the footnote; absent = none)
+    return out
 
 
 # ── /api/period/headline: the headline figures of one page ─────────────────────────────────────────────────────

@@ -2314,6 +2314,7 @@ function msRenderBranches() {
       <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${right}<span style="${_msMuted}">›</span></span>
     </div>`;
   }).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
+  if (yoy && j.branches_ly_hidden) document.getElementById('msBranches').insertAdjacentHTML('beforeend', closedLyNote(j.branches_ly_hidden));   // owner 2026-10-26
 }
 
 // ── VIEW: ยอดขาย (trend by day / week / month, then peak hours and tender mix) ──
