@@ -42,6 +42,7 @@ from pathlib import Path
 HERE = Path(__file__).parent.resolve()
 ROOT = HERE.parent
 sys.path.insert(0, str(HERE))
+from rules import bill_item_branch_sql  # noqa: E402  (after the path insert)
 
 TAG = "grand_gap_2026-09"
 EFFECTIVE_FROM = "2026-09-01"
@@ -108,7 +109,7 @@ def load(con) -> dict:
     by_code = {s["sku_code"]: s | {"eff": eff.get(s["sku_id"]) or 0} for s in skus}
     qty = {}
     if con.execute("SELECT 1 FROM sqlite_master WHERE name='sale_bill_item'").fetchone():
-        for r in con.execute("SELECT i.sku_id, SUM(i.qty) q FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no=i.receipt_no "
+        for r in con.execute("SELECT i.sku_id, SUM(i.qty) q FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no=i.receipt_no" + bill_item_branch_sql(con) + " "
                              "WHERE t.sold_at >= '2026-09-01' GROUP BY i.sku_id"):
             qty[r[0]] = r[1] or 0
     return {"cats": cats, "eff": eff, "by_code": by_code, "old_by_norm": old_by_norm, "qty": qty}
@@ -166,7 +167,7 @@ def nonfood_share_sept(con) -> dict:
     from core import _NONFOOD_CATEGORY_KEYWORDS
     nf = " AND ".join(f"UPPER(COALESCE(c.name,'')) NOT LIKE '%{kw}%'" for kw in _NONFOOD_CATEGORY_KEYWORDS)
     r = con.execute(f"""SELECT COUNT(*), SUM(CASE WHEN COALESCE(e.recipe_cost,0)=0 THEN 1 ELSE 0 END)
-                        FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no=i.receipt_no
+                        FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no=i.receipt_no{bill_item_branch_sql(con)}
                         JOIN skus s ON s.sku_id=i.sku_id LEFT JOIN categories c ON c.category_id=s.category_id
                         LEFT JOIN sku_effective_cost e ON e.sku_id=s.sku_id
                         WHERE t.sold_at >= '2026-09-01' AND {nf}""").fetchone()

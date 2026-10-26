@@ -64,11 +64,14 @@ function opQuickRange(kind) {
     f.value = _opLastMeta.menu_era_from || dataTo;
     t.value = dataTo;
   } else {                                    // the last COMPLETE month of data
-    const d = new Date(dataTo + 'T00:00:00');
-    const first = new Date(d.getFullYear(), d.getMonth(), 1);
-    const prevLast = new Date(first.getTime() - 86400000);
-    f.value = new Date(prevLast.getFullYear(), prevLast.getMonth(), 1).toISOString().slice(0, 10);
-    t.value = prevLast.toISOString().slice(0, 10);
+    // built as YYYY-MM-DD text: a local-midnight Date through toISOString() is the UTC
+    // date, a day early in Bangkok (gave 08-31..09-29 for September)
+    const [y, m] = String(dataTo).slice(0, 10).split('-').map(Number);
+    const py = m === 1 ? y - 1 : y, pm = m === 1 ? 12 : m - 1;
+    const lastDay = new Date(Date.UTC(py, pm, 0)).getUTCDate();   // day 0 of the next month = last of pm
+    const ym = `${py}-${String(pm).padStart(2, '0')}`;
+    f.value = `${ym}-01`;
+    t.value = `${ym}-${String(lastDay).padStart(2, '0')}`;
   }
   loadOrderPlan(true);
 }

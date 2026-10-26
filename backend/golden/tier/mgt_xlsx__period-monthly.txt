@@ -1,4 +1,4 @@
-attachment; filename=management_monthly_2026-05.xlsx
+attachment; filename="management_monthly_2026-05.xlsx"; filename*=UTF-8''management_monthly_2026-05.xlsx
 ## Summary 29x4 widths={'A': 37.0, 'B': 16.0, 'C': 11.0, 'D': 7.0}
 A1	'Oshinei — Management Summary Report'		b	
 A2	'Report'			

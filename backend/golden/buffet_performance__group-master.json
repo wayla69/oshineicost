@@ -32,17 +32,17 @@
    "BUFFET590": 0.0,
    "BUFFET799": 0.0,
    "BUFFETCHILD": 0.0,
-   "daypart": "lunch",
+   "daypart": "other",
    "total_pax": 0
   },
   {
-   "BUFFET350": 0.0,
+   "BUFFET350": 100.0,
    "BUFFET500": 0.0,
    "BUFFET590": 0.0,
    "BUFFET799": 0.0,
    "BUFFETCHILD": 0.0,
-   "daypart": "other",
-   "total_pax": 0
+   "daypart": "lunch",
+   "total_pax": 24
   }
  ],
  "food_cost_trend": [

@@ -14,10 +14,11 @@ double-import the app.
 from fastapi import HTTPException, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from typing import Optional
+from downloads import attachment
 import json as _json
 import io as _io
 from rules import VAT_DIVISOR, closed_branches, discount_base_row, drop_closed, hidden_amount, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
-from rules import GRAND_MENU_FROM, TIER_EXTRA, month_projection, tier_codes_between, tier_label
+from rules import GRAND_MENU_FROM, bill_item_branch_sql, TIER_EXTRA, month_projection, tier_codes_between, tier_label
 from targets import attainment, target_revenue_total, targets_for_month
 from core import (
     HERE,
@@ -1142,7 +1143,7 @@ def report_cost_head_top60_xlsx(month: Optional[str] = Query(None),
                    scope_label=_CH_SCOPE_LABEL.get(scope, scope))   # openpyxl save() accepts a file-like
     buf.seek(0)
     return _SR(buf, media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-               headers={"Content-Disposition": f"attachment; filename=TOP60_COST_PER_HEAD_{scope}_{month}.xlsx"})
+               headers={"Content-Disposition": attachment(f"TOP60_COST_PER_HEAD_{scope}_{month}.xlsx")})
 
 
 @router.get("/api/reports/cost-head-top60.print")
@@ -1214,7 +1215,7 @@ def pnl_bill_drill(idx: int = Query(...), date: Optional[str] = Query(None),
         if not w:
             return {"idx": idx, "label": label, "bills": [], "stat": {}}
         s, e = (_dt.date.fromisoformat(x) for x in w["cur"])
-        JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+        JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no AND c.branch_id=t.branch_id "
               "JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
@@ -1268,7 +1269,7 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
             return {"focus": None, "summary": {}, "dist": [], "worst": []}
         s, e = (_dt.date.fromisoformat(x) for x in w["cur"])
         focus = w["cur"][1]
-        JN = (f"FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+        JN = (f"FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no AND c.branch_id=t.branch_id "
               f"JOIN branches b ON b.branch_id=t.branch_id "
               f"WHERE {tw} AND date(t.sold_at) BETWEEN :s AND :e AND t.total_inc_vat>0")
         params = {**tp, "s": s.isoformat(), "e": e.isoformat()}
@@ -1361,7 +1362,8 @@ def pnl_bill(date: Optional[str] = Query(None), branch: Optional[str] = Query(No
 
 
 @router.get("/api/reports/pnl-bill-items")
-def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill to drill into")):
+def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill to drill into"),
+                   branch: Optional[str] = Query(None, description="branch name: receipt_no repeats across branches")):
     """Menu lines for a single (loss-making) bill: qty, per-unit cost, ex-VAT revenue,
     COGS and per-line gross profit — so you can see exactly what the customer ordered
     that drove COGS above revenue. Source: sale_bill_item (qty/rev staged by the sync
@@ -1379,13 +1381,15 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
         # rolling per-bill-COGS window); when menu lines exist it is overridden below
         # with the live line sum.
         hdr = con.execute(
-            f"""SELECT t.receipt_no, b.name branch, t.sold_at, t.customer_count cust,
+            f"""SELECT t.receipt_no, t.branch_id, b.name branch, t.sold_at, t.customer_count cust,
                       ROUND({net_revenue_row('t')}) rev, ROUND(c.cogs_bom) cogs,
                       ROUND(COALESCE(t.discount,0) + COALESCE(t.sp_discount,0)) disc
                FROM sales_transaction t
-               LEFT JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
-               JOIN branches b ON b.branch_id=t.branch_id WHERE t.receipt_no=:r""",
-            {"r": receipt}).fetchone()
+               LEFT JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no AND c.branch_id=t.branch_id
+               JOIN branches b ON b.branch_id=t.branch_id
+               WHERE t.receipt_no=:r AND (:br IS NULL OR b.name=:br)
+               ORDER BY t.branch_id LIMIT 1""",
+            {"r": receipt, "br": branch}).fetchone()
         if hdr:
             header = {"receipt": hdr["receipt_no"], "branch": hdr["branch"], "sold_at": hdr["sold_at"],
                       "cust": hdr["cust"] or 0, "rev": hdr["rev"] or 0, "cogs": hdr["cogs"] or 0,
@@ -1396,7 +1400,10 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
             # the bill's lines are priced for the month the bill was SOLD, through the
             # P&L's own effective_unit_cost_sql (released cost from the Grand Menu
             # cut-over on, the old chain before it) - not at today's cost
-            _bill_month = "(SELECT substr(t0.sold_at, 1, 7) FROM sales_transaction t0 WHERE t0.receipt_no = :r LIMIT 1)"
+            _bid = hdr["branch_id"] if hdr else None     # the bill the header shows (receipt_no repeats across branches)
+            _bill_month = ("(SELECT substr(t0.sold_at, 1, 7) FROM sales_transaction t0 WHERE t0.receipt_no = :r"
+                           " AND (:bid IS NULL OR t0.branch_id = :bid) LIMIT 1)")
+            _imatch = bill_item_branch_sql(con, "i", "t1").replace("t1.branch_id", ":bid") if _bid is not None else ""
             _uc = (f"CASE WHEN {tier_code_sql('s.sku_code')} THEN 0 "
                    f"ELSE {effective_unit_cost_sql('i', _bill_month)} END")
             items = [{"menu": (x["description"] or x["sku_code"] or "—").replace("(B) ", "").replace("(A) ", ""),
@@ -1409,8 +1416,9 @@ def pnl_bill_items(receipt: str = Query(..., description="receipt_no of the bill
                                   {_uc} uc,
                                   ROUND(SUM(i.qty) * {_uc}) cogs
                            FROM sale_bill_item i JOIN skus s ON s.sku_id=i.sku_id
-                           WHERE i.receipt_no=:r GROUP BY i.sku_id ORDER BY cogs DESC, rev DESC""",
-                        {"r": receipt}).fetchall()]
+                           WHERE i.receipt_no=:r{_imatch}
+                           GROUP BY i.sku_id ORDER BY cogs DESC, rev DESC""",
+                        {"r": receipt, "bid": _bid}).fetchall()]
             if header and items:
                 # header COGS comes from sale_bill_cogs (sync snapshot) — override with
                 # the live recomputation so the summary tiles match the line table.
@@ -4202,5 +4210,5 @@ def report_management_xlsx(
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": attachment(fname)},
     )

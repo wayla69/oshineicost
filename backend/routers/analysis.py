@@ -11,7 +11,7 @@ registered by main.py right after this one). URLs unchanged.
 from fastapi import HTTPException, Query, Request, Response
 import datetime as _sph_dt
 from typing import Dict, List, Optional
-from rules import avg_ticket_sql, closed_branches, drop_closed, food_cost_status_th, month_window, food_cost_target, month_projection, net_revenue_row, net_revenue_sum
+from rules import avg_ticket_sql, closed_branches, closed_day_clause, drop_closed, food_cost_status_th, month_window, food_cost_target, month_projection, net_revenue_row, net_revenue_sum
 from targets import attainment
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
                    tier_of_price)
@@ -26,7 +26,6 @@ from core import (
     _partial_months,
     _unified_cogs_expr,
     _ym_parts,
-    ex_vat,
     get_db,
     ttl_cache,
 )
@@ -200,7 +199,8 @@ def analysis_gross_profit(
             SELECT b.name AS branch,
                    DATE(st.sold_at) AS day,
                    strftime('%Y-%m', st.sold_at) AS m,
-                   SUM(st.total_inc_vat) AS rev_inc
+                   SUM(st.total_inc_vat) AS rev_inc,
+                   {net_revenue_sum('st')} AS rev_net
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {tx_where}
@@ -209,6 +209,34 @@ def analysis_gross_profit(
             """,
             tx_params,
         ).fetchall()
+
+        # The WHOLE month's bill revenue per (branch, month) — the denominator of a
+        # day's share. Same basis as the day (net of VAT and service charge), and not
+        # cut by date_from/date_to, so a partial window still gets only its days' part.
+        # (Until 2026-10 the share was bill inc-VAT WITH the 5 % service charge over
+        # the SKU view's inc-VAT WITHOUT it: the days of a month added to 104.9 %.)
+        mt_filters = ["b.name != 'ALL'", "st.source = 'Easy'"]
+        mt_params: dict = {}
+        if branch:
+            mt_filters.append("b.name = :branch")
+            mt_params["branch"] = branch
+        mt_months = sorted({r["m"] for r in day_rows})
+        month_net: Dict = {}
+        if mt_months:
+            mt_filters.append("strftime('%Y-%m', st.sold_at) BETWEEN :m0 AND :m1")
+            mt_params.update(m0=mt_months[0], m1=mt_months[-1])
+            for r in con.execute(
+                f"""
+                SELECT b.name AS branch, strftime('%Y-%m', st.sold_at) AS m,
+                       {net_revenue_sum('st')} AS rev_net
+                FROM sales_transaction st
+                JOIN branches b ON b.branch_id = st.branch_id
+                WHERE {" AND ".join(mt_filters)}
+                GROUP BY b.name, strftime('%Y-%m', st.sold_at)
+                """,
+                mt_params,
+            ).fetchall():
+                month_net[(r["branch"], r["m"])] = r["rev_net"] or 0.0
 
     # Build per-(branch, month) totals
     bm_map: Dict = {}
@@ -219,21 +247,17 @@ def analysis_gross_profit(
             "cogs":    r["cogs"]    or 0.0,
         }
 
-    # Aggregate daily-tx revenue per (branch, month) so we can compute share
-    bm_daily_total_inc: Dict = {}
-    for r in day_rows:
-        k = (r["branch"], r["m"])
-        bm_daily_total_inc[k] = bm_daily_total_inc.get(k, 0.0) + (r["rev_inc"] or 0.0)
-
     # Build daily output with prorated COGS
     daily_out = []
     for r in day_rows:
         k = (r["branch"], r["m"])
         bm = bm_map.get(k)
         day_rev_inc = r["rev_inc"] or 0.0
-        if not bm or bm["rev_inc"] <= 0 or bm_daily_total_inc.get(k, 0) <= 0:
-            # No monthly costing info or no monthly revenue — fall back to day_rev_ex with 0 COGS
-            day_rev_ex = ex_vat(day_rev_inc)
+        day_rev_net = r["rev_net"] or 0.0
+        m_net = month_net.get(k, 0.0)
+        if not bm or bm["rev_ex"] <= 0 or m_net <= 0:
+            # No monthly costing info or no monthly revenue — fall back to the day's own net revenue with no COGS
+            day_rev_ex = day_rev_net
             daily_out.append({
                 "branch":       r["branch"],
                 "day":          r["day"],
@@ -245,7 +269,7 @@ def analysis_gross_profit(
                 "margin_pct":   None,
             })
             continue
-        share = day_rev_inc / bm["rev_inc"]   # fraction of full-month revenue — correct proration (fix: C1)
+        share = day_rev_net / m_net   # the day's fraction of its whole month's bill revenue (fix: C1; 2026-10 same basis)
         day_cogs = bm["cogs"] * share
         # Day revenue ex-VAT: use the same share against monthly ex-VAT (keeps GP consistent)
         day_rev_ex = bm["rev_ex"] * share
@@ -268,9 +292,9 @@ def analysis_gross_profit(
         for d in daily_out:
             k = d["day"]
             a = agg.setdefault(k, {"period": k, "revenue": 0.0, "cogs": 0.0, "gross_profit": 0.0})
-            a["revenue"]      += d["revenue"]
-            a["cogs"]         += d["cogs"]
-            a["gross_profit"] += d["gross_profit"]
+            a["revenue"]      += d["revenue"] or 0
+            a["cogs"]         += d["cogs"] or 0            # a day without monthly costing carries None (fix C10)
+            a["gross_profit"] += d["gross_profit"] or 0
         out = []
         for k in sorted(agg.keys()):
             a = agg[k]
@@ -297,9 +321,9 @@ def analysis_gross_profit(
                 continue
             a = agg.setdefault(wk, {"period": wk, "revenue": 0.0, "cogs": 0.0,
                                     "gross_profit": 0.0, "week_start": d["day"]})
-            a["revenue"]      += d["revenue"]
-            a["cogs"]         += d["cogs"]
-            a["gross_profit"] += d["gross_profit"]
+            a["revenue"]      += d["revenue"] or 0
+            a["cogs"]         += d["cogs"] or 0            # a day without monthly costing carries None (fix C10)
+            a["gross_profit"] += d["gross_profit"] or 0
             if d["day"] < a["week_start"]:
                 a["week_start"] = d["day"]
         out = []
@@ -400,6 +424,22 @@ def analysis_compare(
             p,
         ).fetchone()
 
+        # Net sales from the bills themselves (net of VAT AND the 5 % service charge). The
+        # summary's net_sales for 2025-05..2026-06 was ingested from Excel before the charge
+        # came out of revenue (month_summary.py) and still carries it - Jan 2026 read
+        # ฿129.2M against ฿123.1M - so it is only the fallback for a month without bills.
+        txnet = con.execute(
+            f"""
+            SELECT ROUND({net_revenue_sum('st')}, 2) AS net
+            FROM sales_transaction st
+            JOIN branches b ON b.branch_id = st.branch_id
+            WHERE b.name != 'ALL' AND st.source = 'Easy' AND strftime('%Y-%m', st.sold_at) = :period
+              {branch_filter}
+            """,
+            p,
+        ).fetchone()
+        net_sales = txnet["net"] if (txnet and txnet["net"]) else ((sms["net_sales"] or 0) if sms else 0)
+
         # Use SKU/transaction data when available, else fall back to the monthly summary
         revenue     = (rev["revenue"]        or 0) if rev else 0
         revenue_ex  = (rev["revenue_ex_vat"] or 0) if rev else 0
@@ -408,8 +448,8 @@ def analysis_compare(
         avg_ticket  = (tx["avg_ticket"]      or 0) if tx else 0
 
         if revenue == 0 and sms:
-            revenue    = sms["net_sales"]     or 0
-            revenue_ex = sms["net_sales"]     or 0
+            revenue    = net_sales
+            revenue_ex = net_sales
         if tx_count == 0 and sms:
             tx_count   = sms["tx_count_sms"]  or 0
             cust_count = sms["customer_count_sms"] or 0
@@ -423,7 +463,7 @@ def analysis_compare(
             "customer_count": cust_count,
             "avg_ticket":   avg_ticket,
             "gross_sales":  (sms["gross_sales"] or 0) if sms else 0,
-            "net_sales":    (sms["net_sales"]   or 0) if sms else 0,
+            "net_sales":    net_sales,
             "discounts":    (sms["discounts"]   or 0) if sms else 0,
         }
 
@@ -1003,16 +1043,20 @@ def analysis_anomalies(
             _ph = ",".join(f":{k}" for k in _mp)
             maxday = con.execute(
                 f"SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy' "
+                f"AND {closed_day_clause('sold_at')} "
                 f"AND strftime('%Y-%m', sold_at) NOT IN ({_ph})", _mp).fetchone()[0]
         else:
             maxday = con.execute(
-                "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy'").fetchone()[0]
-        day_clause = ""
+                "SELECT MAX(date(sold_at)) FROM sales_transaction WHERE source='Easy' "
+                f"AND {closed_day_clause('sold_at')}").fetchone()[0]
+        # the day still trading never enters a comparison (owner rule 2026-10-02, rules.closed_day_clause):
+        # from noon the newest day is today with a few hours of bills
+        day_clause = f" AND {closed_day_clause('st.sold_at')}"
         if maxday:
             _rg = to_date_ranges(maxday, "month")   # the shared to-date rule (backend/to_date.py)
             if not _rg["complete"]:                 # latest month is partial: every month is clamped to the same days
                 _d = _rg["day"]
-                day_clause = f" AND CAST(strftime('%d', st.sold_at) AS INT) <= {_d}"
+                day_clause += f" AND CAST(strftime('%d', st.sold_at) AS INT) <= {_d}"
                 mtd_note = f" (เทียบวันที่ 1–{_d} เท่ากัน)"
                 mtd_day = _d
 
@@ -1591,25 +1635,24 @@ def analysis_forecast(
         filters.append("b.name = :branch")
         params["branch"] = branch
     _group_filter(filters, params, group)
-    where = "WHERE " + " AND ".join(filters)
+    import periods as _P
     with get_db() as con:
-        latest = con.execute(
-            f"""
-            SELECT MAX(DATE(st.sold_at)) AS d
-            FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id {where}
-            """, params
-        ).fetchone()
-        if not latest or not latest["d"]:
+        # the last FINISHED day with its bills in (periods.anchor = rules.latest_settled_day), never the
+        # day still trading: from noon MAX(sold_at) is today with a few hours of bills, which cut the
+        # run-rate (mtd ÷ days elapsed counted today as a whole day)
+        latest_d = _P.anchor(con, " AND ".join(filters).replace("st.", "t."), params)
+        if not latest_d:
             return {"available": False}
         from datetime import datetime as _dt
         from calendar import monthrange
-        d = _dt.strptime(latest["d"], "%Y-%m-%d")
+        d = _dt.strptime(latest_d, "%Y-%m-%d")
         period = d.strftime("%Y-%m")
         if period in _partial_months(con):
             # current month not fully synced (few branches) -> run-rate is meaningless
             return {"available": False, "reason": "current month not fully synced yet"}
         params["period"] = period
-        filters_p = filters + ["strftime('%Y-%m', st.sold_at) = :period"]
+        params["anchor_day"] = latest_d
+        filters_p = filters + ["strftime('%Y-%m', st.sold_at) = :period", "DATE(st.sold_at) <= :anchor_day"]
         where_p = "WHERE " + " AND ".join(filters_p)
         daily = con.execute(
             f"""
@@ -1626,7 +1669,7 @@ def analysis_forecast(
         mtd = sum(revs)
         avg_daily = mtd / max(1, days_elapsed)
         # DV1: the one month-end projection (rules.month_projection, weekday-fair) - the management summary's figure
-        mp = month_projection(con, " AND ".join(filters), {k: v for k, v in params.items() if k != "period"},
+        mp = month_projection(con, " AND ".join(filters), {k: v for k, v in params.items() if k not in ("period", "anchor_day")},
                               d.date().replace(day=1), days_elapsed, days_in_month, mtd)
         projected = mp["projected"] if mp["projected"] is not None else avg_daily * days_in_month
         # DV1: % of target like for like (targets.attainment) - the management summary's figure
@@ -1675,28 +1718,26 @@ def analysis_forecast_branches(group: Optional[str] = Query(None)):
     params: dict = {}
     _group_filter(filters, params, group)
     where = "WHERE " + " AND ".join(filters)
+    import periods as _P
     with get_db() as con:
-        latest = con.execute(
-            f"""SELECT MAX(DATE(st.sold_at)) AS d
-                FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id {where}""",
-            params,
-        ).fetchone()
-        if not latest or not latest["d"]:
+        # the last finished day (periods.anchor), never the day still trading - as analysis_forecast
+        latest_d = _P.anchor(con, " AND ".join(filters).replace("st.", "t."), params)
+        if not latest_d:
             return {"available": False}
         from datetime import datetime as _dt
         from calendar import monthrange
-        d = _dt.strptime(latest["d"], "%Y-%m-%d")
+        d = _dt.strptime(latest_d, "%Y-%m-%d")
         period = d.strftime("%Y-%m")
         days_in_month = monthrange(d.year, d.month)[1]
         days_elapsed = d.day
         py, pm = (d.year - 1, 12) if d.month == 1 else (d.year, d.month - 1)
         prior = f"{py:04d}-{pm:02d}"
 
-        params_cur = dict(params); params_cur["period"] = period
+        params_cur = dict(params); params_cur["period"] = period; params_cur["anchor_day"] = latest_d
         cur = con.execute(
             f"""SELECT b.name AS branch, {net_revenue_sum('st')} AS mtd
                 FROM sales_transaction st JOIN branches b ON b.branch_id = st.branch_id
-                {where} AND strftime('%Y-%m', st.sold_at) = :period
+                {where} AND strftime('%Y-%m', st.sold_at) = :period AND DATE(st.sold_at) <= :anchor_day
                 GROUP BY b.name""", params_cur,
         ).fetchall()
         params_pri = dict(params); params_pri["period"] = prior
