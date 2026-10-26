@@ -78,7 +78,8 @@ async function open(browser, opts, mode, scheme, slug) {
   }
   await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll, #hvmCompact'), null, { timeout: 60_000 });
   // owner 2026-10-26: a phone opens on the compact list (hv-phone-compact.spec.js); these cases read the full list behind ดูทั้งหมด
-  if (opts.isMobile && await page.locator('#hvmCompact').count()) { await page.locator('.hvc-all').click(); await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll'), null, { timeout: 60_000 }); }
+  if (opts.isMobile && await page.locator('#hvmCompact').count()) { await page.locator('.hvc-all').click(); await page.waitForFunction(() => !!document.querySelector('#hvmTable, #hvmAll'), null, { timeout: 60_000 });
+    await page.waitForTimeout(600); await page.evaluate(() => { const c = document.querySelector('.content-area'); if (c) c.scrollTop = 0; window.scrollTo(0, 0); }); }
   await page.waitForTimeout(700);                 // the fit frame / the cards settle
   return { ctx, page, errors };
 }

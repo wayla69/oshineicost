@@ -2435,6 +2435,8 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on .topbar-scope > * { order: 3; }
   body.ph-on .topbar-scope > .page-title { order: 0; flex: 1 1 0%; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; overflow-wrap: normal; font-size: 15px; }
   body.ph-on .topbar-actions { order: 4; }
+  /* the chips' tap areas: 44 px from their padding box (the 1 px border inside the 28 px drawn chip) */
+  body.ph-on .gp-chips .gp-range-chip::after, body.ph-on .gp-chips .gp-branch-chip::after { top: -9px; bottom: -9px; }
   body.ph-on #dataCoverageNote { font-size: 12px !important; padding: 2px 8px !important; }
   body.ph-on #dataCoverageNote .dcn-x { display: none; }
   body.ph-on .top-bar .tb-fold { align-self: center; margin-left: 0; min-width: 44px; min-height: 44px; padding: 0 8px !important; }
