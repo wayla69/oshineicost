@@ -300,8 +300,10 @@ for (const [name, opts] of [['desktop', DESK], ['390', PHONE]]) {
     expect([u.searchParams.get('kind'), u.searchParams.get('branch'), u.searchParams.get('base_from')]).toEqual(['week', br, null]);
     // a week pair keeps the branch; a branch change keeps the pair
     await page.locator('#hvpWa').selectOption('2026-10-12');
-    u = lastPlates(urls);
-    expect([u.searchParams.get('period'), u.searchParams.get('date_from'), u.searchParams.get('branch')]).toEqual(['range', '2026-10-12', br]);
+    // the request is observed asynchronously: wait for it (a page without the in-browser Tailwind runtime fires it sooner
+    // than the request event reaches the test)
+    await expect.poll(() => { const v = lastPlates(urls); return [v.searchParams.get('period'), v.searchParams.get('date_from'), v.searchParams.get('branch')]; },
+      { timeout: 30_000 }).toEqual(['range', '2026-10-12', br]);
     n0 = urls.length;
     await page.evaluate(() => { const s = /** @type {HTMLSelectElement} */ (document.getElementById('selBranch')); s.value = ''; s.dispatchEvent(new Event('change')); });
     await expect.poll(() => urls.slice(n0).some(x => x.includes('ingredient-groups-plates') && !new URL(x).searchParams.get('branch')), { timeout: 30_000 }).toBe(true);
