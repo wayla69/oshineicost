@@ -155,6 +155,36 @@ CAUSES = ("customers", "plates_per_head", "cost_per_plate")
 CAUSE_TH = {"customers": "ลูกค้า", "plates_per_head": "กินต่อหัว", "cost_per_plate": "ต้นทุนต่อจาน"}
 
 
+# The page floors the cause is read against (the JS twins: HVM_FLOOR / HVP_FLOOR in js/20-hvmonitor.js): a net change under the
+# floor either way is ~0, so no direction can be read from it.
+NET_FLOOR_BAHT = 1000.0
+NET_FLOOR_PLATES = 20.0
+
+
+def net_driver(parts: Dict[str, Optional[float]], net: Optional[float] = None, floor: float = 0.0) -> Optional[str]:
+    """THE one rule for the cause of a change (owner 2026-10-26): the biggest driver of the NET change, not the biggest increase.
+    Among the parts, the one with the same sign as the net change and the largest absolute value; when the net is ~0 (|net| <= floor)
+    or no part shares its sign, the largest absolute part. A tie goes to the part listed first (dict order). parts = {key: value},
+    None values are left out; net defaults to the sum of the parts. -> the key, or None without a part.
+    e.g. แซลมอน 1-24 ต.ค. 69: ราคา +646.9K · กิน -501.0K · ลูกค้า -545.8K, net -399.9K -> customers (not cost_per_plate).
+    Used by split / split_plates (High Value Product Monitor, ร้านของฉัน), menu_board.impact (ปรับเมนู) and the management
+    report's cost-riser line; the browser reads the key from the payload ("main" / "cause") and never picks its own."""
+    items = [(k, float(v)) for k, v in parts.items() if v is not None]
+    if not items:
+        return None
+    if net is None:
+        net = sum(v for _, v in items)
+    if abs(net) > floor:
+        same = [(k, v) for k, v in items if v * net > 0]
+        if same:
+            items = same
+    best = items[0]
+    for kv in items[1:]:
+        if abs(kv[1]) > abs(best[1]):
+            best = kv
+    return best[0]
+
+
 def _logmean(a: float, b: float) -> float:
     """The logarithmic mean L(a, b) = (a - b) / (ln a - ln b); L(a, a) = a."""
     if abs(a - b) <= 1e-9 * max(abs(a), abs(b), 1.0):
@@ -166,6 +196,7 @@ def split(cur: Optional[Dict], base: Optional[Dict]) -> Dict:
     """Why the group cost moved (owner 2026-10-25): cost = customers x plates / head x cost / plate, so its change splits into
     three baht parts that add up to the whole change (LMDI: part_i = L(cost_now, cost_base) x ln(x_i now / x_i base)).
     Plates here are the costed plates (the same plates cost / plate is worked on), so the identity is exact.
+    main = the cause (net_driver: the largest part in the direction of the net change).
     -> {total, total_pct, customers, plates_per_head, cost_per_plate, main} or {.., reason} without a base."""
     none = {"total": None, "total_pct": None, "customers": None, "plates_per_head": None, "cost_per_plate": None, "main": None}
     if not cur or not base:
@@ -184,7 +215,7 @@ def split(cur: Optional[Dict], base: Optional[Dict]) -> Dict:
     lm = _logmean(c1, c0)
     parts = {k: lm * math.log(x1[k] / x0[k]) for k in CAUSES}
     total = c1 - c0
-    main = max(CAUSES, key=lambda k: abs(parts[k])) if any(abs(v) > 0.005 for v in parts.values()) else None
+    main = net_driver(parts, total, NET_FLOOR_BAHT) if any(abs(v) > 0.005 for v in parts.values()) else None
     return {"total": round(total, 2), "total_pct": P.pct(c1, c0), **{k: round(v, 2) for k, v in parts.items()}, "main": main}
 
 
@@ -325,7 +356,7 @@ PLATE_CAUSES = ("customers", "plates_per_head")
 
 def split_plates(p1: float, n1: float, p0: float, n0: float) -> Dict:
     """Why the plates of a group moved: plates = customers x plates per head, so the change splits into two parts in plates that add
-    up to the whole change (LMDI: part_i = L(p1, p0) x ln(x_i now / x_i base)). main = the larger part (None when both are ~0).
+    up to the whole change (LMDI: part_i = L(p1, p0) x ln(x_i now / x_i base)). main = the cause (net_driver; None when both parts are ~0).
     -> {total, total_pct, customers, plates_per_head, main} (+ reason when it cannot be split)."""
     out = {"total": None, "total_pct": None, "customers": None, "plates_per_head": None, "main": None}
     if min(p1, p0, n1, n0) <= 0:
@@ -336,7 +367,7 @@ def split_plates(p1: float, n1: float, p0: float, n0: float) -> Dict:
         return out
     lm = _logmean(p1, p0)
     parts = {"customers": lm * math.log(n1 / n0), "plates_per_head": lm * math.log((p1 / n1) / (p0 / n0))}
-    main = max(PLATE_CAUSES, key=lambda k: abs(parts[k])) if any(abs(v) > 0.05 for v in parts.values()) else None
+    main = net_driver(parts, p1 - p0, NET_FLOOR_PLATES) if any(abs(v) > 0.05 for v in parts.values()) else None
     return {"total": round(p1 - p0, 1), "total_pct": P.pct(p1, p0), **{k: round(v, 1) for k, v in parts.items()}, "main": main}
 
 

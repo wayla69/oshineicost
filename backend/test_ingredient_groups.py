@@ -242,3 +242,77 @@ def test_no_base_gives_no_parts_and_a_reason():
     assert s["total"] is None and s["main"] is None and s["reason"]
     z = IG.split(_cell(100, 2, 10), {"cost": 0, "_cust": 100, "_costed": 0})
     assert z["customers"] is None and z["total"] == 2000 and z["reason"] and z["total_pct"] is None
+
+
+# ── the cause = the biggest driver of the NET change (owner 2026-10-26, IG.net_driver) ─────────────────────────────────
+SALMON_PARTS = {"customers": -545800.0, "plates_per_head": -501000.0, "cost_per_plate": 646900.0}   # แซลมอน 1-24 ต.ค. 69, net -399.9K
+
+
+def test_net_driver_names_the_part_that_drove_the_net_not_the_biggest_increase():
+    assert IG.net_driver(SALMON_PARTS, -399900.0, IG.NET_FLOOR_BAHT) == "customers"
+    assert IG.net_driver(SALMON_PARTS) == "customers"                  # the net defaults to the sum of the parts
+
+
+def test_net_driver_all_positive_is_the_largest():
+    assert IG.net_driver({"customers": 100.0, "plates_per_head": 3000.0, "cost_per_plate": 2000.0}) == "plates_per_head"
+    assert IG.net_driver({"customers": -100.0, "plates_per_head": -3000.0, "cost_per_plate": -4000.0}) == "cost_per_plate"
+
+
+def test_net_driver_net_about_zero_falls_back_to_the_largest_absolute_part():
+    # net +500 is under the page's ฿1,000 floor: no direction, so the largest part either way
+    parts = {"customers": -29500.0, "plates_per_head": -10000.0, "cost_per_plate": 40000.0}
+    assert IG.net_driver(parts, 500.0, IG.NET_FLOOR_BAHT) == "cost_per_plate"
+    parts = {"customers": 30000.0, "plates_per_head": -40000.0, "cost_per_plate": 10400.0}
+    assert IG.net_driver(parts, 400.0, IG.NET_FLOOR_BAHT) == "plates_per_head"
+    assert IG.net_driver(parts, 400.0) == "customers"                  # with no floor the +400 has a direction
+
+
+def test_net_driver_no_part_with_the_net_sign_falls_back_to_the_largest_absolute_part():
+    assert IG.net_driver({"a": -10.0, "b": -30.0}, 50.0) == "b"
+
+
+def test_net_driver_a_tie_goes_to_the_part_listed_first():
+    assert IG.net_driver({"customers": 100.0, "plates_per_head": -50.0, "cost_per_plate": 100.0}, 150.0) == "customers"
+    assert IG.net_driver({"cost_per_plate": 100.0, "customers": 100.0}, 200.0) == "cost_per_plate"
+
+
+def test_net_driver_skips_missing_parts_and_none_without_one():
+    assert IG.net_driver({"customers": None, "plates_per_head": -5.0}, -5.0) == "plates_per_head"
+    assert IG.net_driver({}, 0.0) is None and IG.net_driver({"customers": None}) is None
+
+
+def _salmon_cells():
+    """A current and a base cell whose LMDI parts are the salmon example (the cost fell, the price rose)."""
+    import math
+    n0, h0, p0 = 100000.0, 2.0, 15.0
+    c0 = n0 * h0 * p0
+    c1 = c0 - 399900.0
+    lm = (c1 - c0) / (math.log(c1) - math.log(c0))
+    r = {k: math.exp(v / lm) for k, v in SALMON_PARTS.items()}
+    n1, h1 = n0 * r["customers"], h0 * r["plates_per_head"]
+    return {"cost": c1, "_cust": n1, "_costed": n1 * h1}, {"cost": c0, "_cust": n0, "_costed": n0 * h0}
+
+
+def test_split_names_customers_when_the_cost_fell_though_the_price_rose():
+    s = IG.split(*_salmon_cells())
+    assert s["total"] == pytest.approx(-399900, abs=1) and s["cost_per_plate"] == pytest.approx(646900, abs=1)
+    assert s["customers"] == pytest.approx(-545800, abs=1) and s["main"] == "customers"
+
+
+def test_the_payload_cause_follows_the_net_driver(ig, monkeypatch):
+    cur, base = _salmon_cells()
+
+    def data(c):
+        return {"cust": {"BranchA": c["_cust"]}, "food": {"BranchA": c["cost"] * 1.5},
+                "dish": {("BranchA", 10): (c["_costed"], c["cost"], c["_costed"])}}
+    monkeypatch.setattr(IG, "_windows_data", lambda *a, **k: (None, data(cur), data(base), None, {}))
+    main.invalidate_cache()
+    try:
+        d = ig.get("/api/cost/ingredient-groups", params={"kind": "month"}).json()
+    finally:
+        main.invalidate_cache()
+    assert d["branches"]
+    for row in [d["chain"]] + d["branches"]:
+        c = row["cells"]["salmon"]["cause"]["prev"]
+        assert c["cost_per_plate"] > 0 > c["total"] and c["main"] == "customers"
+        assert c["main"] == IG.net_driver({k: c[k] for k in IG.CAUSES}, c["total"], IG.NET_FLOOR_BAHT)

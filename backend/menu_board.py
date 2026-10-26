@@ -214,7 +214,7 @@ def impact(q1: float, c1: float, k1: float, n1: float, q0: float, c0: float, k0:
     """The baht a dish added to (or took from) the current window's cost through its cost PER HEAD.
     plates q, cost c, costed plates k, customers n; 1 = now, 0 = the base.
     -> {impact, cause, eat, price} (eat / price = the กินต่อหัว / ราคาต่อจาน parts; price None when unknown) or None.
-    cause: 'eat' | 'price' (the larger part in the impact's direction), 'nobase' (not sold in the base), 'gone' (not sold now)."""
+    cause: 'eat' | 'price' (IG.net_driver: the larger part in the impact's direction), 'nobase' (not sold in the base), 'gone' (not sold now)."""
     if n1 <= 0 or n0 <= 0:
         return None
     cpp1 = c1 / k1 if k1 > 0 else None
@@ -223,7 +223,7 @@ def impact(q1: float, c1: float, k1: float, n1: float, q0: float, c0: float, k0:
         s = IG.split({"cost": c1, "_cust": n1, "_costed": k1}, {"cost": c0, "_cust": n0, "_costed": k0})
         eat, price = float(s["plates_per_head"] or 0), float(s["cost_per_plate"] or 0)
         tot = eat + price
-        cause = ("eat" if eat >= price else "price") if tot >= 0 else ("eat" if eat <= price else "price")
+        cause = IG.net_driver({"eat": eat, "price": price}, tot)          # the one cause rule (ingredient_groups.net_driver)
         return {"impact": tot, "cause": cause, "eat": eat, "price": price}
     if q0 <= 0 < q1:
         return {"impact": c1, "cause": "nobase", "eat": c1, "price": None} if cpp1 else None

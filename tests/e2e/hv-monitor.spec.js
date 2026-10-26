@@ -22,7 +22,9 @@ function cell(cust, pph, cpp, base) {
   if (!b) return Object.assign(c, { prev: null, ly: null, change: { prev: {}, ly: {} }, cause: { prev: { total: null, reason: 'ไม่มีข้อมูลช่วงที่เทียบ' }, ly: { total: null } } });
   const pc = b.cust * b.pph * b.cpp, L = Math.abs(cost - pc) < 1e-9 ? cost : (cost - pc) / (Math.log(cost) - Math.log(pc));
   const parts = { customers: L * Math.log(cust / b.cust), plates_per_head: L * Math.log(pph / b.pph), cost_per_plate: L * Math.log(cpp / b.cpp) };
-  const main = Object.keys(parts).sort((x, y) => Math.abs(parts[y]) - Math.abs(parts[x]))[0];
+  // the server's cause rule (ingredient_groups.net_driver): the largest part in the direction of the net change
+  const net = cost - pc, same = Object.keys(parts).filter(k => parts[k] * net > 0);
+  const main = (Math.abs(net) > 1000 && same.length ? same : Object.keys(parts)).sort((x, y) => Math.abs(parts[y]) - Math.abs(parts[x]))[0];
   return Object.assign(c, {
     prev: { cost_per_head: pc / b.cust, plates_per_head: b.pph, cost_per_plate: b.cpp, share_of_food_cost: 28, plates: b.cust * b.pph, uncosted_plates: 1, cost: pc },
     ly: null,
@@ -54,7 +56,7 @@ async function login(ctx) {
   }
 }
 
-async function open(browser, opts, mode, scheme, slug) {
+async function open(browser, opts, mode, scheme, slug, ansOf) {
   const ctx = await browser.newContext({ ...opts, colorScheme: scheme });
   await login(ctx);
   await ctx.addInitScript(([m, s, d]) => {
@@ -62,7 +64,7 @@ async function open(browser, opts, mode, scheme, slug) {
   }, [mode, slug, scheme === 'dark']);
   if (!LIVE) {
     await ctx.route('**/api/cost/ingredient-groups/menus?*', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(MENUS) }));
-    await ctx.route(/\/api\/cost\/ingredient-groups\?/, r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(answer()) }));
+    await ctx.route(/\/api\/cost\/ingredient-groups\?/, r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify((ansOf || answer)()) }));
   }
   const page = await ctx.newPage();
   const errors = [];
@@ -229,4 +231,38 @@ for (const [name, opts, mode] of CASES) {
       await ctx.close();
     });
   }
+}
+
+// owner 2026-10-26 · the cause = the biggest driver of the NET change (backend ingredient_groups.net_driver), not the biggest increase:
+// แซลมอน ทั้งเครือ −฿399.9K = ราคา +฿646.9K · กิน −฿501.0K · ลูกค้า −฿545.8K reads ลูกค้า. The page reads `main` from the payload and picks
+// no cause of its own: the row, the table, the sheet's bold part and the answer agree.
+function netDownAnswer() {
+  const a = answer(), c = a.chain.cells.salmon.cause.prev;
+  Object.assign(c, { total: -399900, total_pct: -12.3, cost_per_plate: 646900, plates_per_head: -501000, customers: -545800, main: 'customers' });
+  return a;
+}
+for (const [name, opts, mode] of [['desktop', {}, 'fit'], ['390 compact', PHONE, 'fit']]) {
+  test(`hvmonitor · ${name}: price up but cost down names ลูกค้า`, async ({ browser }) => {
+    test.skip(LIVE, 'a mocked case');
+    const { ctx, page, errors } = await open(browser, opts, mode, 'light', 'salmon', netDownAnswer);
+    if (opts.isMobile) {
+      await page.evaluate(() => hvmFull(false));
+      await page.waitForFunction(() => !!document.querySelector('#hvmCompact .hvc-chain'));
+      await expect(page.locator('#hvmCompact .hvc-chain .hvc-v')).toHaveText('−฿399.9K');
+      await expect(page.locator('#hvmCompact .hvc-chain .hvc-w')).toHaveText('ลูกค้า');
+      await page.evaluate(() => hvmFull(true));
+      await page.waitForFunction(() => !!document.getElementById('hvmTable'));
+    }
+    const ls = await page.evaluate(() => [...document.getElementById('hvmTable').tBodies[0].rows[0].cells[1].querySelectorAll('[data-ph-line]')].map(e => e.textContent.trim()));
+    expect(ls).toEqual(['−฿399.9K', 'ลูกค้า −฿545.8K']);
+    if (!opts.isMobile) await expect(page.locator('#hvmAnswer')).toContainText('ราคา +฿646.9K · กิน −฿501.0K · ลูกค้า −฿545.8K');
+    await page.evaluate(() => /** @type {HTMLElement} */ (document.querySelector('#hvmTable tbody tr:nth-child(1) td')).click());
+    if (opts.isMobile) await page.locator('#msSheet .ph-rs-act button', { hasText: 'เปิดรายละเอียด' }).click();
+    const sheet = page.locator('#uiHelpDlg.hvm-sheet');
+    await expect(sheet.locator('.hvm-cause-main')).toHaveText('สาเหตุหลัก: ลูกค้า');
+    await expect(sheet.locator('.hvm-cause-drv')).toHaveCount(1);
+    await expect(sheet.locator('.hvm-cause-drv')).toContainText('ลูกค้า');
+    expect(errors).toEqual([]);
+    await ctx.close();
+  });
 }

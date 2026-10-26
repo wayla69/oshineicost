@@ -357,12 +357,14 @@ function hvmCauseHtml(cell) {
   if (c.total == null) return `<span class="hvm-muted" title="${esc(c.reason || _hvmVs())}">—</span>`;
   const keys = ['customers', 'plates_per_head', 'cost_per_plate'];
   const hasParts = keys.every(k => c[k] != null);
-  const maxPos = hasParts ? keys.filter(k => c[k] > 0).sort((a, b) => c[b] - c[a])[0] : null;
+  // the bold part = the cause the payload names (main = backend ingredient_groups.net_driver: the largest part in the direction of the
+  // net change), never a largest increase picked here - the sheet, the row and the answer name one cause (owner 2026-10-26)
+  const drv = hasParts ? c.main : null;
   const ink = c.total > 0 ? 'var(--bad-ink)' : c.total < 0 ? 'var(--good-ink)' : 'var(--text-secondary)';
   const arrow = c.total > 0 ? '▲' : c.total < 0 ? '▼' : '';
   let h = c.main ? `<div class="hvm-cause-main">สาเหตุหลัก: ${HVM_CAUSE[c.main]}</div>` : '';
   h += `<div class="hvm-cause-tot" style="color:${ink}" title="${esc(_hvmVs())}">${arrow} ${_hvmSigned(c.total).replace(/^[+−]/, '')}${c.total_pct != null ? ` (${Math.abs(c.total_pct).toFixed(1)}%)` : ''}</div>`;
-  if (hasParts) h += keys.map(k => `<div class="hvm-cause-part${k === maxPos ? ' hvm-cause-up' : ''}">${HVM_CAUSE[k]} ${_hvmSigned(c[k])}</div>`).join('');
+  if (hasParts) h += keys.map(k => `<div class="hvm-cause-part${k === drv ? ` hvm-cause-drv" style="color:${_hvmInk(c[k], k === 'customers')}` : ''}">${HVM_CAUSE[k]} ${_hvmSigned(c[k])}</div>`).join('');
   else if (c.reason) h += `<div class="hvm-cause-part hvm-muted">${esc(c.reason)}</div>`;
   return h;
 }
