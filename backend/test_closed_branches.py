@@ -69,6 +69,18 @@ def test_no_window_or_an_empty_one_counts_only_the_flag(shops):
     assert rules.closed_branches(shops, [None, ("", "")]) == {CLOSED}
 
 
+def test_a_slim_database_without_the_flag_or_the_month_table_reads_what_is_there():
+    import rules
+    con = sqlite3.connect(":memory:")
+    con.executescript("CREATE TABLE branches(branch_id INTEGER PRIMARY KEY, name TEXT, branch_type TEXT);"
+                      "INSERT INTO branches VALUES (1,'A','master'),(2,'B','master');"
+                      "CREATE TABLE sales_transaction(branch_id INTEGER, sold_at TEXT, source TEXT);"
+                      "INSERT INTO sales_transaction VALUES (1,'2031-02-03T12:00:00','Easy');")
+    assert rules.closed_branches(con) == set()
+    assert rules.closed_branches(con, ["2031-02"]) == {"B"}
+    assert rules.picker_closed_branches(con) == set()                    # B has no history: a new branch stays
+
+
 def test_drop_closed_keeps_order_and_reads_names_ids_or_a_key():
     import rules
     rows = [{"branch": "A", "id": 1}, {"branch": "B", "id": 2}, {"branch": "C", "id": 3}]

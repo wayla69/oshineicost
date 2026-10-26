@@ -455,21 +455,31 @@ def _win_bounds(w):
     return a, b
 
 
+def _columns(con, table: str) -> set:
+    """The columns of `table` (empty when it does not exist): a slim database (a report generator's, a unit test's)
+    may hold no `active` column or no month table, and the rule then reads what is there."""
+    return {r[1] for r in con.execute(f"PRAGMA table_info({table})").fetchall()}
+
+
 def _traded_ids(con, windows) -> set:
     """branch_ids with a sale in any of the windows: a bill (sales_transaction) on a day inside it, or a
     month row (sales_sku_monthly) for a month it touches - the months before the bill table starts."""
     out = set()
+    has_tx = "sold_at" in _columns(con, "sales_transaction")
+    has_month = "period_month" in _columns(con, "sales_sku_monthly")
     for w in windows:
         if not w or (not isinstance(w, str) and not (w[0] and w[1])):
             continue
         a, b = _win_bounds(w)
-        out |= {r[0] for r in con.execute(
-            "SELECT b.branch_id FROM branches b WHERE EXISTS (SELECT 1 FROM sales_transaction t "
-            "WHERE t.branch_id=b.branch_id AND t.sold_at >= :a AND t.sold_at < date(:b,'+1 day'))",
-            {"a": a, "b": b})}
-        out |= {r[0] for r in con.execute(
-            "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month BETWEEN :a AND :b",
-            {"a": a[:7], "b": b[:7]})}
+        if has_tx:
+            out |= {r[0] for r in con.execute(
+                "SELECT b.branch_id FROM branches b WHERE EXISTS (SELECT 1 FROM sales_transaction t "
+                "WHERE t.branch_id=b.branch_id AND t.sold_at >= :a AND t.sold_at < date(:b,'+1 day'))",
+                {"a": a, "b": b})}
+        if has_month:
+            out |= {r[0] for r in con.execute(
+                "SELECT DISTINCT branch_id FROM sales_sku_monthly WHERE period_month BETWEEN :a AND :b",
+                {"a": a[:7], "b": b[:7]})}
     return out
 
 
@@ -481,7 +491,8 @@ def closed_branches(con, windows=(), *, keep: Optional[str] = None, ids: bool = 
     windows (a period before the data, a blank window) only the flag counts - a table is never emptied
     by this rule. `keep` = the branch the page is filtered to (its branch= / the picker's closed-branch fold):
     asked for by name, it is never left out."""
-    rows = con.execute("SELECT branch_id, name, COALESCE(active,1) AS active FROM branches WHERE name != 'ALL'").fetchall()
+    act = "COALESCE(active,1)" if "active" in _columns(con, "branches") else "1"
+    rows = con.execute(f"SELECT branch_id, name, {act} AS active FROM branches WHERE name != 'ALL'").fetchall()
     traded = _traded_ids(con, [w for w in (windows or ()) if w])
     out = set()
     for bid, name, active in rows:
@@ -515,15 +526,19 @@ def picker_closed_branches(con) -> set:
     the past but none in the last PICKER_IDLE_DAYS days of the data (anchored on the chain's newest bill, not on
     today, so an old copy of the database keeps its list). A branch with no sales at all yet (a new one being set
     up) stays in the picker."""
+    flagged = closed_branches(con)
+    if "sold_at" not in _columns(con, "sales_transaction"):
+        return flagged
     last = con.execute("SELECT MAX(sold_at) FROM sales_transaction").fetchone()[0]
-    flagged = {r[0] for r in con.execute("SELECT name FROM branches WHERE name != 'ALL' AND COALESCE(active,1)=0")}
     if not last:
         return flagged
     a = con.execute("SELECT date(:d, :off)", {"d": last[:10], "off": f"-{PICKER_IDLE_DAYS - 1} days"}).fetchone()[0]
     idle = closed_branches(con, [(a, last[:10])])
+    month_rows = ("OR EXISTS (SELECT 1 FROM sales_sku_monthly m WHERE m.branch_id=b.branch_id)"
+                  if "branch_id" in _columns(con, "sales_sku_monthly") else "")
     ever = {r[0] for r in con.execute(
         "SELECT b.name FROM branches b WHERE EXISTS (SELECT 1 FROM sales_transaction t WHERE t.branch_id=b.branch_id) "
-        "OR EXISTS (SELECT 1 FROM sales_sku_monthly m WHERE m.branch_id=b.branch_id)")}
+        + month_rows)}
     return flagged | (idle & ever)
 
 
