@@ -167,7 +167,7 @@ def test_the_note_names_the_next_sync():
 def test_http_dish_cost_writes_flush_without_rebuild_and_carry_the_sync_line(client, web, monkeypatch):
     import routers.bom_center as rb
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
     calls = []
     monkeypatch.setattr(rb, "invalidate_cache", lambda *a, **k: calls.append((a, k)))
@@ -307,7 +307,7 @@ def test_an_empty_live_answer_keeps_the_local_cost_list(tmp_path, monkeypatch):
     D.ensure(sq)
     sq.execute("INSERT INTO bc_sku_cost_list(sku_id, month, unit_cost, note, imported_by, imported_at) VALUES(77,'2026-10',11,NULL,'a','x')")
     sq.commit()
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_SYNC_ON_LIVE", raising=False)
 
     class _Resp:

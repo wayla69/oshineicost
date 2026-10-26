@@ -102,7 +102,7 @@ def test_pull_from_live_maps_by_code_and_never_raises(tmp_path, monkeypatch):
     sq = sqlite3.connect(str(tmp_path / "staging.db"))
     sq.executescript("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT);"
                      "INSERT INTO skus VALUES (77, 'OTHBFSSM00020');")
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     seen = []
 
     class _Resp:
@@ -131,7 +131,7 @@ def test_admin_export_is_token_gated(client, monkeypatch):
     H = {"X-Seed-Token": "tok"}
     monkeypatch.delenv("OSHINEI_SEED_TOKEN", raising=False)
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     assert client.get("/api/_admin/bc-sku-cost-month", headers={"X-Seed-Token": "wrong"}).status_code == 404
     r = client.get("/api/_admin/bc-sku-cost-month", headers=H)
     assert r.status_code == 200 and r.json()["columns"][0] == "sku_code"

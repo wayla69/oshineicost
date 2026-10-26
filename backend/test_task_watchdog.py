@@ -326,7 +326,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(core, "DB_PATH", tmp_path / "t.db")
     monkeypatch.setattr(main, "DB_PATH", tmp_path / "t.db")
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "owner:" + "ab" * 32)
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:" + "ab" * 32)
     return TestClient(main.app)
 
 

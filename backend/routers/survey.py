@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import HTMLResponse
 
 from feedback_host import branch_rows, get_db, require_write_token, scope_branch
+import auth as _auth
 from routers.feedback import _ensure as _ensure_feedback, _thai_today, insert_reviews
 
 router = APIRouter()
@@ -83,14 +84,45 @@ def _rate_ok(key: str, limit: int) -> bool:
     if len(q) >= limit:
         return False
     q.append(now)
+    if len(_HITS) > 20000:                      # keep the table bounded: drop keys with no hit in the window
+        for k in [k for k, d in _HITS.items() if not d or d[-1] < now - 3600]:
+            _HITS.pop(k, None)
     return True
 
 
 def _client_ip(request: Request) -> str:
-    fwd = request.headers.get("x-forwarded-for") or ""
-    if fwd:
-        return fwd.split(",")[0].strip()
-    return request.client.host if request.client else "?"
+    # Fly-Client-IP (set by Fly's proxy), else the socket peer - never the first
+    # X-Forwarded-For hop, which the guest's own browser/script can write to dodge RATE_PER_IP
+    return _auth.client_ip(request)
+
+
+_URL_BAD_CHARS = set("\"'<>\\`")
+
+
+def _is_https_url(v) -> bool:
+    """True for an absolute https:// link with a host and nothing that could break out
+    of an href (whitespace, quotes, angle brackets, backslashes)."""
+    from urllib.parse import urlsplit
+    s = str(v or "").strip()
+    if not s or any(c.isspace() or c in _URL_BAD_CHARS for c in s):
+        return False
+    try:
+        u = urlsplit(s)
+    except ValueError:
+        return False
+    return u.scheme.lower() == "https" and bool(u.netloc)
+
+
+def _review_url_or_400(v):
+    """The google_review_url to store: None for blank, the https:// link as typed, 400
+    for anything else (a javascript: / data: / http: link would be rendered into the
+    guest's thank-you <a href> on the public survey page)."""
+    s = str(v or "").strip()[:500]
+    if not s:
+        return None
+    if not _is_https_url(s):
+        raise HTTPException(400, "ลิงก์รีวิว Google ต้องขึ้นต้นด้วย https://")
+    return s
 
 
 def _base_url(request: Request) -> str:
@@ -178,7 +210,7 @@ def _survey_page(link: dict, code: str) -> str:
       if(x[0]!==200){{ throw new Error((x[1]&&x[1].detail)||'ส่งไม่สำเร็จ'); }}
       $('#f').style.display='none'; var t=$('#thanks'); t.style.display='block';
       if(x[1].callback) $('#tmsg').textContent='ขออภัยในประสบการณ์ครั้งนี้ค่ะ ผู้จัดการสาขาจะติดต่อกลับโดยเร็วที่สุด';
-      if(x[1].review_url) $('#gwrap').innerHTML='<p>ถ้าประทับใจ ช่วยบอกต่อบน Google ได้ไหมคะ</p><a class="gbtn" href="'+x[1].review_url.replace(/"/g,'&quot;')+'" rel="noopener">⭐ รีวิวเราบน Google</a>';
+      var gu=String(x[1].review_url||''); if(gu && gu.slice(0,8).toLowerCase()==='https://') $('#gwrap').innerHTML='<p>ถ้าประทับใจ ช่วยบอกต่อบน Google ได้ไหมคะ</p><a class="gbtn" href="'+gu.replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;')+'" rel="noopener">⭐ รีวิวเราบน Google</a>';
       try{{ localStorage.setItem('oshinei_survey_'+code, new Date().toISOString().slice(0,10)); }}catch(e){{}}
     }})
     .catch(function(e){{ err.textContent=e.message; err.style.display='block'; $('#go').disabled=false; }});
@@ -345,7 +377,8 @@ async def survey_submit(code: str, request: Request):
         con.execute("UPDATE feedback_survey_link SET responses = COALESCE(responses,0) + ? WHERE code=?", (out["inserted"], code))
         purge_contacts(con, today)
         con.commit()
-    return {"ok": True, "review_url": (link.get("google_review_url") or None) if rating >= 4 else None,
+    gurl = link.get("google_review_url") or None          # a stored non-https link is never handed out
+    return {"ok": True, "review_url": gurl if (rating >= 4 and _is_https_url(gurl)) else None,
             "callback": bool(contact) and rating <= 3}
 
 
@@ -423,12 +456,12 @@ async def survey_link_save(request: Request):
             while con.execute("SELECT 1 FROM feedback_survey_link WHERE code=?", (code,)).fetchone():
                 code = _new_code()
             con.execute("INSERT INTO feedback_survey_link(branch_id, branch_name, code, google_review_url, active, created_at, created_by) "
-                        "VALUES (?,?,?,?,?,?,?)", (bid, b["name"], code, (body.get("google_review_url") or "").strip() or None,
+                        "VALUES (?,?,?,?,?,?,?)", (bid, b["name"], code, _review_url_or_400(body.get("google_review_url")),
                                                    1 if body.get("active", True) else 0, _thai_today(), str(body.get("by") or "")[:60]))
         else:
             sets, vals = ["branch_name=?"], [b["name"]]
             if "google_review_url" in body:
-                sets.append("google_review_url=?"); vals.append((body.get("google_review_url") or "").strip()[:500] or None)
+                sets.append("google_review_url=?"); vals.append(_review_url_or_400(body.get("google_review_url")))
             if "active" in body:
                 sets.append("active=?"); vals.append(1 if body.get("active") else 0)
             vals.append(bid)

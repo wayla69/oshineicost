@@ -87,9 +87,13 @@ def test_the_open_scaffolding_is_the_same_as_the_branch_logins_and_has_no_write_
 def test_the_franchise_role_does_not_skip_the_write_token(monkeypatch):
     monkeypatch.setenv("OSHINEI_AUTH", "1")
     monkeypatch.setenv("OSHINEI_AUTH_SECRET", "test-secret-stable")
+    import types
     for role, expect in (("franchise", False), ("branch", True)):
         tok = auth.make_token(1, "x", role, branch="BranchB")
-        req = type("R", (), {"cookies": {auth.SESSION_COOKIE: tok}})()
+        # the role is the LIVE account's, which the auth middleware leaves on request.state
+        live = {"u": "x", "r": role, "b": "BranchB", "active": True, "live": True}
+        req = type("R", (), {"cookies": {auth.SESSION_COOKIE: tok},
+                             "state": types.SimpleNamespace(auth_user=live)})()
         assert core.is_branch_session(req) is expect, role
 
 
