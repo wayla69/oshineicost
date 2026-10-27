@@ -54,7 +54,8 @@ def test_export_is_token_gated_and_streams_every_preserved_table(client, monkeyp
         tables, rows, done = _parse(r.content)
         assert "customer_feedback" in tables and "app_user" in tables          # checklist_* appear once that router has run
         import core as _core   # the preserved list is the contract — read it, don't copy it
-        assert all(t.startswith(tuple(p + "_" for p in _core._PRESERVED_PREFIXES)) or t in _core._PRESERVED_EXACT for t in tables)
+        assert all(t.startswith(tuple(p + "_" for p in _core._PRESERVED_PREFIXES)) or t in _core._PRESERVED_EXACT
+                   or t in _core._MERGED_ROWS for t in tables)          # merged tables (branches, …) travel too
         assert "sales_transaction" not in tables and "skus" not in tables
         voices = [o for o in rows if o["t"] == "customer_feedback"]
         assert len(voices) == 1 and voices[0]["r"][tables["customer_feedback"].index("text")] == "รอนานมาก"
