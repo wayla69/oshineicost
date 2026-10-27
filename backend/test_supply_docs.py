@@ -244,12 +244,12 @@ def _load(name):
 
 def test_the_branch_handout_carries_the_daily_rule_and_the_receive_question():
     HO = _load("branch_handout")
-    txt = HO.message("อุดรธานี", "wh_udon", "PW-X")
+    txt = HO.message("อุดรธานี", "wh_udn", "PW-X")
     for w in ("ใบตัดเบิก", "ส่งใบตัดเบิกของวันนี้ก่อน", "13:15", "รับครบ", "มีรายการไม่ครบ", "ส่งใบสั่งซื้อ", "เวลาส่งสุดท้าย", "หน้าแรก · ตัดเบิก · สั่งของ · รับของ · ฉัน", "นับของ"):
         assert w in txt, w
     for w in ("ปล่อย", "token", "Sales Support", "ส่วนกลาง"):
         assert w not in txt, w
-    card = HO.card("อุดรธานี", "wh_udon", "PW-X")
+    card = HO.card("อุดรธานี", "wh_udn", "PW-X")
     assert "ตัดเบิก" in card and "ส่งใบตัดเบิก" in card and "รับครบ" in card
 
 
