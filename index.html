@@ -2044,6 +2044,31 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
 .frc-tbl th:first-child { background: var(--bg-input); }
 .frc-tbl tr.frc-we td, .frc-tbl tr.frc-part td { background: color-mix(in srgb, var(--bg-input) 70%, var(--bg-card)); }
 .frc-tbl .frc-dow { font-size: 12px; color: var(--text-muted); }
+/* สรุปประจำวัน (owner 2026-10-27, mockup B, js/17-franchise.js _frcDayCard): a navy band on a FIXED dark fill (its text keeps fixed light
+   inks in both themes), four tiles with a coloured top edge, the month card with the target bar */
+.frc-hero { border-radius: var(--r-lg, 16px); padding: 14px 16px 16px; color: #ffffff; background: linear-gradient(135deg, #1f3a6e, #3a4fa8);
+  box-shadow: 0 8px 22px rgba(31, 58, 110, .28); }
+.frc-hero .lbl { font-size: 12.5px; color: #d5ddf5; }
+.frc-hero .num { font-size: 34px; font-weight: 800; line-height: 1.1; margin: 2px 0 8px; font-variant-numeric: tabular-nums; color: #ffffff; }
+.frc-hero .cmp { display: flex; flex-wrap: wrap; gap: 6px; }
+.frc-hchip { display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 999px; font-size: 12.5px; color: #ffffff;
+  background: rgba(255, 255, 255, .16); font-variant-numeric: tabular-nums; }
+.frc-hchip b.up { color: #a7f3d0; } .frc-hchip b.dn { color: #fecaca; }
+.frc-tiles { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.frc-tile { min-width: 0; background: var(--bg-card); border: 1px solid var(--border); border-top: 3px solid var(--acc, var(--navy-ink)); border-radius: var(--r-md);
+  padding: 10px 12px; box-shadow: 0 1px 3px rgba(15, 23, 42, .08); }
+.frc-tile .k { font-size: 12.5px; color: var(--text-muted); }
+.frc-tile .n { font-size: 21px; font-weight: 800; margin-top: 2px; font-variant-numeric: tabular-nums; color: var(--text-primary); }
+.frc-tile .s { font-size: 12.5px; margin-top: 2px; }
+.frc-lv { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; white-space: nowrap;
+  background: color-mix(in srgb, currentColor 12%, transparent); }
+.frc-dmonth { margin-top: 10px; }
+.frc-dmtd { font-size: 22px; font-weight: 800; color: var(--navy-ink); font-variant-numeric: tabular-nums; }
+.frc-cmpl { font-size: 12.5px; color: var(--text-muted); }
+.frc-dtarget { display: block; }
+.frc-dtarget .frc-meter { display: block; margin: 6px 0 4px; }
+.frc-dtl { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 6px; font-size: 13px; color: var(--text-primary); }
+@media print { .frc-hero { box-shadow: none; } }
 /* PR-F2: สัดส่วนการขาย · ช่วงเวลาขายดี · การควบคุม · เสียงลูกค้า (js/17-franchise.js) */
 .frc-sub { font-size: 12.5px; color: var(--text-muted); margin: -2px 0 8px; }
 .frc-sub2 { font-size: 13px; font-weight: 600; color: var(--text-secondary); margin: 12px 0 6px; }

@@ -18,7 +18,7 @@ async function open(browser, { franchise = false } = {}) {
     await ctx.route('**/api/auth/me', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, authenticated: true,
       username: 'own-e2e', role: 'franchise', branch: 'สาขาทดสอบ', display_name: 'เจ้าของสาขา', names: {}, write_gated: false, modules: ['franchise.view'] }) }));
     // auth is off on the fixture: the centre's rule (name the branch) stands in for the signed session's pin
-    await ctx.route(/\/api\/franchise\/(summary|decide|insight|supply)(\?|$)/, r => {
+    await ctx.route(/\/api\/franchise\/(summary|decide|insight|supply|daily)(\?|$)/, r => {
       const u = new URL(r.request().url()); u.searchParams.set('branch_id', '1');
       return r.continue({ url: u.toString() });
     });
