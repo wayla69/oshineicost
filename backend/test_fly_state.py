@@ -45,7 +45,7 @@ def test_export_is_token_gated_and_streams_every_preserved_table(client, monkeyp
     try:
         H = {"X-Seed-Token": "tok"}
         assert client.get("/api/_admin/export-state", headers=H).status_code == 404       # endpoint off without a token
-        monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+        monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
         assert client.get("/api/_admin/export-state").status_code == 404
         assert client.get("/api/_admin/export-state", params={"token": "tok"}).status_code == 404   # the old way is refused
         assert client.get("/api/_admin/export-state", headers={"X-Seed-Token": "wrong"}).status_code == 404

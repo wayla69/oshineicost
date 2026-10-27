@@ -152,7 +152,7 @@ function renderFeedback(d) {
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่พบชื่อพนักงานในเสียงลูกค้า (จับจาก "พนักงานชื่อ…", "น้อง…", "คุณ…")</p>';
   // positives
   document.getElementById('fbPos').innerHTML = (d.recent_positive || []).length ? (d.recent_positive || []).map(r =>
-    `<div class="fb-quote"><div>${_fbEsc(r.text)}</div><div class="m">${_fbEsc(r.branch || '')} · ${_fbEsc(r.source || '')} · ${_fbEsc(r.date || '')}${r.rating != null ? ' · ' + r.rating + '★' : ''} <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="fbCopy(this, ${JSON.stringify(`${r.text} — ลูกค้า ${r.branch || ''} (${r.source || ''} ${r.date || ''})`).replace(/"/g, '&quot;')})">คัดลอก</button></div></div>`).join('') :
+    `<div class="fb-quote"><div>${_fbEsc(r.text)}</div><div class="m">${_fbEsc(r.branch || '')} · ${_fbEsc(r.source || '')} · ${_fbEsc(r.date || '')}${r.rating != null ? ' · ' + r.rating + '★' : ''} <button class="fb-ghost" style="padding:0 .4rem;font-size:10px" onclick="fbCopy(this, ${_fbEsc(JSON.stringify(`${r.text} — ลูกค้า ${r.branch || ''} (${r.source || ''} ${r.date || ''})`))})">คัดลอก</button></div></div>`).join('') :
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมในช่วงนี้</p>';
 }
 
@@ -235,7 +235,7 @@ async function loadFeedbackQueue() {
         <span>${_fbReplyChip(r, true)}</span>
         ${r.needs_reply ? `<button class="fb-ghost" onclick="markFeedbackHandled(${r.id})" title="สาขาตอบไปแล้วในแอป/โทรแล้ว">✓ ตอบแล้ว</button>` : ''}
         <button class="fb-ghost${r.flag ? ' on' : ''}" onclick="flagFeedback(${r.id}, ${r.flag ? 'false' : 'true'})">${r.flag ? 'ยกเลิกหมุด' : 'ปักหมุด'}</button>
-        <button class="fb-ghost" onclick="openActionForm({from_id:${r.id}, branch:${JSON.stringify(r.branch_name || '').replace(/"/g, '&quot;')}, theme:${JSON.stringify((r.themes || [])[0] || '').replace(/"/g, '&quot;')}})" title="สร้างงานแก้จากเสียงนี้">งานแก้</button>
+        <button class="fb-ghost" onclick="openActionForm({from_id:${r.id}, branch:${_fbEsc(JSON.stringify(r.branch_name || ''))}, theme:${_fbEsc(JSON.stringify((r.themes || [])[0] || ''))}})" title="สร้างงานแก้จากเสียงนี้">งานแก้</button>
         ${r.contact ? `<button class="fb-ghost${r.contacted_at ? ' on' : ''}" onclick="toggleContacted(${r.id}, ${r.contacted_at ? 'false' : 'true'})" title="บันทึกว่าโทรกลับลูกค้าแล้วหรือยัง">${r.contacted_at ? 'ยกเลิกโทรกลับแล้ว' : 'โทรกลับแล้ว'}</button>` : ''}
         ${r.url ? `<a class="fb-ghost" href="${_fbEsc(r.url)}" target="_blank" rel="noopener">เปิดต้นทาง ↗</a>` : ''}
       </div></div>`).join('') + (items.length >= 80 ? '<p class="text-[11px] mt-2" style="color:var(--text-muted)">แสดง 80 รายการแรก — ตอบให้หมดแล้วรีเฟรช</p>' : '');
@@ -405,7 +405,7 @@ async function loadSurveyLinks() {
   const sm = 'padding:0 .4rem;font-size:10px';
   el.innerHTML = (made < links.length ? `<div class="mb-2"><button class="fb-btn" onclick="createSurveyLinksAll()">สร้างลิงก์ให้ทุกสาขาที่ยังไม่มี (${links.length - made})</button></div>` : '') + `<table class="fb-t"><thead><tr><th>สาขา</th><th>ลิงก์ (รหัส 8 ตัว)</th><th style="text-align:right">สแกน</th><th style="text-align:right">ตอบ</th><th style="text-align:right">30 วันล่าสุด</th><th>ลิงก์รีวิว Google</th><th></th></tr></thead><tbody>` +
     links.map(l => `<tr${l.code && !l.active ? ' style="opacity:.55"' : ''}><td>${_fbEsc(l.branch)}</td>
-      <td>${l.code ? `<code>${_fbEsc(l.code)}</code> <button class="fb-ghost" style="${sm}" onclick="fbCopy(this, ${JSON.stringify(l.url).replace(/"/g, '&quot;')})">คัดลอกลิงก์</button> <a class="fb-ghost" style="${sm}" href="${_fbEsc(l.print_url)}" target="_blank" rel="noopener">โปสเตอร์ ↗</a>${l.active ? '' : ' <span class="fb-tag">ปิดใช้</span>'}` : `<button class="fb-ghost" style="${sm}" onclick="createSurveyLink(${l.branch_id})">สร้างลิงก์</button>`}</td>
+      <td>${l.code ? `<code>${_fbEsc(l.code)}</code> <button class="fb-ghost" style="${sm}" onclick="fbCopy(this, ${_fbEsc(JSON.stringify(l.url))})">คัดลอกลิงก์</button> <a class="fb-ghost" style="${sm}" href="${_fbEsc(l.print_url)}" target="_blank" rel="noopener">โปสเตอร์ ↗</a>${l.active ? '' : ' <span class="fb-tag">ปิดใช้</span>'}` : `<button class="fb-ghost" style="${sm}" onclick="createSurveyLink(${l.branch_id})">สร้างลิงก์</button>`}</td>
       <td style="text-align:right">${l.scans || 0}</td><td style="text-align:right">${l.responses || 0}</td>
       <td style="text-align:right">${l.n30 ? `${l.n30} · ${l.avg30 != null ? l.avg30.toFixed(2) + '★' : ''}${l.neg30 ? ` · <span style="color:var(--bad-ink)">ลบ ${l.neg30}</span>` : ''}` : '—'}</td>
       <td>${l.code ? `<input id="fbGurl-${l.branch_id}" value="${_fbEsc(l.google_review_url)}" placeholder="https://g.page/r/…/review" class="rounded border px-1 text-[11px]" style="width:210px;border-color:var(--border);background:var(--bg-input);color:var(--text-primary)"> <button class="fb-ghost" style="${sm}" onclick="saveSurveyUrl(${l.branch_id})">บันทึก</button>` : ''}</td>
@@ -515,7 +515,7 @@ async function loadFeedbackNarrative() {
   eng.textContent = `· ${d.range[0]} → ${d.range[1]} · เขียนโดย ${d.engine === 'claude' ? 'Claude' : 'กฎ (ยังไม่ได้เปิดใช้ AI)'}`;
   el.innerHTML = `<p>${_fbEsc(d.overview)}</p>${d.fix ? `<p class="mt-1"><b>ต้องแก้:</b> ${_fbEsc(d.fix)}</p>` : ''}${d.praise ? `<p class="mt-1"><b>ทำได้ดี:</b> ${_fbEsc(d.praise)}</p>` : ''}` +
     ((d.actions || []).length ? `<ol class="mt-1 pl-5 list-decimal">${d.actions.map(a => `<li>${_fbEsc(a)}</li>`).join('')}</ol>` : '') +
-    `<div class="mt-1"><button class="fb-ghost" onclick="fbCopy(this, ${JSON.stringify([d.overview, d.fix, d.praise, ...(d.actions || []).map((a, i) => `${i + 1}. ${a}`)].filter(Boolean).join('\n')).replace(/"/g, '&quot;')})">คัดลอกส่งกลุ่ม</button></div>`;
+    `<div class="mt-1"><button class="fb-ghost" onclick="fbCopy(this, ${_fbEsc(JSON.stringify([d.overview, d.fix, d.praise, ...(d.actions || []).map((a, i) => `${i + 1}. ${a}`)].filter(Boolean).join('\n')))})">คัดลอกส่งกลุ่ม</button></div>`;
 }
 async function askFeedback() {
   const q = (document.getElementById('fbAskQ') || {}).value || '', out = document.getElementById('fbAskA');
@@ -753,7 +753,7 @@ async function loadDailyReport() {
   const staffRows = (d.staff || []).length ? d.staff.slice(0, 8).map(s => `<div class="flex justify-between"><span>${_fbEsc(s.name)} <span class="text-[11px]" style="color:var(--text-muted)">(${_fbEsc(s.branch)})</span></span><b>${s.pos} ${s.neg}</b></div>`).join('') :
     `<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีพนักงานถูกระบุชื่อ${pw}</p>`;
   const newIssues = (d.new_issues || []).length ? d.new_issues.slice(0, 12).map(it => {
-    const branchArg = JSON.stringify(it.branch || '').replace(/"/g, '&quot;'), themeArg = JSON.stringify(it.theme || '').replace(/"/g, '&quot;');
+    const branchArg = _fbEsc(JSON.stringify(it.branch || '')), themeArg = _fbEsc(JSON.stringify(it.theme || ''));
     return `<div class="fb-quote" style="border-left-color:#fca5a5;background:#fef2f2;display:flex;justify-content:space-between;align-items:flex-start;gap:.5rem">
       <div>${d.branch ? '' : _fbEsc(it.branch || '-') + ' · '}<b>${_fbEsc(it.theme)}</b> (${it.n} เสียงลบ)${it.examples && it.examples[0] ? ` — “${_fbEsc(it.examples[0])}”` : ''}</div>
       <button class="fb-ghost" style="white-space:nowrap" onclick="openActionForm({branch:${branchArg}, theme:${themeArg}})" title="สร้างงานแก้สำหรับปัญหานี้">มอบหมาย</button>
@@ -768,7 +768,7 @@ async function loadDailyReport() {
   }).join('') : `<p class="text-xs" style="color:var(--text-muted)">ไม่มีปัญหาที่ปิดในช่วงนี้</p>`;
   const chronicClaimed = new Set((d.open_issues || []).map(it => `${it.branch || ''} ${it.theme || ''}`));
   const chronicTable = (d.chronic_branches || []).length ? `<table class="fb-t"><thead><tr><th>สาขา</th><th>หัวข้อที่ซ้ำ</th><th>ความถี่</th><th></th></tr></thead><tbody>${d.chronic_branches.slice(0, 15).map(it => {
-    const branchArg = JSON.stringify(it.branch || '').replace(/"/g, '&quot;'), themeArg = JSON.stringify(it.theme || '').replace(/"/g, '&quot;');
+    const branchArg = _fbEsc(JSON.stringify(it.branch || '')), themeArg = _fbEsc(JSON.stringify(it.theme || ''));
     const already = chronicClaimed.has(`${it.branch || ''} ${it.theme || ''}`);
     const act = already ? '<span class="text-[11px]" style="color:var(--text-muted)">มีงานอยู่แล้ว</span>' :
       `<button class="fb-ghost" onclick="openActionForm({branch:${branchArg}, theme:${themeArg}})" title="สร้างงานแก้สำหรับปัญหาที่วนซ้ำนี้">มอบหมาย</button>`;

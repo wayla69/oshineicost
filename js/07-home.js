@@ -1476,7 +1476,7 @@ function renderPnlBill(d) {
   if (ls) ls.innerHTML = (d.loss_count || 0) > 0
     ? `ขาดทุน <b style="color:var(--bad-ink)">${fmtN(d.loss_count)}</b> บิล · รวม <b style="color:var(--bad-ink)">${fmt(d.loss_total)}</b>${d.loss_capped ? ' · แสดง 2,000 บิลแรก' : ''} · ${((d.loss_count / (s.bills || 1)) * 100).toFixed(2)}% ของบิลทั้งหมด`
     : 'ไม่มีบิลขาดทุนในช่วงนี้';
-  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('pbLoss', i, loss.length, PB_TOP)} title="ดูเมนูที่สั่งในบิลนี้" onclick='openBillItems(${JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}).replace(/'/g, "&#39;")})'>
+  document.getElementById('pbLoss').innerHTML = loss.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-rose-50/40 cursor-pointer"${dvMoreAttr('pbLoss', i, loss.length, PB_TOP)} title="ดูเมนูที่สั่งในบิลนี้" onclick="openBillItems(${esc(JSON.stringify({receipt: r.receipt, branch: r.branch, rev: r.rev, cogs: r.cogs, disc: r.disc, cust: r.cust}))})">
     <td class="py-1.5 pr-2 tabular-nums text-slate-400">${i + 1}</td>
     <td class="py-1.5 pr-2 font-mono text-[10.5px] text-sky-600">${esc(r.receipt)}</td>
     <td class="py-1.5 pr-2">${esc(r.branch)}</td>

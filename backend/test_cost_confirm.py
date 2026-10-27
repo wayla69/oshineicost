@@ -126,7 +126,7 @@ def test_the_sync_mirrors_live_confirmations_and_never_fails_the_build(monkeypat
             return json.dumps({"columns": ["sku_code", "kind", "unit_cost", "lines", "note",
                                            "confirmed_by", "confirmed_at", "a_future_column"],
                                "rows": [["PEPSI", "cost", 9.5, None, "", "chef1", "2026-09-18", "x"]]}).encode()
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     seen = []
     monkeypatch.setattr("urllib.request.urlopen", lambda req, timeout=0: (seen.append(req), _Resp())[1])
     assert b._pull_confirmed_costs(con, cs) == 1
@@ -168,7 +168,7 @@ def test_the_sync_endpoint_is_token_gated(client, monkeypatch):
     H = {"X-Seed-Token": "tok"}
     monkeypatch.delenv("OSHINEI_SEED_TOKEN", raising=False)
     assert client.get("/api/_admin/cost-overrides", headers=H).status_code == 404
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     assert client.get("/api/_admin/cost-overrides", headers={"X-Seed-Token": "wrong"}).status_code == 404
     assert client.get("/api/_admin/cost-overrides", params={"token": "tok"}).status_code == 404   # the old way is refused
     r = client.get("/api/_admin/cost-overrides", headers=H)

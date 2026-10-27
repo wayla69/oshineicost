@@ -576,14 +576,62 @@ def parse_token(token: str) -> Optional[Dict]:
     return payload
 
 
+def identity_from_row(row) -> Dict:
+    """The parts of a LIVE app_user row the request helpers need, in the cookie's key
+    names (u / r / b) so callers that read a payload keep working."""
+    keys = row.keys() if hasattr(row, "keys") else ()
+    return {"id": row["id"] if "id" in keys else None, "u": row["username"], "r": row["role"] or "",
+            "b": (row["branch"] or None) if "branch" in keys else None,
+            "active": bool(row["active"]), "live": True}
+
+
+def live_session(request) -> Dict:
+    """Who this request is, from the LIVE account — never from the cookie's copy of
+    role / branch, which can be up to the session TTL stale (a demoted manager, a
+    deactivated login, a branch moved). Returns {} when there is no valid active session.
+
+    The auth middleware (main.enforce_auth) loads the app_user row for every gated
+    request and stores identity_from_row() on request.state.auth_user; this reads it.
+    On a path the middleware lets through without loading it, the row is looked up
+    here. Only when the database cannot be read at all does it fall back to the
+    signed cookie's own values (marked live=False)."""
+    if not auth_enabled():
+        return {}
+    state = getattr(request, "state", None)
+    cached = getattr(state, "auth_user", None) if state is not None else None
+    if isinstance(cached, dict):
+        return cached
+    try:
+        payload = parse_token(request.cookies.get(SESSION_COOKIE, "")) or {}
+    except Exception:
+        payload = {}
+    if not payload:
+        return {}
+    try:
+        from core import get_db as _get_db          # lazy: core imports this module lazily too
+        with _get_db() as con:
+            row = get_user(con, str(payload.get("u") or ""))
+    except Exception:
+        return {"id": payload.get("uid"), "u": payload.get("u"), "r": payload.get("r") or "",
+                "b": payload.get("b") or None, "active": True, "live": False}
+    if not row or not row["active"]:
+        return {}
+    ident = identity_from_row(row)
+    if state is not None:
+        try:
+            state.auth_user = ident
+        except Exception:
+            pass
+    return ident
+
+
 def request_modules(request) -> Set[str]:
-    """The modules the signed session of this request holds (every module with auth off).
-    Read from the signed cookie and the live role map - no DB hit per request. A payload
-    that is missing or forged holds none."""
+    """The modules the session of this request holds (every module with auth off), from
+    the LIVE role (live_session) and the live role map. No / forged / inactive session
+    holds none."""
     if not auth_enabled():
         return set(MODULES)
-    payload = parse_token(request.cookies.get(SESSION_COOKIE, "")) or {}
-    return modules_for_role(payload.get("r") or "")
+    return modules_for_role(live_session(request).get("r") or "")
 
 
 def client_rules() -> List[list]:
@@ -599,11 +647,11 @@ def client_rules() -> List[list]:
 
 def scope_branch(request) -> Optional[str]:
     """The branch a logged-in user is confined to, or None (the whole chain,
-    or auth off). Read from the signed cookie — no DB hit per request."""
+    or auth off). Read from the LIVE account (live_session), so a login moved to
+    another branch, or a branch renamed, takes effect on the next request."""
     if not auth_enabled():
         return None
-    payload = parse_token(request.cookies.get(SESSION_COOKIE, "")) or {}
-    return (payload.get("b") or None) if payload else None
+    return live_session(request).get("b") or None
 
 
 def auth_enabled() -> bool:
@@ -884,8 +932,9 @@ def change_own_password(con: sqlite3.Connection, username: str,
     """Self-service change: verify the caller's CURRENT password, then set the new
     one and clear must_change. Returns False if the current password is wrong."""
     row = get_user(con, username)
-    if not row or not verify_password(old_password or "", row["pw_hash"], row["pw_salt"]):
-        return False
+    if not row or not row["active"] \
+            or not verify_password(old_password or "", row["pw_hash"], row["pw_salt"]):
+        return False                                       # a deactivated login cannot change it either
     check_password_policy(new_password)                   # AUD-1
     h = hash_password(new_password)
     con.execute(
@@ -918,27 +967,78 @@ def authenticate(con: sqlite3.Connection, username: str, password: str) -> Optio
 # without even checking the password. Per-process is plenty for a single Fly
 # instance serving ~12 users.
 # ---------------------------------------------------------------------------
+# Two counters share the dict: (ip, username) and ("*", username). The second caps
+# the failures on ONE account from every address together, so rotating addresses
+# does not buy more guesses. The dict is pruned of expired entries and capped at
+# _LOGIN_MAX_KEYS so a flood of junk usernames cannot grow it without bound.
 _LOGIN_FAILS: Dict[tuple, List[float]] = {}
 _LOGIN_MAX_FAILS = 5
+_LOGIN_USER_MAX_FAILS = 10  # per account, all addresses together, within the same window
 _LOGIN_COOLDOWN = 300.0     # seconds; also the sliding window for counting fails
+_LOGIN_MAX_KEYS = 5000
+
+
+def client_ip(request) -> str:
+    """The caller's address for rate limits and the audit log. Fly's edge proxy sets
+    Fly-Client-IP itself (a value a client sends is replaced), so it is trusted; the
+    first X-Forwarded-For hop is whatever the client typed and is NOT used. Without
+    the Fly header (local dev, tests) the socket peer is the answer."""
+    try:
+        fly = (request.headers.get("fly-client-ip") or "").strip()
+    except Exception:
+        fly = ""
+    if fly:
+        return fly
+    client = getattr(request, "client", None)
+    return (getattr(client, "host", None) or "?") if client else "?"
 
 
 def _throttle_key(ip: str, username: str) -> tuple:
     return (ip or "?", (username or "").strip().lower())
 
 
-def login_throttled(ip: str, username: str) -> bool:
-    """True if this (ip, username) has hit the failure ceiling within the cooldown."""
-    now = time.time()
-    key = _throttle_key(ip, username)
+def _user_key(username: str) -> tuple:
+    return ("*", (username or "").strip().lower())
+
+
+def _recent(key: tuple, now: float) -> List[float]:
     fails = [t for t in _LOGIN_FAILS.get(key, []) if now - t < _LOGIN_COOLDOWN]
-    _LOGIN_FAILS[key] = fails           # prune as we go (keeps the dict bounded)
-    return len(fails) >= _LOGIN_MAX_FAILS
+    if fails:
+        _LOGIN_FAILS[key] = fails
+    else:
+        _LOGIN_FAILS.pop(key, None)
+    return fails
+
+
+def _prune_login_fails(now: float) -> None:
+    for key in list(_LOGIN_FAILS):
+        _recent(key, now)
+    if len(_LOGIN_FAILS) > _LOGIN_MAX_KEYS:
+        # still too many live keys: drop the ones whose last failure is oldest
+        by_age = sorted(_LOGIN_FAILS, key=lambda k: _LOGIN_FAILS[k][-1])
+        for key in by_age[:len(_LOGIN_FAILS) - _LOGIN_MAX_KEYS]:
+            _LOGIN_FAILS.pop(key, None)
+
+
+def login_throttled(ip: str, username: str) -> bool:
+    """True if this (ip, username) has hit the failure ceiling within the cooldown,
+    or the account itself has, counted over every address."""
+    now = time.time()
+    if len(_recent(_throttle_key(ip, username), now)) >= _LOGIN_MAX_FAILS:
+        return True
+    return len(_recent(_user_key(username), now)) >= _LOGIN_USER_MAX_FAILS
 
 
 def record_login_failure(ip: str, username: str) -> None:
-    _LOGIN_FAILS.setdefault(_throttle_key(ip, username), []).append(time.time())
+    now = time.time()
+    for key in (_throttle_key(ip, username), _user_key(username)):
+        lst = _LOGIN_FAILS.setdefault(key, [])
+        lst.append(now)
+        del lst[:-max(_LOGIN_MAX_FAILS, _LOGIN_USER_MAX_FAILS) * 2]   # a list never outgrows the ceiling
+    if len(_LOGIN_FAILS) > _LOGIN_MAX_KEYS:
+        _prune_login_fails(now)
 
 
 def clear_login_failures(ip: str, username: str) -> None:
     _LOGIN_FAILS.pop(_throttle_key(ip, username), None)
+    _LOGIN_FAILS.pop(_user_key(username), None)

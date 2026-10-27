@@ -312,15 +312,60 @@ def photo(con, claim_id: int, photo_id: int):
     return r[0], bytes(r[1]), r[2]
 
 
+def _order_label(con, h) -> str:
+    """4.2: a note names the order by its round and delivery day, never a number."""
+    from .fmt import round_day_th
+    from .hub import delivery_of
+    ob = con.execute("SELECT round, cycle_date, delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
+    return round_day_th(ob[0], delivery_of(con, h["branch_id"], ob[0], ob[1], ob[2])) if ob else "ใบสั่งซื้อ"
+
+
+def _book(con, h, claim_id: int, sign: int, qtys: list, note_txt: str, who: str):
+    """One 'claim' receipt dated the order's receipt, so the same variance period sees it."""
+    from .variance import add_receipt
+    units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (h["order_id"],))}
+    recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
+    base = {c: b for c, b in con.execute("SELECT code, base_unit FROM bc_ingredient")}
+    rec = con.execute("SELECT receipt_date FROM bc_receipt WHERE branch_id=? AND ref=? ORDER BY receipt_id LIMIT 1",
+                      (h["branch_id"], f"ORDER-{h['order_id']}")).fetchone()
+    rdate = rec[0] if rec else (con.execute("SELECT SUBSTR(received_at,1,10) FROM bc_order WHERE order_id=?",
+                                            (h["order_id"],)).fetchone() or [None])[0] or bkk_today().isoformat()
+    rl = [{"code": c, "qty": q, "unit": (recv.get(c) if units.get(c) and units.get(c) != "base" else base.get(c))}
+          for c, q in qtys]
+    r = add_receipt(con, h["branch_id"], rdate, rl, who, ref=f"CLAIM-{claim_id}", note=note_txt, source="claim")
+    if sign < 0:
+        con.execute("UPDATE bc_receipt_line SET qty=-qty, qty_base=-qty_base WHERE receipt_id=?", (r["receipt_id"],))
+    return r["receipt_id"], rdate
+
+
 def cancel(con, claim_id: int, who: str) -> dict:
+    """The branch withdraws a claim that is still waiting.
+
+    Audit 2026-10: a claim raised in the receive form ('receive') covers goods the order receipt already left
+    out. Withdrawing it means the branch no longer reports them missing, so - exactly as a rejection does - the
+    claimed quantity is added back as a positive 'claim' receipt dated the order's receipt; otherwise the goods
+    the warehouse sent would vanish from the stock with no decision. A later claim ('after') books nothing until
+    it is approved, so cancelling it writes no receipt."""
     h = _head(con, claim_id)
     if not h:
         raise ValueError("ไม่พบเรื่องที่แจ้ง")
     if h["status"] != "submitted":
         raise ValueError("ยกเลิกได้เฉพาะเรื่องที่ยังรอพิจารณา")
-    con.execute("UPDATE bc_claim SET status='cancelled', decided_by=?, decided_at=? WHERE claim_id=?", (who, now(), claim_id))
-    audit(con, who, "claim_cancel", "bc_claim", str(claim_id), "submitted", "cancelled")
-    return {"claim_id": claim_id, "status": "cancelled"}
+    rid = rdate = None
+    restored = 0
+    if h["origin"] == "receive":
+        back = [(c, float(cu)) for c, cu in con.execute(
+            "SELECT ingredient_code, claim_units FROM bc_claim_line WHERE claim_id=? AND claim_units>0", (claim_id,))]
+        if back:
+            rid, rdate = _book(con, h, claim_id, +1, back,
+                               f"สินค้าตามเรื่องที่แจ้ง {_order_label(con, h)} ซึ่งสาขายกเลิก ถือว่าสาขาได้รับแล้ว", who)
+            restored = len(back)
+    con.execute("UPDATE bc_claim SET status='cancelled', decided_by=?, decided_at=?, adjust_receipt_id=? WHERE claim_id=?",
+                (who, now(), rid, claim_id))
+    audit(con, who, "claim_cancel", "bc_claim", str(claim_id), "submitted",
+          {"status": "cancelled", "origin": h["origin"], "restored": restored, "receipt_id": rid})
+    return {"claim_id": claim_id, "status": "cancelled", "origin": h["origin"], "restored": restored,
+            "receipt_id": rid, "receipt_date": rdate}
 
 
 def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) -> dict:
@@ -330,7 +375,6 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
     order was received. origin 'receive': the order receipt is already at the received quantity, so
     approving writes NO negative receipt; whatever is NOT approved (all of it on a rejection) is added
     back as a positive 'claim' receipt, because the branch is treated as having received those goods."""
-    from .variance import add_receipt
     h = _head(con, claim_id)
     if not h:
         raise ValueError("ไม่พบรายการเคลม")
@@ -338,26 +382,10 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
         raise ValueError(f"เคลมนี้พิจารณาแล้ว ({h['status_th']})")
     note = (note or "").strip() or None
     origin = h["origin"]
-    units = {c: u for c, u in con.execute("SELECT ingredient_code, order_unit FROM bc_order_line WHERE order_id=?", (h["order_id"],))}
-    recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
-    base = {c: b for c, b in con.execute("SELECT code, base_unit FROM bc_ingredient")}
-    from .fmt import round_day_th                         # 4.2: a note names the order by its round and delivery day, never a number
-    from .hub import delivery_of
-    ob = con.execute("SELECT round, cycle_date, delivery_date FROM bc_order WHERE order_id=?", (h["order_id"],)).fetchone()
-    lbl = round_day_th(ob[0], delivery_of(con, h["branch_id"], ob[0], ob[1], ob[2])) if ob else "ใบสั่งซื้อ"
+    lbl = _order_label(con, h)
 
-    def _book(sign, qtys, note_txt):
-        """One 'claim' receipt dated the order's receipt, so the same variance period sees it."""
-        rec = con.execute("SELECT receipt_date FROM bc_receipt WHERE branch_id=? AND ref=? ORDER BY receipt_id LIMIT 1",
-                          (h["branch_id"], f"ORDER-{h['order_id']}")).fetchone()
-        rdate = rec[0] if rec else (con.execute("SELECT SUBSTR(received_at,1,10) FROM bc_order WHERE order_id=?",
-                                                (h["order_id"],)).fetchone() or [None])[0] or bkk_today().isoformat()
-        rl = [{"code": c, "qty": q, "unit": (recv.get(c) if units.get(c) and units.get(c) != "base" else base.get(c))}
-              for c, q in qtys]
-        r = add_receipt(con, h["branch_id"], rdate, rl, who, ref=f"CLAIM-{claim_id}", note=note_txt, source="claim")
-        if sign < 0:
-            con.execute("UPDATE bc_receipt_line SET qty=-qty, qty_base=-qty_base WHERE receipt_id=?", (r["receipt_id"],))
-        return r["receipt_id"], rdate
+    def _book_here(sign, qtys, note_txt):
+        return _book(con, h, claim_id, sign, qtys, note_txt, who)
 
     if decision == "reject":
         if not note:
@@ -368,7 +396,7 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
             back = [(c, float(cu)) for c, cu in con.execute(
                 "SELECT ingredient_code, claim_units FROM bc_claim_line WHERE claim_id=? AND claim_units>0", (claim_id,))]
             if back:
-                rid, rdate = _book(+1, back, f"สินค้าตามเคลม {lbl} ที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
+                rid, rdate = _book_here(+1, back, f"สินค้าตามเคลม {lbl} ที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
                 restored = len(back)
         con.execute("UPDATE bc_claim SET status='rejected', decided_by=?, decided_at=?, decision_note=?,"
                     " adjust_receipt_id=? WHERE claim_id=?", (who, now(), note, rid, claim_id))
@@ -399,14 +427,14 @@ def decide(con, claim_id: int, decision: str, lines: list, note: str, who: str) 
     if origin == "after":
         # the adjustment: dated the receipt of the order, so the same variance period loses these goods
         plus = [(c, a) for c, a in approved if a > 0]
-        rid, rdate = _book(-1, plus, f"ปรับสินค้าตามเคลม {lbl}")
+        rid, rdate = _book_here(-1, plus, f"ปรับสินค้าตามเคลม {lbl}")
         adjusted = len(plus)
     else:
         # already received at the lower quantity: nothing comes out; the part not approved goes back in
         cl = dict(rows)
         back = [(c, round(float(cl[c]) - a, 6)) for c, a in approved if float(cl[c]) - a > 1e-9]
         if back:
-            rid, rdate = _book(+1, back, f"สินค้าตามเคลม {lbl} ส่วนที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
+            rid, rdate = _book_here(+1, back, f"สินค้าตามเคลม {lbl} ส่วนที่ไม่อนุมัติ ถือว่าสาขาได้รับแล้ว")
             restored = len(back)
     con.execute("UPDATE bc_claim SET status='approved', decided_by=?, decided_at=?, decision_note=?, adjust_receipt_id=?"
                 " WHERE claim_id=?", (who, now(), note, rid, claim_id))

@@ -252,8 +252,10 @@ async def enforce_auth(request: Request, call_next):
             {"detail": "Auth misconfigured: set OSHINEI_AUTH_SECRET."}, status_code=503)
     # Only gate the API + /docs. The SPA shell, static assets and login itself
     # stay open so an unauthenticated browser can load the login form.
-    if not (path.startswith("/api/") or docs_req) or path.startswith("/api/auth/login") \
-            or path.startswith("/api/auth/me") or path.startswith("/api/auth/logout") \
+    # login / me / logout are matched EXACTLY: a prefix match let /api/auth/me/password
+    # (and anything else that ever lands under /api/auth/me…) skip the session check.
+    if not (path.startswith("/api/") or docs_req) or path == "/api/auth/login" \
+            or path == "/api/auth/me" or path == "/api/auth/logout" \
             or path.startswith("/api/analysis/health") \
             or path == "/api/meta/build" \
             or path.startswith("/api/_admin/seed-db") \
@@ -293,6 +295,10 @@ async def enforce_auth(request: Request, call_next):
         row = None
     if not row or not row["active"]:
         return _deny()
+    # the LIVE identity for every helper downstream (auth.live_session: request_modules,
+    # scope_branch, core.is_branch_session, auth_api._require_admin) so none of them
+    # trusts the cookie's copy of role / branch
+    request.state.auth_user = _auth.identity_from_row(row)
     if docs_req:                                   # any active user may read docs
         return await call_next(request)
     mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
@@ -1114,11 +1120,25 @@ def app_js():
 # pull before it builds menu_fact_*: that build runs against a staging DB on
 # another machine, which would otherwise never hear about a confirmation made
 # here. Same token gate as export-state; a few dozen tiny rows, so plain JSON.
+def _owner_token_ok(provided: str) -> bool:
+    """True only for the OWNER's token: the bare entry or the one labelled "admin" in
+    OSHINEI_SEED_TOKEN (docs/TOKEN_ROTATION.md). The per-person tokens staff type into
+    the browser's "รหัส" button (Patcharee, Arnan, AR ...) are good for data edits
+    (core.require_write_token), never for the machine endpoints that read or replace
+    the whole database. Constant-time against every owner entry; False when none set."""
+    import hmac as _hmac
+    tok = (provided or "").strip()
+    owner = [t for t, label in _accepted_tokens().items() if label.strip().lower() in ("", "admin")]
+    return bool(tok) and any(_hmac.compare_digest(tok, t) for t in owner)
+
+
 def _seed_token_or_404(x_seed_token: str = Header(None)) -> str:
-    """The machine-to-machine gate shared by the /api/_admin endpoints: the seed token
-    in the X-Seed-Token HEADER (never the URL - see the note above), 404 on anything
-    else so the endpoints do not even admit to existing."""
-    if not _accepted_tokens() or not _token_accepted(x_seed_token or ""):
+    """The machine-to-machine gate shared by the /api/_admin endpoints: the OWNER seed
+    token (bare or "admin:", see _owner_token_ok) in the X-Seed-Token HEADER (never the
+    URL - see the note above), 404 on anything else so the endpoints do not even admit
+    to existing. export-state streams password hashes and seed-db replaces the whole
+    database, so a staff token must not open them."""
+    if not _owner_token_ok(x_seed_token or ""):
         raise HTTPException(status_code=404, detail="not found")
     return x_seed_token
 
@@ -1162,13 +1182,11 @@ def _bc_sku_cost_list(_tok: str = Depends(_seed_token_or_404)):
 # bypass and its "no token configured = open" dev mode are deliberately NOT used here).
 # Header only (X-Seed-Token or X-Upload-Token); never the URL.
 def _backup_token_or_403(x_seed_token: str = Header(None), x_upload_token: str = Header(None)) -> str:
-    import hmac as _hmac
     tok = (x_seed_token or x_upload_token or "").strip()
     # The file carries password hashes, so only the owner's own token opens it: the bare token or the
     # one labelled "admin" (docs/TOKEN_ROTATION.md). The per-person tokens staff type into the
     # browser's "รหัส" button (Patcharee, Arnan, AR ...) are good for data edits, not for this.
-    owner = {t for t, label in _accepted_tokens().items() if label.lower() in ("", "admin")}
-    if not tok or not any(_hmac.compare_digest(tok, t) for t in owner):
+    if not _owner_token_ok(tok):
         raise HTTPException(status_code=403, detail="A valid admin token is required.",
                             headers={"X-Denied": "token"})
     return tok
@@ -1610,14 +1628,15 @@ def upload_file(
     The DB is backed up before any write, and curated cost tables are verified
     unchanged afterwards (Easy SALES rows only; period+branch-scoped upsert).
     """
-    import hmac
     from pathlib import Path as _Path
 
     # ── AUTH gate ──────────────────────────────────────────────────────────
-    expected = _os_db.environ.get("OSHINEI_SEED_TOKEN")
-    if expected:
-        provided = x_upload_token or ""
-        if not hmac.compare_digest(provided, expected):
+    # OSHINEI_SEED_TOKEN is a comma/newline list of (label:)token entries on Fly, so
+    # the header is checked against each entry (_token_accepted) — comparing it to the
+    # raw env string refused every real token. Env unset → open (local dev), as before;
+    # env set but holding no usable entry → _token_accepted is False → closed.
+    if (_os_db.environ.get("OSHINEI_SEED_TOKEN") or "").strip():
+        if not _token_accepted(x_upload_token or ""):
             raise HTTPException(status_code=403, detail="A valid upload token is required.")
 
     # Use the basename only — file.filename is attacker-controlled and a value like

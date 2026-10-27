@@ -227,6 +227,9 @@ def _source_of(con, month: str):
 
 
 # ── preview and commit ───────────────────────────────────────────────────────
+ZERO_IMPORT_TH = "ต้นทุนต้องมากกว่า 0 บาท · ไฟล์นำเข้าไม่รับต้นทุน 0 บาท หากเมนูนี้ไม่มีต้นทุนจริงให้แก้ไขทีละรายการ"
+
+
 def _classify(con, rows):
     """-> (ok [{sku_id, code, name, cost, note}], unknown_codes, tier_codes, bad_values). The last of a repeated code wins."""
     sku = {c: (sid, d) for sid, c, d in _sku_rows(con)}
@@ -247,6 +250,12 @@ def _classify(con, rows):
             cost = _num(r.get("cost"))
         except ValueError as e:
             bad.append({"code": code, "value": _text(r.get("cost")), "why": str(e)})
+            continue
+        if cost <= 0:
+            # Audit 2026-10: a list cost beats the recipe cost (rules.dated_cost_sql), so a 0 in the file would erase the
+            # dish's cost from every report. An import refuses it per row; a deliberate 0 is one edit with confirm_zero.
+            bad.append({"code": code, "value": _text(r.get("cost")), "why": ZERO_IMPORT_TH})
+            ok.pop(code, None)
             continue
         ok[code] = {"sku_id": sku[code][0], "code": code, "name": _text(r.get("name")) or sku[code][1], "cost": cost,
                     "note": _text(r.get("note"))}

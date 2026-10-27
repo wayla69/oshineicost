@@ -167,7 +167,7 @@ def test_the_note_names_the_next_sync():
 def test_http_dish_cost_writes_flush_without_rebuild_and_carry_the_sync_line(client, web, monkeypatch):
     import routers.bom_center as rb
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
     calls = []
     monkeypatch.setattr(rb, "invalidate_cache", lambda *a, **k: calls.append((a, k)))
@@ -197,12 +197,11 @@ def test_dish_cost_month_stops_at_next_month(dc_con):
 def test_zero_cost_needs_an_explicit_confirm(dc_con):
     c = dc_con
     rows = [{"code": "DCT-B", "name": "", "cost": 0, "note": ""}, {"code": "DCT-A", "name": "", "cost": 11, "note": ""}]
-    assert DC.preview(c, "2026-10", rows)["zero_costs"] == ["DCT-B"]
-    with pytest.raises(ValueError, match="ต้นทุน 0 บาท"):
-        DC.commit(c, "2026-10", rows, "analyst1")
-    assert c.execute("SELECT COUNT(*) FROM bc_sku_cost_list").fetchone()[0] == 0          # nothing was written
+    pre = DC.preview(c, "2026-10", rows)
+    # audit 2026-10: an import never writes a 0 cost - the row is a per-row error in the preview, the other rows go in
+    assert pre["zero_costs"] == [] and [b["code"] for b in pre["bad_values"]] == ["DCT-B"] and pre["imported"] == 1
     DC.commit(c, "2026-10", rows, "analyst1", confirm_zero=True)
-    assert c.execute("SELECT unit_cost FROM bc_sku_cost_list WHERE sku_id=9002").fetchone()[0] == 0
+    assert c.execute("SELECT COUNT(*) FROM bc_sku_cost_list WHERE sku_id=9002").fetchone()[0] == 0
     with pytest.raises(ValueError, match="ยืนยันอีกครั้ง"):
         DC.set_one(c, "2026-10", "DCT-D", 0, "", "analyst1")
     DC.set_one(c, "2026-10", "DCT-D", 0, "", "analyst1", confirm_zero=True)
@@ -307,7 +306,7 @@ def test_an_empty_live_answer_keeps_the_local_cost_list(tmp_path, monkeypatch):
     D.ensure(sq)
     sq.execute("INSERT INTO bc_sku_cost_list(sku_id, month, unit_cost, note, imported_by, imported_at) VALUES(77,'2026-10',11,NULL,'a','x')")
     sq.commit()
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_SYNC_ON_LIVE", raising=False)
 
     class _Resp:

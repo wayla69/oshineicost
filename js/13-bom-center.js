@@ -512,7 +512,7 @@ function _bmcPickedCode(v, choices) {
   const byName = choices.find(c => c.label.split(' · ')[0].trim() === t);   // typed a name exactly
   return byName ? byName.value : t;
 }
-function _bmcQ(v) { return JSON.stringify(v).replace(/"/g, '&quot;'); }
+function _bmcQ(v) { return esc(JSON.stringify(v)); }   // esc() also turns & into &amp;, so text holding &quot; cannot close the JS string
 function bmcRenderCodeReview() {
   const iss = document.getElementById('bmcIssuesCard');
   const d = _bmcCr;

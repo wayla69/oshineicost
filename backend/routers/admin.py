@@ -178,20 +178,90 @@ def put_settings(body: Dict[str, str]):
 # ---------------------------------------------------------------------------
 # /api/branches/{id}   -  PUT: rename a branch
 # ---------------------------------------------------------------------------
+# Tables written in the app that key a branch by its NAME (not branch_id). A rename
+# moves their rows with it, in the same transaction, or a branch login (app_user.branch)
+# would be scoped to a name that no longer exists, closures / survey links / actions /
+# order plans would drop off the branch, etc. Only tables + columns that exist are touched.
+_BRANCH_NAME_COLUMNS = (
+    ("app_user", "branch"),
+    ("branch_downtime", "branch"),
+    ("feedback_survey_link", "branch_name"),
+    ("customer_feedback", "branch_name"),
+    ("feedback_action", "branch_name"),
+    ("feedback_competitor", "branch_name"),
+    ("demand_calendar", "branch"),
+    ("ingredient_sourcing", "branch"),
+    ("ingredient_order_issue", "branch"),
+    ("ingredient_purchase_week", "branch"),
+    ("push_subscription", "branch"),
+)
+# app_settings values that are JSON objects keyed by branch name ({"name": value}),
+# and feedback_places, whose per-branch overrides sit under "branches".
+_BRANCH_NAME_SETTINGS = ("branch_fixed_costs", "branch_labor_costs")
+
+
+def _rename_branch_refs(con, old: str, new: str) -> dict:
+    """Move every name-keyed reference from `old` to `new`. No commit (the caller's
+    transaction). Returns {table: rows moved} for the answer."""
+    import json as _json
+    moved = {}
+    have = {r[0] for r in con.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+    for table, col in _BRANCH_NAME_COLUMNS:
+        if table not in have:
+            continue
+        if col not in {r[1] for r in con.execute(f'PRAGMA table_info("{table}")')}:
+            continue
+        n = con.execute(f'UPDATE "{table}" SET "{col}"=? WHERE "{col}"=?', (new, old)).rowcount
+        if n:
+            moved[table] = n
+    if "app_settings" in have:
+        for key in _BRANCH_NAME_SETTINGS + ("feedback_places",):
+            row = con.execute("SELECT value FROM app_settings WHERE key=?", (key,)).fetchone()
+            if not row or not row[0]:
+                continue
+            try:
+                val = _json.loads(row[0])
+            except (TypeError, ValueError):
+                continue
+            target = val.get("branches") if key == "feedback_places" and isinstance(val, dict) else val
+            if isinstance(target, dict) and old in target:
+                target[new] = target.pop(old)
+                con.execute("UPDATE app_settings SET value=? WHERE key=?",
+                            (_json.dumps(val, ensure_ascii=False), key))
+                moved[f"app_settings.{key}"] = 1
+    return moved
+
+
 @router.put("/api/branches/{branch_id}", dependencies=[Depends(require_write_token)])
 def update_branch(branch_id: int, body: BranchUpdate):
+    import sqlite3 as _sqlite3
+    new = (body.name or "").strip()
+    if not new:
+        raise HTTPException(400, "Branch name is required")
     with get_db() as con:
+        cur = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()
+        if not cur:
+            raise HTTPException(404, "Branch not found")
         clash = con.execute(
             "SELECT branch_id FROM branches WHERE name=? AND branch_id!=?",
-            (body.name, branch_id),
+            (new, branch_id),
         ).fetchone()
         if clash:
             raise HTTPException(400, "Branch name already in use")
-        con.execute(
-            "UPDATE branches SET name=? WHERE branch_id=?", (body.name, branch_id)
-        )
-        con.commit()
-    return {"ok": True}
+        old = cur[0]
+        moved = {}
+        try:
+            con.execute("UPDATE branches SET name=? WHERE branch_id=?", (new, branch_id))
+            if old and old != new:
+                moved = _rename_branch_refs(con, old, new)
+            con.commit()
+        except _sqlite3.IntegrityError as e:
+            con.rollback()
+            raise HTTPException(409, f"เปลี่ยนชื่อสาขาไม่ได้: มีข้อมูลของชื่อใหม่อยู่แล้ว ({e})")
+    if old != new:
+        # every cached answer that carries the old name; costs did not change, so no cost rebuild
+        invalidate_cache(rebuild_cost=False)
+    return {"ok": True, "moved": moved}
 
 
 @router.put("/api/branches/{branch_id}/active", dependencies=[Depends(require_write_token)])

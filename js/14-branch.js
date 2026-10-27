@@ -1019,6 +1019,7 @@ function _brnRecvCard(x) {
   const packs = (x.pack_reports || []).map(r => `<div class="text-xs mt-1" style="color:${r.status === 'rejected' ? 'var(--amber-ink)' : r.status === 'applied' ? 'var(--good-ink)' : 'var(--text-secondary)'}">${
     r.status === 'rejected' ? `แจ้งขนาดแพ็ค: ไม่ใช้ — ${esc(r.decision_note || '')}` : `แจ้งขนาดแพ็ค: ${esc(r.name || r.ingredient_code)} ${esc(r.text)} · ${esc(r.status_th)}`}</div>`).join('');
   const del = x.source === 'claim' ? _bmcChip('ยกเลิกไม่ได้ (เกิดจากการอนุมัติเรื่องที่แจ้ง)', 'var(--text-muted)')
+    : x.source === 'order' ? _bmcChip('ยกเลิกไม่ได้ (รับของตามใบสั่งซื้อ · ของขาดหรือเสียใช้แจ้งของขาด/เสีย)', 'var(--text-muted)')
     : x.locked ? _bmcChip('อยู่ในเดือนที่ปิดแล้ว', 'var(--text-muted)')
     : `<button onclick="brnRecvDelete(${x.receipt_id})" style="border:1px solid var(--bad-ink);color:var(--bad-ink);background:transparent;border-radius:var(--r-sm);padding:4px 12px;font-size:12px;cursor:pointer;white-space:nowrap">ยกเลิกใบรับของ</button>`;
   return `<div style="border:1px solid var(--border);border-radius:var(--r-md, 12px);padding:10px 12px;margin-bottom:8px;background:var(--bg-card, transparent)">

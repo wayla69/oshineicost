@@ -14,8 +14,26 @@ async function login(ctx) {
   }
 }
 
+// Open ตั้งค่า → prefs and wait until loadPreferences has FINISHED. It fetches /api/settings + /api/branches
+// and only then writes the fields, so typing before it resolves gets overwritten with the saved value
+// (the field already holds a value from the previous step, so "not empty" is not a load signal).
+async function openPrefs(page) {
+  await page.evaluate(async () => {
+    if (!window.__prefLoads) {
+      const orig = loadPreferences;
+      window.__prefLoads = [];
+      window.loadPreferences = (...a) => { const p = orig(...a); window.__prefLoads.push(p); return p; };
+    }
+    const before = window.__prefLoads.length;
+    window.switchTab('settings'); switchSettingsTab('prefs');
+    const t0 = Date.now();
+    while (window.__prefLoads.length === before && Date.now() - t0 < 15000) await new Promise(r => setTimeout(r, 50));
+    await Promise.allSettled(window.__prefLoads);
+  });
+}
+
 async function saveTarget(page, value) {
-  await page.evaluate(() => { window.switchTab('settings'); switchSettingsTab('prefs'); });
+  await openPrefs(page);
   const field = page.locator('#prefFoodCostTarget');
   await expect(field).toBeVisible();
   await expect(field).not.toHaveValue('');                     // loadPreferences filled it (58 when unset)
@@ -70,7 +88,7 @@ test('the food-cost target saves in settings and the GP รายสาขา ba
     await expect(page.locator('#tab-gpbranch')).not.toContainText('55-70');
 
     // out of range is refused on the page, nothing is sent
-    await page.evaluate(() => { window.switchTab('settings'); switchSettingsTab('prefs'); });
+    await openPrefs(page);
     await page.locator('#prefFoodCostTarget').fill('120');
     await page.evaluate(() => savePreferences());
     await expect(page.locator('#prefSaveStatus')).toContainText('20–90');

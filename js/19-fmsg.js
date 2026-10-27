@@ -12,6 +12,7 @@ let _fmsgList = null;
 let _fmsgCur = null;
 let _fmsgBranch = '';
 let _fmsgGen = 0;
+let _fmsgOpenGen = 0;
 let _fmsgBusy = false;
 function _fmsgStatusKey() { const f = uiStateFilter.get(['todo', 'done', 'all']); return f === 'done' ? 'closed' : f === 'all' ? 'all' : 'open'; }
 async function loadFmsgInbox() {
@@ -49,8 +50,12 @@ function fmsgRenderList() {
 function fmsgFilter(f) { uiStateFilter.set(f); loadFmsgInbox(); }
 function fmsgBranchChanged() { const sel = document.getElementById('fmsgBranch'); _fmsgBranch = sel ? sel.value : ''; _fmsgCur = null; loadFmsgInbox(); }
 async function fmsgOpen(tid, quiet) {
-  try { _fmsgCur = await _fmFetch(`/api/franchise/messages/${Number(tid) || 0}`); }
-  catch (e) { if (!quiet) uiToast(e.message, 'error'); _fmsgCur = null; fmsgRenderThread(); return; }
+  const gen = ++_fmsgOpenGen;                      // audit 2026-10: only the newest open draws (a slow answer for an older click is dropped)
+  let t;
+  try { t = await _fmFetch(`/api/franchise/messages/${Number(tid) || 0}`); }
+  catch (e) { if (gen !== _fmsgOpenGen) return; if (!quiet) uiToast(e.message, 'error'); _fmsgCur = null; fmsgRenderThread(); return; }
+  if (gen !== _fmsgOpenGen) return;
+  _fmsgCur = t;
   const row = ((_fmsgList && _fmsgList.threads) || []).find(x => x.id === _fmsgCur.id);
   if (row) row.unread = 0;
   fmsgRenderList();
@@ -65,7 +70,7 @@ function fmsgRenderThread() {
   const box = document.getElementById('fmsgThread');
   if (!box) return;
   const t = _fmsgCur;
-  if (!t) { box.innerHTML = `<div class="ms-card fm-card"><div class="ms-row" style="color:var(--text-muted);font-size:13px">เลือกหัวข้อจากรายการเพื่ออ่านและตอบ</div></div>`; return; }
+  if (!t) { _fmForget(box); box.innerHTML = `<div class="ms-card fm-card"><div class="ms-row" style="color:var(--text-muted);font-size:13px">เลือกหัวข้อจากรายการเพื่ออ่านและตอบ</div></div>`; return; }
   const max = t.max_body || 1000;
   const ctx = t.context ? `<div class="fm-ctx"><span class="fm-ctx-t">เรื่องที่อ้างถึง: ${esc(_fmCtxText(t.context))}</span></div>` : '';
   const state = t.status === 'closed'
@@ -76,8 +81,10 @@ function fmsgRenderThread() {
   const foot = t.status === 'open'
     ? `<label class="fm-label" for="fmsgReply">ตอบกลับ</label>${_fmComposer('fmsgReply', max, 'พิมพ์คำตอบถึงเจ้าของสาขา')}`
       + `<div class="fm-actions"><button type="button" class="fm-btn fm-primary" id="fmsgSend" onclick="fmsgSendReply(${Number(t.id) || 0})">ส่งคำตอบ</button></div>` : '';
+  const keep = _fmKeep(box, 'thread:' + (Number(t.id) || 0), ['fmsgReply']);     // audit 2026-10: a reload keeps a half-typed reply
   box.innerHTML = `<div class="ms-card fm-card"><div class="fm-actions"><span class="fm-topic fm-grow">${esc(t.branch || '')} · ${esc(t.topic_th || '')}</span>${state}${act}</div>`
     + ctx + `<div class="fm-thread">${_fmMessagesHtml(t.messages, 'hq')}</div>${foot}</div>`;
+  keep();
 }
 async function fmsgSendReply(tid) {
   if (_fmsgBusy) return;
@@ -87,7 +94,9 @@ async function fmsgSendReply(tid) {
   const btn = document.getElementById('fmsgSend'); if (btn) btn.disabled = true;
   try {
     _fmsgCur = await _fmPost(`/api/franchise/messages/${Number(tid) || 0}/reply`, { body: text });
+    _fmsgOpenGen++;                                  // an open still on its way carries the thread without this reply
     uiToast('ส่งคำตอบถึงเจ้าของสาขาแล้ว', 'success');
+    _fmForget(document.getElementById('fmsgThread'));     // the reply is sent: the box starts empty
     fmsgRenderThread();
     loadFmsgInbox();
   } catch (e) {
@@ -98,6 +107,7 @@ async function fmsgSendReply(tid) {
 async function fmsgSetStatus(tid, status) {
   try {
     _fmsgCur = await _fmPost(`/api/franchise/messages/${Number(tid) || 0}/status`, { status });
+    _fmsgOpenGen++;
     uiToast(status === 'closed' ? 'ปิดหัวข้อแล้ว' : 'เปิดหัวข้ออีกครั้งแล้ว', 'success');
     if (status === 'closed' && _fmsgStatusKey() === 'open') _fmsgCur = null;    // a finished thread leaves the default list
     loadFmsgInbox();

@@ -142,9 +142,12 @@ def test_token_carries_the_branch_and_scope_reads_it(monkeypatch):
     assert auth.parse_token(tok)["b"] == "ขอนแก่น"
     assert "b" not in auth.parse_token(auth.make_token(1, "u", "operation"))
 
-    class R:                                     # the only thing scope_branch reads
-        cookies = {auth.SESSION_COOKIE: tok}
-    assert auth.scope_branch(R()) == "ขอนแก่น"
+    import types
+
+    class R:                                     # what scope_branch reads: the LIVE identity the auth
+        cookies = {auth.SESSION_COOKIE: tok}     # middleware leaves on request.state (security audit 2026-10)
+        state = types.SimpleNamespace(auth_user={"u": "u", "r": "operation", "b": "ขอนแก่น", "active": True, "live": True})
+    assert auth.scope_branch(R()) == "ขอนแก่น"   # (a cookie with no live account: test_security_audit_2026_10)
     monkeypatch.setenv("OSHINEI_AUTH", "0")
     assert auth.scope_branch(R()) is None
 

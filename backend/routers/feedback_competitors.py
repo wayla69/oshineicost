@@ -216,6 +216,12 @@ def competitors_settings_get(branch: Optional[str] = Query(None)):
 
 @router.post("/api/feedback/competitors/settings", dependencies=[Depends(require_write_token)])
 async def competitors_settings_post(request: Request, branch: Optional[str] = Query(None)):
+    # audit 2026-10: a branch-confined login may change only its own branch's override, never the chain defaults or another branch
+    scope = scope_branch(request)
+    if scope:
+        if branch and branch != scope:
+            raise HTTPException(403, "รายการนี้อยู่นอกสาขาของคุณ")
+        branch = scope
     body = await request.json()
     radius_m, keywords = body.get("radius_m"), body.get("keywords")
     if radius_m is not None and not (500 <= int(radius_m) <= 10000):
@@ -232,6 +238,9 @@ async def competitors_settings_post(request: Request, branch: Optional[str] = Qu
 
 @router.post("/api/feedback/competitors", dependencies=[Depends(require_write_token)])
 async def competitors_post(request: Request):
+    # audit 2026-10: the fetcher's monthly snapshot covers every branch - refused to a branch-confined login
+    if scope_branch(request):
+        raise HTTPException(403, "รายการนี้สำหรับผู้ใช้งานส่วนกลางเท่านั้น")
     body = await request.json()
     month = str(body.get("month") or _thai_today()[:7])[:7]
     rows = body.get("rows") or []
