@@ -37,7 +37,7 @@ def load_env():
                 os.environ.setdefault(k.strip(), v.strip())
 load_env()
 
-from ingest_may26_update import BRANCH_ALIAS
+import branch_map                     # noqa: E402  — POS BranchId → branch_id
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
 
@@ -222,18 +222,13 @@ def main():
         "SELECT s.sku_code, e.recipe_cost FROM sku_effective_cost e JOIN skus s USING(sku_id) "
         "WHERE e.recipe_cost > 0") if c not in TIER_CODES}
     code2sid = {c: i for i, c in sq.execute("SELECT sku_id, sku_code FROM skus")}
-    name2bid = {nm: b for b, nm in sq.execute("SELECT branch_id, name FROM branches")}
     desc_by_code = {c: (d or "") for c, d in sq.execute("SELECT sku_code, description FROM skus")}
 
     print(f"[1/4] connect MSSQL · window {args.d_from} → {args.d_to}")
     mc = connect_mssql().cursor()
     mc.execute("SELECT BranchId, BranchName FROM Branch")
-    bid_map = {}
-    for bid, nm in mc.fetchall():
-        nm = (nm or "").strip()
-        short = BRANCH_ALIAS.get(nm, nm)
-        if short in name2bid:
-            bid_map[int(bid)] = name2bid[short]
+    # the POS id the sync mapped before wins over the name (a branch renamed in the app)
+    bid_map, _, _ = branch_map.resolve(sq, mc.fetchall())
 
     mc.execute("SELECT ItemId, ItemCode FROM Items")
     iid2code, code2iids = {}, {}

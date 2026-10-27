@@ -11,7 +11,8 @@ Design (decided 2026-06-04):
               is COPIED from the current DB and kept — COGS stays on BoM.
   * Mapping  : reuse the existing skus/branches by NATURAL KEY
                 - sku   : MSSQL Items.ItemCode  == sqlite skus.sku_code
-                - branch: MSSQL Branch.BranchName --BRANCH_ALIAS--> sqlite branches.name
+                - branch: MSSQL Branch.BranchId as mapped by the last sync (branch_pos),
+                          else BranchName --BRANCH_ALIAS--> sqlite branches.name (branch_map)
               → zero convention drift (descriptions, (A)/(B) prefixes,
                 business_type all come from the existing skus rows).
   * Output   : writes backend/oshinei.db.incoming then RECONCILES against the
@@ -47,7 +48,7 @@ def load_env():
                 os.environ.setdefault(k.strip(), v.strip())
 load_env()
 
-from ingest_may26_update import BRANCH_ALIAS   # MSSQL/full name → short DB name
+import branch_map as _branch_map            # POS BranchId → branch_id (survives renames)
 import month_summary                            # sales_month_summary roll-up (backend/month_summary.py)
 
 SALE_FILTER = "s.IsFinalize=1 AND s.Active=1 AND ISNULL(s.IsReturn,0)=0"
@@ -269,9 +270,8 @@ class ResilientCursor:
         except Exception:
             pass
 
-def short_name(mssql_name: str) -> str:
-    n = (mssql_name or "").strip()
-    return BRANCH_ALIAS.get(n, n)
+BRANCH_ALIAS = _branch_map.BRANCH_ALIAS   # re-exported for callers and tests
+short_name = _branch_map.short_name   # MSSQL/full name → short DB name (kept for callers)
 
 # ── drink / other category classification (food = everything else) ───────────
 def bucket_for_cat(name: str) -> str:
@@ -680,16 +680,10 @@ def _sync_masters(*, code2sid, name2bid, sq):
     print("[2/6] connect MSSQL + load Branch / Items / ItemCategory")
     mc = ResilientCursor(connect_mssql)   # auto-reconnects on dropped connection (err 20047)
     mc.execute("SELECT BranchId, BranchName, BranchCode FROM Branch")
-    bid_map = {}                       # MSSQL BranchId → sqlite branch_id
-    unmatched_branches = []
-    pos_rows = []
-    for r in mc.fetchall():
-        sn = short_name(r["BranchName"])
-        if sn in name2bid:
-            bid_map[r["BranchId"]] = name2bid[sn]
-            pos_rows.append((name2bid[sn], r["BranchId"], r.get("BranchCode"), r["BranchName"]))
-        else:
-            unmatched_branches.append(r["BranchName"])
+    # MSSQL BranchId → sqlite branch_id: the POS id mapped by the previous sync wins, so a
+    # branch renamed in the app keeps its sales; the name only places a new POS branch
+    bid_map, pos_rows, unmatched_branches = _branch_map.resolve(
+        sq, [(r["BranchId"], r["BranchName"], r.get("BranchCode")) for r in mc.fetchall()])
     write_branch_pos(sq, pos_rows)
 
     mc.execute("SELECT CategoryId, CategoryName FROM ItemCategory")

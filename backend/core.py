@@ -393,7 +393,12 @@ _PRESERVED_PREFIXES = ("recon", "feedback", "checklist", "bc")  # + "_" (escaped
 #                           is per ROW, by who wrote it: {table: (key column, SQL picking the
 #                           rows a person wrote on the site)}. Those rows are laid over the
 #                           incoming table; everything else in it is the PC's.
-_MERGED_ROWS = {"ingredient_order_unit": ("ingredient_code", "COALESCE(source, '') = 'manual'")}
+# branches: names, hours and flags are edited on the site (ตั้งค่า → สาขา) while the sync only
+# READS the table (branch_map maps POS ids onto it). Every live row is laid over the staged copy,
+# so a rename made while a sync was building is not reverted, and a branch the staged build
+# added (a data ingest) is kept.
+_MERGED_ROWS = {"ingredient_order_unit": ("ingredient_code", "COALESCE(source, '') = 'manual'"),
+                "branches": ("branch_id", "1=1")}
 
 
 def _merged_counts(db_path: str) -> dict:
