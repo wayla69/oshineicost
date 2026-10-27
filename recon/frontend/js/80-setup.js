@@ -232,7 +232,7 @@ async function _setupSaveMap(id,el,field){
   const body={category:r.category,bank:r.bank,reconcile:r.reconcile,notes:r.notes||''};
   body[field]=field==='reconcile'?(el.checked?1:0):el.value;
   try{
-    await api(`/api/payment-map/${id}`,{method:'PATCH',body});
+    await lockedOk(`/api/payment-map/${id}`,{method:'PATCH',body});
     toast(`บันทึก ${r.payment_code_norm} แล้ว`);
     loadSetup();
   }catch(e){toast('ไม่สำเร็จ: '+e.message);loadSetup();}
@@ -278,7 +278,7 @@ async function _setupSaveLane(cfgId){
     fee_vat_expected:$('sle-fee').checked?1:0,
     notes:$('sle-notes').value};
   try{
-    await mgrApi(`/api/method-config/${cfgId}`,{method:'PATCH',body});
+    await lockedOk(`/api/method-config/${cfgId}`,{method:'PATCH',body},mgrApi);
     toast('บันทึก lane แล้ว');
     loadSetup();
   }catch(e){toast('ไม่สำเร็จ: '+e.message);}
@@ -330,14 +330,14 @@ async function _setupAddMid(){
   const mid=prompt('Merchant ID:')||'';
   const term=prompt('Terminal ID (ไม่บังคับ):')||'';
   try{
-    await api('/api/acquirer-mids',{method:'POST',
+    await lockedOk('/api/acquirer-mids',{method:'POST',
       body:{branch_id:bid,acquirer:acq.trim().toUpperCase(),merchant_id:mid.trim(),terminal_id:term.trim()}});
     toast('เพิ่ม MID แล้ว');loadSetup();
   }catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 async function _setupDelMid(id){
   if(!confirm('ลบ MID นี้?'))return;
-  try{await api(`/api/acquirer-mids/${id}`,{method:'DELETE'});toast('ลบแล้ว');loadSetup();}
+  try{await lockedOk(`/api/acquirer-mids/${id}`,{method:'DELETE'});toast('ลบแล้ว');loadSetup();}
   catch(e){toast('ไม่สำเร็จ: '+e.message);}
 }
 /* ════════════════ END PHASE 4 ════════════════ */

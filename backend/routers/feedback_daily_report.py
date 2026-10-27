@@ -26,6 +26,7 @@ import html
 import io
 import json
 from typing import Optional
+from downloads import attachment
 
 from fastapi import APIRouter, Query, Request, Response
 
@@ -567,7 +568,7 @@ def feedback_daily_report_xlsx(request: Request, date: Optional[str] = Query(Non
     buf = _build_xlsx(data)
     fname = f"FEEDBACK_REPORT_{data['date_from']}_{data['date_to']}" + (f"_{branch}" if branch else "") + ".xlsx"
     return Response(buf.read(), media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                    headers={"Content-Disposition": f"attachment; filename={fname}"})
+                    headers={"Content-Disposition": attachment(fname)})
 
 
 @router.get("/api/feedback/daily-report.print")

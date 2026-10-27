@@ -274,6 +274,20 @@ def machine_token_label(request) -> str | None:
     return None
 
 
+# What a session-less caller holding the write token (X-Upload-Token) may do with
+# the recon login ON: exactly what the bulk uploader (bulk_recon_upload.py) does —
+# POST a document to the upload endpoints. Every other write needs a recon session.
+_MACHINE_PATH = re.compile(r"^/api/uploads/((bank|credit_card|grab|lineman)/confirm|bulk)$")
+
+
+def machine_path_ok(request) -> bool:
+    """True when a session-less token call may reach this path (see _MACHINE_PATH)."""
+    try:
+        return request.method == "POST" and bool(_MACHINE_PATH.match(request.url.path))
+    except Exception:
+        return False
+
+
 def require_role(request, *roles: str) -> dict:
     """Raise 401 (not logged in) / 403 (wrong role) — used when login is enforced."""
     from fastapi import HTTPException

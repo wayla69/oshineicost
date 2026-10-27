@@ -49,6 +49,27 @@ def avg_ticket_sql(a: str = "st") -> str:
     return f"(AVG({p}total_inc_vat)/{VAT_DIVISOR} - AVG(COALESCE({p}service_charge,0)))"
 
 
+# ─── Per-bill joins ──────────────────────────────────────────────────────────
+# receipt_no is a PER-BRANCH sequence ("<day>-<SaleNum>-<SaleId>"): the same text
+# turns up at two branches (24 pairs in the 31 days to 2026-10-22). Every join of
+# a per-bill table to sales_transaction must also match the branch, or a bill takes
+# the other branch's cost (2026-10-20-691020021-23842: branch 18's ฿155 bill read
+# branch 12's ฿1,430 cost).
+
+def bill_item_branch_sql(con, i: str = "i", t: str = "t") -> str:
+    """` AND <branch match>` for a sale_bill_item join, or "" while the table predates
+    its branch_id column (a DB synced before 2026-10-26: the app must keep serving it
+    until the next sync adds the column). Lines staged before then carry NULL and
+    match on receipt_no alone, as before."""
+    try:
+        cols = {r[1] for r in con.execute("PRAGMA table_info(sale_bill_item)").fetchall()}
+    except Exception:
+        return ""
+    if "branch_id" not in cols:
+        return ""
+    return f" AND ({i}.branch_id IS NULL OR {i}.branch_id = {t}.branch_id)"
+
+
 # ─── Discount policy ─────────────────────────────────────────────────────────
 # The owner's ceiling (2026-07): discounts should stay within 2.5% of pre-discount
 # net sales. Every reading of discount share — the Discounts tab, the management

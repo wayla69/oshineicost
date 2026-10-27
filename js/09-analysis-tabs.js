@@ -206,7 +206,8 @@ async function openBillItems(row = {}) {
   modal.style.display = 'flex';
   let d;
   try {
-    const r = await fetch(`${API}/api/reports/pnl-bill-items?receipt=${encodeURIComponent(row.receipt || '')}`);
+    // receipt_no repeats across branches: the branch picks the right bill
+    const r = await fetch(`${API}/api/reports/pnl-bill-items?receipt=${encodeURIComponent(row.receipt || '')}${row.branch ? '&branch=' + encodeURIComponent(row.branch) : ''}`);
     if (!r.ok) throw new Error('HTTP ' + r.status);
     d = await r.json();
   } catch (e) { body.innerHTML = `<p class="text-sm text-red-500 py-6 text-center">โหลดไม่ได้: ${esc(String(e.message || e))}</p>`; return; }

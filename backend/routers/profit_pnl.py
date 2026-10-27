@@ -49,7 +49,7 @@ def buffet_per_bill(
     else:
         period_expr = "strftime('%Y-%m', st.sold_at)"
 
-    filters = ["st.source = 'Easy'", "b.name != 'ALL'", "st.customer_count > 0", "st.food_subtotal > 0"]
+    filters = ["st.source = 'Easy'", "b.name != 'ALL'", "st.customer_count > 0", "st.total_inc_vat > 0"]
     params: dict = {}
     if branch:
         filters.append("b.name = :branch")
@@ -89,20 +89,24 @@ def buffet_per_bill(
                 _rrev_tot += rev; _rcogs_tot += cg
         overall_ratio = (_rcogs_tot / _rrev_tot) if _rrev_tot else 0.60
 
-        # Pull all eligible buffet bills (per-head spend used only for the spend-bracket mix)
+        # Pull all eligible buffet bills (per-head spend used only for the spend-bracket mix).
+        # Per head = the bill's NET revenue ÷ covers. Until 2026-10 it was food_subtotal ÷ covers,
+        # but the buffet charge sits in other_subtotal: food_subtotal is the à-la-carte part only,
+        # so ~5 % of bills passed the 200-1500 band (Sep 2026: 2,743 of 48,715) and the
+        # dominant bracket described à-la-carte add-ons, not what a guest paid.
         rows = con.execute(f"""
             SELECT b.name AS branch,
                    {period_expr} AS period,
                    strftime('%Y-%m', st.sold_at)                  AS ym,
                    st.customer_count                              AS pax,
-                   st.food_subtotal / st.customer_count           AS per_head,
+                   {net_revenue_row('st')} / st.customer_count    AS per_head,
                    st.total_inc_vat                               AS rev_inc,
                    {net_revenue_row('st')}                        AS rev_ex,
                    st.discount + st.sp_discount                   AS discount
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where}
-              AND (st.food_subtotal / st.customer_count) BETWEEN 200 AND 1500
+              AND ({net_revenue_row('st')} / st.customer_count) BETWEEN 200 AND 1500
         """, params).fetchall()
 
     # Spend-bracket label from real per-head spend (NOT the dead tier SKU codes)

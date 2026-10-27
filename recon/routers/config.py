@@ -25,6 +25,7 @@ from ..matcher import TOL_ABS
 from ..matcher import TOL_ABS_DAY
 from ..matcher import TOL_PCT
 from ..matcher import TOL_PCT_DAY
+from ..matcher import max_lag_days
 from ..parsers.bank import _normalise_channel
 from ..seed_payment_map import seed_payment_map
 from fastapi import Depends
@@ -65,6 +66,65 @@ class PaymentMapPatch(BaseModel):
     reconcile:  int | None = None
     notes:      str | None = None
     updated_by: str = ""
+
+
+# ── Global config vs signed-off months (2026-10 audit) ───────────────────────
+# The payment-code map, lane method parameters and acquirer MIDs are read LIVE by
+# every month's matcher, so changing one re-computes approved/closed months too.
+# The signed-off figures themselves are safe — frozen in the close snapshot
+# (recon_close_snapshot, sha256) at approval — but the live screens of those
+# months would quietly move. So such a change is refused with 409 naming the
+# locked branch-months it touches, and goes through only when re-sent with
+# ?confirm_locked=1 (the manager's explicit acknowledgement); the list is then
+# written into the audit row. Bank accounts are not gated: they only route
+# uploads (wrong-branch guard / PDF passwords), the matcher never reads them.
+# Statement-code overrides keep their own rule: lines of locked months (and of
+# the next-month window a locked month reads) are left as they were.
+_LOCKED_CONFIRM = "ยืนยันเพื่อบันทึก"
+
+
+def _locked_sessions(conn, branch_id: int | None = None) -> list[tuple]:
+    sql = ("SELECT s.branch_id, s.period_month, b.name FROM recon_sessions s "
+           "JOIN branches b ON b.branch_id = s.branch_id "
+           "WHERE s.status IN ('approved','closed')")
+    params: list = []
+    if branch_id is not None:
+        sql += " AND s.branch_id=?"; params.append(branch_id)
+    return [(r[0], r[1], r[2]) for r in conn.execute(sql + " ORDER BY s.period_month, b.name", params)]
+
+
+def _locked_for_codes(conn, codes) -> list[tuple]:
+    """Locked branch-months whose POS carries one of these (normalised) payment codes."""
+    from ..seed_payment_map import normalize
+    want = {c for c in codes if c}
+    if not want:
+        return []
+    try:
+        rows = conn.execute(
+            "SELECT DISTINCT s.branch_id, s.period_month, b.name, p.payment_code "
+            "FROM recon_sessions s JOIN branches b ON b.branch_id = s.branch_id "
+            "JOIN pos_payment_month p ON p.branch_id = s.branch_id AND p.period_month = s.period_month "
+            "WHERE s.status IN ('approved','closed') AND COALESCE(p.amount,0) <> 0").fetchall()
+    except sqlite3.OperationalError:            # no POS month table (fresh DB / tests)
+        return []
+    return sorted({(r[0], r[1], r[2]) for r in rows if normalize(r[3]) in want},
+                  key=lambda t: (t[1], t[2] or ""))
+
+
+def _guard_locked(request: Request, affected: list[tuple], what: str) -> list[dict]:
+    """409 unless ?confirm_locked=1 when `affected` locked branch-months exist; on
+    confirm returns the audit diff that records them ([] when nothing is locked)."""
+    if not affected:
+        return []
+    label = ", ".join(f"{n or b} {m}" for b, m, n in affected[:6]) + (
+        f" และอีก {len(affected) - 6}" if len(affected) > 6 else "")
+    if (request.query_params.get("confirm_locked") or "").strip().lower() not in ("1", "true", "yes"):
+        raise HTTPException(
+            409, f"การแก้{what}นี้จะเปลี่ยนผลกระทบยอดที่แสดงของเดือนที่ปิด/อนุมัติแล้ว "
+                 f"{len(affected)} สาขา-เดือน ({label}) — ตัวเลขที่อนุมัติไว้ยังอยู่ในเอกสารปิดงวด "
+                 f"แต่หน้าจอของเดือนเหล่านั้นจะคำนวณตามค่าใหม่ · {_LOCKED_CONFIRM}")
+    return [{"field": "locked_months_affected", "old": None,
+             "new": f"{len(affected)}: " + ", ".join(f"{b}/{m}" for b, m, _n in affected)}]
 
 
 def _validate_map(body):
@@ -115,21 +175,29 @@ def list_payment_map(needs_attention: int = 0):
 
 
 @router.post("/api/payment-map", dependencies=[Depends(require_write_token)])
-def create_payment_map(body: PaymentMapUpsert):
+def create_payment_map(body: PaymentMapUpsert, request: Request):
     _validate_map(body)
     code = (body.payment_code_norm or "").strip()
     if not code:
         raise HTTPException(400, "payment_code_norm is required")
+    actor = _actor(request, body.updated_by, default="manual")
     with get_db() as conn:
+        if conn.execute("SELECT 1 FROM recon_payment_map WHERE payment_code_norm=?", (code,)).fetchone():
+            raise HTTPException(409, f"payment_code_norm {code!r} already mapped")
+        locked = _guard_locked(request, _locked_for_codes(conn, [code]), "รหัสชำระเงิน")
         try:
             cur = conn.execute("""
                 INSERT INTO recon_payment_map (payment_code_norm, category, bank, reconcile, notes, updated_by)
                 VALUES (?,?,?,?,?,?)
-            """, (code, body.category, body.bank, body.reconcile, body.notes, body.updated_by or "manual"))
-            conn.commit()
-            return {"id": cur.lastrowid}
+            """, (code, body.category, body.bank, body.reconcile, body.notes, actor))
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"payment_code_norm {code!r} already mapped")
+        if locked:
+            _audit(conn, "payment_map", cur.lastrowid, "create", actor,
+                   [{"field": "mapping", "old": None, "new": f"{code} → {body.category}·{body.bank}"}]
+                   + locked)
+        conn.commit()
+        return {"id": cur.lastrowid}
 
 
 @router.patch("/api/payment-map/{map_id}", dependencies=[Depends(require_write_token)])
@@ -144,6 +212,11 @@ def update_payment_map(map_id: int, body: PaymentMapPatch, request: Request):
         new = {f: (getattr(body, f) if getattr(body, f) is not None else old[f])
                for f in ("category", "bank", "reconcile", "notes")}
         _validate_map(PaymentMapPatch(**new))
+        locked = []
+        if any(old[f] != new[f] for f in ("category", "bank", "reconcile")):   # notes move nothing
+            code = conn.execute("SELECT payment_code_norm FROM recon_payment_map WHERE id=?",
+                                (map_id,)).fetchone()[0]
+            locked = _guard_locked(request, _locked_for_codes(conn, [code]), "รหัสชำระเงิน")
         conn.execute("""
             UPDATE recon_payment_map
             SET category=?, bank=?, reconcile=?, notes=?, updated_by=?, updated_at=datetime('now')
@@ -153,7 +226,7 @@ def update_payment_map(map_id: int, body: PaymentMapPatch, request: Request):
                  for f in ("category", "bank", "reconcile", "notes")
                  if ("" if old[f] is None else old[f]) != ("" if new[f] is None else new[f])]
         if diffs:
-            _audit(conn, "payment_map", map_id, "update", actor, diffs)
+            _audit(conn, "payment_map", map_id, "update", actor, diffs + locked)
         conn.commit()
     return {"id": map_id}
 
@@ -164,11 +237,13 @@ def delete_payment_map(map_id: int, request: Request):
         old = conn.execute("SELECT * FROM recon_payment_map WHERE id=?", (map_id,)).fetchone()
         if not old:
             raise HTTPException(404, f"payment map {map_id} not found")
+        locked = _guard_locked(request, _locked_for_codes(conn, [old["payment_code_norm"]]),
+                               "รหัสชำระเงิน")
         conn.execute("DELETE FROM recon_payment_map WHERE id=?", (map_id,))
         _audit(conn, "payment_map", map_id, "delete", _actor(request), [
             {"field": "payment_code_norm", "old": old["payment_code_norm"], "new": None},
             {"field": "mapping", "old": f"{old['category']}·{old['bank']} reconcile={old['reconcile']}",
-             "new": None}])
+             "new": None}] + locked)
         conn.commit()
     return {"deleted": map_id}
 
@@ -230,9 +305,11 @@ def list_method_config():
 
 
 @router.post("/api/method-config", dependencies=[Depends(require_manager_token)])
-def create_method_config(body: MethodConfig):
+def create_method_config(body: MethodConfig, request: Request):
     _validate_method_config(body)
+    actor = _actor(request, body.updated_by, default="manager")
     with get_db() as conn:
+        locked = _guard_locked(request, _locked_sessions(conn), "ค่าวิธีกระทบยอด")
         try:
             cur = conn.execute("""
                 INSERT INTO recon_method_config
@@ -241,8 +318,8 @@ def create_method_config(body: MethodConfig):
                 VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
             """, (body.category, body.bank, body.doc1, body.doc2, body.method,
                   body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
-                  body.fee_vat_expected, body.notes or None, body.updated_by or "manager"))
-            _audit(conn, "method_config", cur.lastrowid, "create", body.updated_by or "manager")
+                  body.fee_vat_expected, body.notes or None, actor))
+            _audit(conn, "method_config", cur.lastrowid, "create", actor, locked or None)
             conn.commit()
             return {"id": cur.lastrowid}
         except sqlite3.IntegrityError:
@@ -250,12 +327,17 @@ def create_method_config(body: MethodConfig):
 
 
 @router.patch("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
-def update_method_config(cfg_id: int, body: MethodConfig):
+def update_method_config(cfg_id: int, body: MethodConfig, request: Request):
     _validate_method_config(body)
+    actor = _actor(request, body.updated_by, default="manager")
     with get_db() as conn:
         old = conn.execute("SELECT * FROM recon_method_config WHERE id=?", (cfg_id,)).fetchone()
         if not old:
             raise HTTPException(404, f"method config {cfg_id} not found")
+        locked = []
+        if any(old[f] != getattr(body, f) for f in
+               ("category", "bank", "method", "tol_abs", "tol_abs_day", "lag_days", "merge_days")):
+            locked = _guard_locked(request, _locked_sessions(conn), "ค่าวิธีกระทบยอด")
         conn.execute("""
             UPDATE recon_method_config
             SET category=?, bank=?, doc1=?, doc2=?, method=?, tol_abs=?, tol_abs_day=?,
@@ -265,24 +347,26 @@ def update_method_config(cfg_id: int, body: MethodConfig):
         """, (body.category, body.bank, body.doc1, body.doc2, body.method,
               body.tol_abs, body.tol_abs_day, body.lag_days, body.merge_days,
               body.fee_vat_expected, body.notes or None,
-              body.updated_by or "manager", cfg_id))
+              actor, cfg_id))
         diffs = [{"field": f, "old": old[f], "new": getattr(body, f)}
                  for f in ("doc1", "doc2", "method", "tol_abs", "tol_abs_day",
                            "lag_days", "merge_days", "fee_vat_expected")
                  if old[f] != getattr(body, f)]
         if diffs:
-            _audit(conn, "method_config", cfg_id, "update", body.updated_by or "manager", diffs)
+            _audit(conn, "method_config", cfg_id, "update", actor, diffs + locked)
         conn.commit()
     return {"id": cfg_id}
 
 
 @router.delete("/api/method-config/{cfg_id}", dependencies=[Depends(require_manager_token)])
-def delete_method_config(cfg_id: int):
+def delete_method_config(cfg_id: int, request: Request):
     with get_db() as conn:
-        cur = conn.execute("DELETE FROM recon_method_config WHERE id=?", (cfg_id,))
-        if cur.rowcount == 0:
+        if not conn.execute("SELECT 1 FROM recon_method_config WHERE id=?", (cfg_id,)).fetchone():
             raise HTTPException(404, f"method config {cfg_id} not found")
-        _audit(conn, "method_config", cfg_id, "delete", "manager")
+        locked = _guard_locked(request, _locked_sessions(conn), "ค่าวิธีกระทบยอด")
+        conn.execute("DELETE FROM recon_method_config WHERE id=?", (cfg_id,))
+        _audit(conn, "method_config", cfg_id, "delete", _actor(request, default="manager"),
+               locked or None)
         conn.commit()
     return {"deleted": cfg_id}
 
@@ -516,12 +600,13 @@ def create_acquirer_mid(body: AcquirerMid, request: Request):
         raise HTTPException(400, "acquirer must be KTB, KBANK, KTC, BAY, SCB, BBL, KTCPOINT or BAYPOINT")
     with get_db() as conn:
         _validate_master_branch(conn, body.branch_id)
+        locked = _guard_locked(request, _locked_sessions(conn, body.branch_id), "MID ผู้รับบัตร")
         cur = conn.execute("""
             INSERT INTO recon_acquirer_mid (branch_id, acquirer, merchant_id, terminal_id, active)
             VALUES (?,?,?,?,?)
         """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active))
         _audit(conn, "acquirer_mid", cur.lastrowid, "create", _actor(request),
-               _config_diffs(None, body.model_dump()))
+               _config_diffs(None, body.model_dump()) + locked)
         conn.commit()
         return {"mid_id": cur.lastrowid}
 
@@ -535,13 +620,19 @@ def update_acquirer_mid(mid_id: int, body: AcquirerMid, request: Request):
         old = conn.execute("SELECT * FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,)).fetchone()
         if not old:
             raise HTTPException(404, f"acquirer MID {mid_id} not found")
+        locked = []
+        if any(old[f] != v for f, v in body.model_dump().items()):
+            aff = set(_locked_sessions(conn, old["branch_id"])) | set(_locked_sessions(conn, body.branch_id))
+            locked = _guard_locked(request, sorted(aff, key=lambda t: (t[1], t[2] or "")),
+                                   "MID ผู้รับบัตร")
         conn.execute("""
             UPDATE recon_acquirer_mid SET branch_id=?, acquirer=?, merchant_id=?, terminal_id=?, active=?
             WHERE mid_id=?
         """, (body.branch_id, body.acquirer, body.merchant_id, body.terminal_id, body.active, mid_id))
         diffs = _config_diffs(old, body.model_dump())
         if diffs:
-            _audit(conn, "acquirer_mid", mid_id, "update", _actor(request), _with_branch(diffs, old))
+            _audit(conn, "acquirer_mid", mid_id, "update", _actor(request),
+                   _with_branch(diffs, old) + locked)
         conn.commit()
     return {"mid_id": mid_id}
 
@@ -552,10 +643,11 @@ def delete_acquirer_mid(mid_id: int, request: Request):
         old = conn.execute("SELECT * FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,)).fetchone()
         if not old:
             raise HTTPException(404, f"acquirer MID {mid_id} not found")
+        locked = _guard_locked(request, _locked_sessions(conn, old["branch_id"]), "MID ผู้รับบัตร")
         conn.execute("DELETE FROM recon_acquirer_mid WHERE mid_id=?", (mid_id,))
         _audit(conn, "acquirer_mid", mid_id, "delete", _actor(request),
                [{"field": f, "old": old[f], "new": None}
-                for f in ("branch_id", "acquirer", "merchant_id", "terminal_id", "active")])
+                for f in ("branch_id", "acquirer", "merchant_id", "terminal_id", "active")] + locked)
         conn.commit()
     return {"deleted": mid_id}
 
@@ -568,7 +660,9 @@ def _reapply_statement_overrides(conn, code: str) -> int:
     """Re-classify stored bank lines whose description contains `code`, from the
     parser base + current overrides. Used on save (apply) and delete (revert).
     Lines of an approved/closed branch-month are left as signed off — a remap must
-    not rewrite a locked period's channels (reopen the month first)."""
+    not rewrite a locked period's channels (reopen the month first). Nor those dated
+    in the first lag days of a month whose PREVIOUS month is locked: that month's
+    cash / card / payout matchers read them (a deposit on the 1st banking the 31st)."""
     overrides = _statement_code_overrides(conn)
     # The code is a literal substring: escape LIKE's own wildcards (% _) first.
     lit = code.upper().replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
@@ -576,8 +670,12 @@ def _reapply_statement_overrides(conn, code: str) -> int:
         "SELECT l.id, l.description FROM recon_bank_lines l "
         "WHERE UPPER(COALESCE(l.description,'')) LIKE ? ESCAPE '\\' "
         "AND NOT EXISTS (SELECT 1 FROM recon_sessions s WHERE s.branch_id=l.branch_id "
-        "  AND s.period_month=substr(l.txn_date,1,7) AND s.status IN ('approved','closed'))",
-        (f"%{lit}%",)).fetchall()
+        "  AND s.period_month=substr(l.txn_date,1,7) AND s.status IN ('approved','closed')) "
+        "AND NOT (CAST(substr(l.txn_date,9,2) AS INTEGER) <= ? AND EXISTS ("
+        "  SELECT 1 FROM recon_sessions s WHERE s.branch_id=l.branch_id "
+        "  AND s.period_month=strftime('%Y-%m', substr(l.txn_date,1,10), 'start of month', '-1 month') "
+        "  AND s.status IN ('approved','closed')))",
+        (f"%{lit}%", max_lag_days(conn))).fetchall()
     n = 0
     for r in rows:
         base = _normalise_channel(r["description"])

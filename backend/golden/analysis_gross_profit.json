@@ -1,44 +1,44 @@
 [
  {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
-  "margin_pct": 70.0,
-  "period": "2026-05-01",
-  "revenue": 2000.0
- },
- {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
-  "margin_pct": 70.0,
-  "period": "2026-05-02",
-  "revenue": 2000.0
- },
- {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
-  "margin_pct": 70.0,
-  "period": "2026-05-03",
-  "revenue": 2000.0
- },
- {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
+  "cogs": 2400.0,
+  "gross_profit": 5600.0,
   "margin_pct": 70.0,
   "period": "2026-06-01",
-  "revenue": 2000.0
+  "revenue": 8000.0
  },
  {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
+  "cogs": 2400.0,
+  "gross_profit": 5600.0,
   "margin_pct": 70.0,
   "period": "2026-06-02",
-  "revenue": 2000.0
+  "revenue": 8000.0
  },
  {
-  "cogs": 600.0,
-  "gross_profit": 1400.0,
+  "cogs": 2400.0,
+  "gross_profit": 5600.0,
   "margin_pct": 70.0,
   "period": "2026-06-03",
-  "revenue": 2000.0
+  "revenue": 8000.0
+ },
+ {
+  "cogs": 3000.0,
+  "gross_profit": 7000.0,
+  "margin_pct": 70.0,
+  "period": "2026-05-01",
+  "revenue": 10000.0
+ },
+ {
+  "cogs": 3000.0,
+  "gross_profit": 7000.0,
+  "margin_pct": 70.0,
+  "period": "2026-05-02",
+  "revenue": 10000.0
+ },
+ {
+  "cogs": 3000.0,
+  "gross_profit": 7000.0,
+  "margin_pct": 70.0,
+  "period": "2026-05-03",
+  "revenue": 10000.0
  }
 ]
