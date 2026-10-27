@@ -26,6 +26,8 @@ module only picks the numbers and words the owner may see - no maths of its own 
                push (franchise_morning_payload, sent by routers/push_api.maybe_send_franchise, kind "franchise")
   supply_ratio (F3) ยอดซื้อเทียบยอดขาย of the month and of last month (_purchase_ratio, see the F3 block at the end of this module)
   GET /api/franchise/supply   (F3) วัตถุดิบจากส่วนกลาง: delivery rounds, purchases against sales, claims, late orders, over-use
+  GET /api/franchise/daily    สรุปประจำวัน (owner 2026-10-27): the branch's last FINISHED day (rules.latest_settled_day) and its
+               month so far - see the block at the end of this module
   GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี (F3: + วัตถุดิบ). The Fly image has
                no Chrome, so no server PDF; the page has a print stylesheet (A4 portrait) for a paper copy
 
@@ -1438,3 +1440,92 @@ def franchise_decide(request: Request, kind: str = Query("week"), pick: Optional
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     return franchise_decide_payload(bid, kind, pick)
+
+
+# ── สรุปประจำวัน: the last finished day at the top of ร้านของฉัน (owner 2026-10-27, mockup B) ──────────────────────
+# GET /api/franchise/daily: the owner's own branch only (the same branch rules as the summary), and never the day still
+# trading. The day does NOT follow the top bar's period: it is always the branch's last finished day.
+#   day     rules.latest_settled_day on the branch's own bills (closed_day_clause, and it steps back over a finished day the
+#           POS has not posted yet). Net sales on the dashboard's revenue rule (rules.net_revenue_sum: bill total / 1.07 less
+#           service charge), bills, customers, per head and per bill; vs_last_week_pct = against the same weekday seven days
+#           earlier (null when either day has no sales). discount_pct = discount over the PRE-discount base (rules.
+#           discount_base_row, the report's and the Discounts tab's base) against the policy ceiling (rules.
+#           discount_policy_pct): level 'good' within it, 'watch' above it, 'fix' above twice it (the controls card's bands).
+#           food_cost_pct = period_cost.cost_sum over the one day (the cost engine of the period pattern) against the ONE
+#           target (rules.food_cost_target); null with the engine's reason when the day has no cost source. No last-year
+#           figure for the day: the owner left it out (2026-10-27).
+#   month   the month that holds the day, from the management report the summary reads (to date through its last finished
+#           day): sales so far, against last month and last year on the same days (the summary's own fields), the sales
+#           target (_target: targets.py, weekday-fair while open) and the month's voided bills (home_extra.extra_cancel_bills,
+#           monthly only: the POS gives voided bills per month) with the controls card's bands T_CANCEL_WATCH / T_CANCEL_FIX
+def _daily_day(con, bid: int, name: str, day: str) -> dict:
+    import period_cost as PC
+    from rules import (discount_base_row, discount_policy_pct, food_cost_status_th, food_cost_target, net_revenue_sum)
+    d = date.fromisoformat(day)
+    wk = (d - timedelta(days=7)).isoformat()
+    rows = {r[0]: r for r in con.execute(
+        f"SELECT date(t.sold_at), {net_revenue_sum('t')}, COUNT(*), COALESCE(SUM(t.customer_count),0), "
+        f"COALESCE(SUM(t.discount),0), SUM({discount_base_row('t')}) FROM sales_transaction t "
+        f"WHERE t.branch_id=:bid AND t.source='Easy' AND date(t.sold_at) IN (:d, :w) GROUP BY date(t.sold_at)",
+        {"bid": bid, "d": day, "w": wk})}
+    cur, prev = rows.get(day), rows.get(wk)
+    rev = _num(cur[1], 2) if cur else None
+    bills, cust = (cur[2], int(cur[3])) if cur else (0, 0)
+    prev_rev = prev[1] if prev else None
+    disc = _num(100.0 * cur[4] / cur[5]) if cur and cur[5] else None
+    pol = float(discount_policy_pct(con))
+    dlevel = None if disc is None else "fix" if disc > 2 * pol else "watch" if disc > pol else "good"
+    fc, why = _safe("daily food cost", lambda: PC.cost_sum(con, day, day, name, None, PC.cost_floor(con)), (None, None))
+    fpct = _num((fc or {}).get("food_cost_pct"))
+    tgt = food_cost_target(con)
+    return {"date": day, "weekday": TH_DOW[d.weekday()], "revenue": rev, "bills": bills, "customers": cust,
+            "per_head": _num(rev / cust, 0) if rev is not None and cust else None,
+            "per_bill": _num(rev / bills, 0) if rev is not None and bills else None,
+            "last_week_date": wk,
+            "vs_last_week_pct": _num(100.0 * (rev - prev_rev) / prev_rev) if rev is not None and prev_rev else None,
+            "discount_pct": disc, "discount_policy_pct": _num(pol), "discount_level": dlevel,
+            "food_cost_pct": fpct, "food_cost_target_pct": _num(tgt),
+            "food_cost_status_th": food_cost_status_th(fpct, tgt) if fpct is not None else None,
+            "food_cost_reason": None if fpct is not None else (why or "ยังไม่มีต้นทุนของวันนี้")}
+
+
+def _daily_voids(name: str, month: str) -> dict:
+    from .home_extra import extra_cancel_bills
+    cb = extra_cancel_bills(month=month, branch=name, group=None)
+    s = (cb.get("summary") or {}) if cb.get("month") == month else {}
+    r = s.get("cancel_rate")
+    level = None if r is None else "fix" if r > T_CANCEL_FIX else "watch" if r > T_CANCEL_WATCH else "good"
+    return {"bills": s.get("bills") or 0, "rate_pct": _num(r, 2), "level": level,
+            "watch_pct": T_CANCEL_WATCH, "fix_pct": T_CANCEL_FIX}
+
+
+def franchise_daily_data(branch_id: int) -> dict:
+    """สรุปประจำวัน of one branch (see the block comment above). NOT wrapped in core.ttl_cache: the report it reads is cached."""
+    from rules import latest_settled_day
+    with get_db() as con:
+        name = con.execute("SELECT name FROM branches WHERE branch_id=?", (branch_id,)).fetchone()[0]
+        st = latest_settled_day(con, "t.source='Easy' AND t.branch_id=:bid", {"bid": branch_id})
+        day = st.get("day")
+        if not day:
+            return {"available": False, "branch": name, "day": None, "month": None}
+        out = {"available": True, "branch": name, "skipped_day": st.get("skipped_day"),
+               "day": _daily_day(con, branch_id, name, day), "month": None}
+        mon = day[:7]
+        rep = _safe("daily report", lambda: _report(name, mon), {}) or {}
+        sales = _sales_and_gp(rep, name)[0] if rep.get("selected_month") == mon else None
+        if sales:
+            out["month"] = {"month": mon, "label": rep.get("label"), "through": sales["through"],
+                            "complete": sales["month_complete"], "mtd": sales["mtd"],
+                            "vs_last_month_pct": sales["mtd_vs_last_month_pct"], "mom_basis": sales["mom_basis"],
+                            "vs_last_year_pct": sales["mtd_vs_last_year_pct"],
+                            "target": _safe("daily target", lambda: _target(con, rep, sales, name, mon)),
+                            "voids": _safe("daily voids", lambda: _daily_voids(name, mon))}
+    return out
+
+
+@router.get("/api/franchise/daily")
+def franchise_daily(request: Request, branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน · สรุปประจำวัน: the branch's last finished day and its month so far (see the block comment above)."""
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    return franchise_daily_data(bid)

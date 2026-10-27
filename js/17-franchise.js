@@ -15,6 +15,10 @@
 // page, GET/POST /api/franchise/messages*), a "สอบถามเรื่องนี้" button beside each ควรดู / ต้องแก้ line of the verdict. Head office's inbox
 // is js/19-fmsg.js, which draws with the pure helpers here (_fmRowHtml, _fmMessagesHtml, ...). Every string a person typed is drawn through
 // esc() - never innerHTML of raw text.
+// สรุปประจำวัน (owner 2026-10-27, mockup B): the card at the top of the page (#frcDay), from GET /api/franchise/daily - the branch's last
+// FINISHED day (navy band: net sales against the same weekday last week; tiles: customers, per head, food cost against the ONE target,
+// discount against the ceiling) and its month so far (against last month, last year and the target; voided bills of the month). It does not
+// follow the top bar's period: it is always the last finished day. No other branch, no chain figure.
 
 let _frcMonth = '';
 let _frcGen = 0;
@@ -46,6 +50,7 @@ async function loadFranchise() {
   _frcMonth = per.month;
   const decideP = frcFetchDecide(per);         // DV6: เรื่องที่ควรดู loads beside the summary (the first screen)
   decideP.catch(() => { /* drawn by frcShowDecide */ });
+  frcShowDay(gen, _frcGetJson('/api/franchise/daily'));      // สรุปประจำวัน: the last finished day, whatever the period (its own slot)
   frcPeriodChip(null);
   const qs = new URLSearchParams();
   if (_frcMonth) qs.set('month', _frcMonth);
@@ -314,6 +319,94 @@ function _frcRender(d) {
     + `<div id="frcSupply"><div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดวัตถุดิบจากส่วนกลาง…</div></div></div></div>`
     + _frcMenus(d.top_menus)
     + `<div id="frcInsight"><div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดสัดส่วนการขาย การควบคุม และเสียงลูกค้า…</div></div></div></div>`;
+}
+
+// ── สรุปประจำวัน (owner 2026-10-27, mockup B): the last finished day and its month so far ─────────────────────────────
+// #frcDay is its own slot in tabs/56-franchise.html, above ติดต่อสำนักงานใหญ่ and the month cards: it loads on its own and stays when the
+// month summary fails. The loading line shows only on the first load (a reload keeps the card until the new one is drawn).
+const _FRC_DAY_LOADING = `<div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดสรุปประจำวัน…</div></div></div>`;
+const _FRC_DOW_SHORT = { 'จันทร์': 'จ.', 'อังคาร': 'อ.', 'พุธ': 'พ.', 'พฤหัสบดี': 'พฤ.', 'ศุกร์': 'ศ.', 'เสาร์': 'ส.', 'อาทิตย์': 'อา.' };
+const _FRC_LEVEL_INK = { good: 'var(--good-ink)', watch: 'var(--amber-ink)', fix: 'var(--bad-ink)' };
+async function _frcGetJson(url) {
+  const r = await fetch(`${API}${url}`);
+  const t = await r.text();
+  let j = null; try { j = JSON.parse(t); } catch (e) { /* not json */ }
+  if (!r.ok) throw new Error((j && typeof j.detail === 'string' && j.detail) || 'โหลดข้อมูลไม่สำเร็จ');
+  return j;
+}
+async function frcShowDay(gen, p) {
+  const first = document.getElementById('frcDay');
+  if (first && !first.innerHTML.trim()) first.innerHTML = _FRC_DAY_LOADING;
+  let d = null, err = '';
+  try { d = await p; } catch (e) { err = (e && e.message) || 'โหลดข้อมูลไม่สำเร็จ'; }
+  const box = document.getElementById('frcDay');
+  if (gen !== _frcGen || !box) return;
+  box.innerHTML = err ? `<div class="ms-section"><div class="ms-card"><div class="ms-row" style="color:var(--bad-ink)">${esc(err)}</div></div></div>` : _frcDayCard(d);
+}
+// a band word on its own ink (ในเป้า / ไม่เกินเพดาน / ต้องแก้ ...)
+function _frcLevelChip(level, text) {
+  if (!level || !text) return '';
+  return `<span class="frc-lv" style="color:${_FRC_LEVEL_INK[level] || 'var(--text-secondary)'}">${esc(text)}</span>`;
+}
+// the change on the navy band: a light green / red on the fixed dark fill
+function _frcHeroChip(label, v) {
+  const val = v == null ? '—' : `${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(1).replace(/\.0$/, '')}%`;
+  return `<span class="frc-hchip">${esc(label)} <b class="${v == null || v === 0 ? '' : v > 0 ? 'up' : 'dn'}">${val}</b></span>`;
+}
+function _frcDayTile(label, value, acc, sub, ink) {
+  return `<div class="frc-tile" style="--acc:${acc}"><div class="k">${esc(label)}</div><div class="n"${ink ? ` style="color:${ink}"` : ''}>${value}</div><div class="s">${sub || ''}</div></div>`;
+}
+function _frcDayCard(d) {
+  if (!d || !d.available || !d.day) return '';
+  const D = d.day;
+  const dow = _FRC_DOW_SHORT[D.weekday] || D.weekday || '';
+  const help = '<p>วันที่แสดงคือวันล่าสุดที่ปิดการขายแล้ว วันที่ยังเปิดขายอยู่ไม่นำมาแสดง และไม่เปลี่ยนตามช่วงเวลาที่เลือกด้านบน</p>'
+    + '<p>ยอดขายไม่รวม VAT และไม่รวมค่าบริการ · เทียบวันเดียวกันของสัปดาห์ก่อน เช่น วันพฤหัสบดีเทียบวันพฤหัสบดี</p>'
+    + '<p>ต้นทุนอาหารของวันเทียบเป้าของบริษัท เมนูที่ยังไม่มีต้นทุนนับเป็น 0 บาท ตัวเลขจึงเป็นค่าต่ำสุด · ส่วนลดคิดจากยอดก่อนหักส่วนลด เทียบเพดานส่วนลด</p>'
+    + '<p>ยอดเดือนนี้เทียบเดือนก่อนและปีก่อนในช่วงวันเดียวกัน · เป้า = เป้าที่กำหนดไว้ หรือยอดเดือนเดียวกันของปีก่อน เส้นตั้งบนแถบคือเป้าถึงวันนี้ · บิลยกเลิกมีข้อมูลเป็นรายเดือน</p>';
+  const late = d.skipped_day ? `<span class="frc-hchip">ข้อมูล ${esc(_frcDay(d.skipped_day))} ยังเข้าไม่ครบ</span>` : '';
+  const hero = `<div class="frc-hero"><div class="lbl">${esc(D.weekday || '')} ${esc(_frcDay(D.date))} · ยอดขาย (ไม่รวม VAT และค่าบริการ)</div>`
+    + `<div class="num">${_frcBaht(D.revenue)}</div>`
+    + `<div class="cmp">${_frcHeroChip(dow + ' ก่อน', D.vs_last_week_pct)}${late}</div></div>`;
+  const fc = D.food_cost_pct;
+  const fcLevel = fc == null ? null : fc <= D.food_cost_target_pct ? 'good' : 'fix';
+  const fcWord = fcLevel === 'good' ? `ในเป้า ${_frcPctText(D.food_cost_target_pct)}` : D.food_cost_status_th;
+  const pol = _frcPctText(D.discount_policy_pct);
+  const discWord = { good: `ไม่เกิน ${pol}`, watch: `เกินเพดาน ${pol}`, fix: `เกินเพดาน ${pol} มาก` };
+  const tiles = `<div class="frc-tiles">`
+    + _frcDayTile('ลูกค้า', D.customers != null ? `${fmtN(D.customers)} คน` : _FRC_NA, '#0891b2', `<span style="${_FRC_MUTED}">${fmtN(D.bills || 0)} บิล</span>`)
+    + _frcDayTile('เฉลี่ยต่อหัว', _frcBaht(D.per_head), '#7a66b8', D.per_bill != null ? `<span style="${_FRC_MUTED}">ต่อบิล ${_frcBaht(D.per_bill)}</span>` : '')
+    + _frcDayTile('ต้นทุนอาหาร', _frcPct(fc), fcLevel === 'fix' ? '#dc2626' : '#10b981',
+        fc == null ? `<span style="${_FRC_MUTED}">${esc(D.food_cost_reason || 'ยังไม่มีต้นทุน')}</span>` : _frcLevelChip(fcLevel, fcWord),
+        fcLevel ? _FRC_LEVEL_INK[fcLevel] : '')
+    + _frcDayTile('ส่วนลด', _frcPct(D.discount_pct), D.discount_level === 'fix' ? '#dc2626' : D.discount_level === 'watch' ? '#d97706' : '#10b981',
+        _frcLevelChip(D.discount_level, discWord[D.discount_level]))
+    + `</div>`;
+  return `<div class="ms-section"><div class="ms-section-title frc-title">สรุปประจำวัน ${uiQ('frc:day', 'สรุปประจำวัน', help)}</div>`
+    + hero + tiles + _frcDayMonth(d.month) + `</div>`;
+}
+function _frcDayMonth(M) {
+  if (!M) return '';
+  const head = M.complete ? `ทั้งเดือน ${_frcMonthLabel({ month: M.month })}` : `เดือนนี้ถึง ${_frcDay(M.through)}`;
+  const yoy = M.vs_last_year_pct != null ? `${msPchip(M.vs_last_year_pct)} <span class="frc-cmpl">ปีก่อน</span>` : '';
+  let target = '';
+  const t = M.target;
+  if (t && t.source !== 'none' && t.month_target != null) {
+    const share = Math.max(0, Math.min(100, t.of_month_pct || 0)), mark = Math.max(0, Math.min(100, t.elapsed_share_pct || 0));
+    target = `<div class="ms-row frc-dtarget"><div class="frc-dtl"><span>ได้ <b>${_frcPct(t.of_month_pct)}</b> ของเป้าเดือน</span>`
+      + `<span>${t.vs_to_date_pct != null ? msPchip(t.vs_to_date_pct) + ` <span class="frc-cmpl">${t.month_complete ? 'เทียบเป้าเดือน' : 'เทียบเป้าถึงวันนี้'}</span>` : ''}</span></div>`
+      + `<span class="frc-meter" role="img" aria-label="ยอดขาย ${esc(_frcPctText(t.of_month_pct))} ของเป้าเดือน"><span style="width:${share}%"></span>${t.month_complete ? '' : `<i style="left:${mark}%"></i>`}</span>`
+      + `<div class="frc-cmpl">เป้าเดือน ${_frcBaht(t.month_target)}</div></div>`;
+  }
+  const v = M.voids;
+  const vWord = { good: 'ปกติ', watch: 'ควรดู', fix: 'ต้องแก้' };
+  const voids = v && v.rate_pct != null
+    ? `<div class="ms-row"><span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary)">บิลยกเลิก (เดือนนี้)</span>`
+      + `<span style="font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary)">${_frcPctText(v.rate_pct)} ${_frcLevelChip(v.level, vWord[v.level])}</span></div>` : '';
+  return `<div class="ms-card frc-dmonth"><div class="ms-row" style="flex-wrap:wrap;gap:6px">`
+    + `<div style="flex:1 1 100%"><div class="frc-cmpl">${esc(head)}</div><div class="frc-dmtd">${_frcBaht(M.mtd)}</div></div>`
+    + `${msPchip(M.vs_last_month_pct)} <span class="frc-cmpl">เดือนก่อน</span> ${yoy}</div>`
+    + target + voids + `</div>`;
 }
 
 // ── DV6 (phone table review 2026-10-25, owner: "อะไรที่มีประโยชน์ขึ้นหน้าจอของเจ้าของสาขาด้วย"): เรื่องที่ควรดู, from GET

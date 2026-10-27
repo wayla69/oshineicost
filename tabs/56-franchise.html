@@ -20,6 +20,8 @@
     </div>
     <!-- PR-F4: ติดต่อสำนักงานใหญ่ - the owner's questions to head office and the replies (GET/POST /api/franchise/messages*,
          routers/franchise_msgs.py), drawn by js/17-franchise.js frcMsg*. Shown for the franchise login only. -->
+    <!-- สรุปประจำวัน (owner 2026-10-27): the branch's last finished day, GET /api/franchise/daily, drawn by js/17-franchise.js frcShowDay -->
+    <div id="frcDay"></div>
     <div class="ms-section" id="frcMsg" hidden></div>
     <div id="frcBody"></div>
     <!-- PR-F2: รับแจ้งเตือนทุกเช้า - this owner's own morning summary on this phone (kind "franchise", routers/push_api.py
