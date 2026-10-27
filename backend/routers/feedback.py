@@ -822,12 +822,18 @@ async def feedback_sla_alerts_ack(request: Request):
     ids = [int(i) for i in (b.get("ids") or []) if str(i).lstrip("-").isdigit()]
     if not ids:
         return {"acked": 0}
+    branch = _scope(request)          # audit 2026-10: a branch-confined login acks only its own branch's cases
     with get_db() as con:
         _ensure(con)
         now = _thai_now()
-        con.executemany("UPDATE customer_feedback SET sla_alerted_at=? WHERE id=?", [(now, i) for i in ids])
+        if branch:
+            n = sum(max(con.execute("UPDATE customer_feedback SET sla_alerted_at=? WHERE id=? AND branch_name=?",
+                                    (now, i, branch)).rowcount, 0) for i in ids)
+        else:
+            con.executemany("UPDATE customer_feedback SET sla_alerted_at=? WHERE id=?", [(now, i) for i in ids])
+            n = len(ids)
         con.commit()
-    return {"acked": len(ids)}
+    return {"acked": n}
 
 
 @router.get("/api/feedback/sources")
@@ -885,6 +891,13 @@ def _scope(request: Request):
     return scope_branch(request) if request is not None else None
 
 
+def _chain_only(request: Request):
+    """Audit 2026-10: the fetcher's machine endpoints whose rows carry no branch (webhook events) are refused to a
+    branch-confined login."""
+    if _scope(request):
+        raise HTTPException(403, "รายการนี้สำหรับผู้ใช้งานส่วนกลางเท่านั้น")
+
+
 def _guard(request: Request, row: dict):
     b = _scope(request)
     if b and (row.get("branch_name") or "") != b:
@@ -892,20 +905,22 @@ def _guard(request: Request, row: dict):
 
 
 @router.get("/api/feedback/reply-queue")
-def feedback_reply_queue(status: str = Query("pending")):
+def feedback_reply_queue(request: Request, status: str = Query("pending")):
     """What the fetcher (backend/fetch_feedback.py) must post, plus the counts
-    per status for the tab."""
+    per status for the tab. A branch-confined login sees only its own branch (audit 2026-10)."""
     if status not in REPLY_STATUSES:
         raise HTTPException(400, f"status must be one of {', '.join(REPLY_STATUSES)}")
+    branch = _scope(request)
+    bw, bp = (" AND branch_name=?", (branch,)) if branch else ("", ())
     with get_db() as con:
         _ensure(con)
         items = [dict(r) for r in con.execute(
             "SELECT id, source, external_id, external_ref, branch_name, location, reply_draft, reply_status, "
-            "reply_requested_at, reply_requested_by, reply_error FROM customer_feedback WHERE reply_status=? "
-            "ORDER BY reply_requested_at, id", (status,))]
+            "reply_requested_at, reply_requested_by, reply_error FROM customer_feedback WHERE reply_status=?" + bw +
+            " ORDER BY reply_requested_at, id", (status,) + bp)]
         counts = {s: 0 for s in REPLY_STATUSES}
         for st, n in con.execute("SELECT reply_status, COUNT(*) FROM customer_feedback "
-                                 "WHERE reply_status IS NOT NULL GROUP BY reply_status"):
+                                 "WHERE reply_status IS NOT NULL" + bw + " GROUP BY reply_status", bp):
             if st in counts:
                 counts[st] = n
     return {"items": items, "counts": counts}
@@ -924,7 +939,7 @@ async def feedback_reply_result(request: Request):
         raise HTTPException(400, "status must be sent or failed")
     with get_db() as con:
         _ensure(con)
-        row = _get_row(con, fid)
+        row = _get_row(con, fid, request)
         if status == "sent":
             con.execute("UPDATE customer_feedback SET reply_status='sent', reply_error=NULL, "
                         "reply_text=COALESCE(?, reply_draft), replied_at=?, updated_at=? WHERE id=?",
@@ -1052,9 +1067,10 @@ async def meta_webhook(request: Request):
 
 
 @router.get("/api/feedback/webhook-events")
-def feedback_webhook_events(platform: str = Query("instagram"), unprocessed: int = Query(1),
+def feedback_webhook_events(request: Request, platform: str = Query("instagram"), unprocessed: int = Query(1),
                             limit: int = Query(500, ge=1, le=2000)):
     """What the webhook kept — the fetcher reads the unprocessed ones."""
+    _chain_only(request)
     with get_db() as con:
         _ensure(con)
         where = "platform=?" + (" AND processed_at IS NULL" if unprocessed else "")
@@ -1073,6 +1089,7 @@ def feedback_webhook_events(platform: str = Query("instagram"), unprocessed: int
 
 @router.post("/api/feedback/webhook-events/ack", dependencies=[Depends(require_write_token)])
 async def feedback_webhook_ack(request: Request):
+    _chain_only(request)
     b = await request.json()
     ids = [int(i) for i in (b.get("ids") or []) if str(i).isdigit()]
     if not ids:

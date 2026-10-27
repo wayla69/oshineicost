@@ -121,7 +121,7 @@ def test_what_the_app_writes_is_what_the_swap_keeps(client, monkeypatch):
 
 def test_the_nightly_backup_includes_the_pack_sizes(client, monkeypatch):
     import gzip, json
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "owner:" + "cd" * 32)
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:" + "cd" * 32)
     con = sqlite3.connect(str(main.DB_PATH)); con.execute(_DDL); con.commit(); con.close()
     r = client.get("/api/_admin/export-state", headers={"X-Seed-Token": "cd" * 32})
     assert r.status_code == 200

@@ -28,6 +28,7 @@ from bom_center import variance as VA
 from bom_center import issues as IS
 from bom_center.clock import BKK
 from test_bom_center_s4b import con  # noqa: F401  (sales to 5 Oct 2026 at branch 1; crab stick 1 kg packs)
+from test_bom_center_claims import _shipped_rest  # noqa: E402  (audit 2026-10: every shipped line is received)
 
 AS_OF = date(2026, 10, 5)
 WED = date(2026, 10, 7)                                           # round 1's delivery: cutoff Monday 5 Oct 13:15
@@ -71,7 +72,9 @@ def test_the_system_stock_is_deducted(con):  # noqa: F811
     assert r["projected"] == pytest.approx(r["on_hand"] - r["pre_cover_use"] + r["on_order"], abs=0.02)
     assert r["need"] == pytest.approx(max(0.0, r["forecast"] + r["safety"] - max(r["projected"], 0.0)), abs=0.02)
     assert r["pre_cover_use"] > 0                                # Tuesday 6th is used before Wednesday's delivery
-    # a full shelf means nothing to order
+    # a full shelf means nothing to order (a recount of the same day: the earlier count is reopened as the draft - a submitted
+    # count dated on or before the last one is refused, audit 2026-10)
+    con.execute("UPDATE bc_stock_count SET status='draft' WHERE branch_id=1 AND count_date='2026-10-05'")
     ST.save(con, 1, [{"code": CRAB, "qty": 500, "unit": "แพ็ค 1 กก."}], "udon", submit=True,
             count_date="2026-10-05", require_all=False)
     r = _crab(OR.plan(con, 1, "1", WED, as_of=AS_OF, now=NOW))
@@ -116,7 +119,7 @@ def test_confirm_submit_reopen_receive(con):  # noqa: F811
     flow([{"code": CRAB, "confirmed_units": sug}], submit=True)
     with pytest.raises(ValueError):
         OR.receive(con, 2, out["order_id"], [], "udon")          # another branch
-    rec = OR.receive(con, 1, out["order_id"], [{"code": "13-01-009", "received_units": sug}], "udon",
+    rec = OR.receive(con, 1, out["order_id"], [{"code": "13-01-009", "received_units": sug}] + _shipped_rest(con, out["order_id"]), "udon",
                      receipt_date="2026-10-07", ack=True)
     assert rec["status"] == "received" and rec["receipt_id"]
     r = next(x for x in VA.receipts(con, 1) if x["receipt_id"] == rec["receipt_id"])

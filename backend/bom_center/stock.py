@@ -486,6 +486,19 @@ def _drop_uncountable(con, conv, line_table: str, id_col: str, cid: int) -> None
         con.execute(f"DELETE FROM {line_table} WHERE {id_col}=? AND ingredient_code=?", (cid, code))
 
 
+def check_count_date(con, branch_id: int, cdate: str) -> None:
+    """Audit 2026-10 · a month-end count that is SUBMITTED (typed or imported) must be dated after the branch's last submitted
+    count, not later than today (Bangkok), and outside any period Accounting has posted. A count dated on or before the last
+    one would split a measured period or reorder the periods; a future date would close a month that has not happened."""
+    if date.fromisoformat(cdate) > bkk_today():
+        raise ValueError(f"วันที่นับของ {_fmt_day(cdate)} เป็นวันในอนาคต · ใช้วันที่นับจริงซึ่งต้องไม่เกินวันนี้")
+    prev = last_submitted(con, branch_id)
+    if prev and cdate <= prev["count_date"]:
+        raise ValueError(f"วันที่นับของ {_fmt_day(cdate)} ต้องอยู่หลังวันที่นับครั้งล่าสุดที่ส่งแล้ว ({_fmt_day(prev['count_date'])})")
+    from .variance import assert_not_posted
+    assert_not_posted(con, branch_id, cdate, "ผลนับของ")
+
+
 def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count_date: str = None,
          note: str = None, require_all: bool = True) -> dict:
     """Write the branch's month-end draft (creating it) and optionally submit it: the first count is the
@@ -518,6 +531,7 @@ def save(con, branch_id: int, lines: list, who: str, submit: bool = False, count
     if submit:
         if not n:
             raise ValueError("ยังไม่มีรายการที่นับของ")
+        check_count_date(con, branch_id, cdate)
         if require_all:
             miss = uncounted_items(con, branch_id, cid)
             if miss:
@@ -983,6 +997,7 @@ def import_count(con, branch_id: int, count_date: str, lines: list, who: str, dr
                    f" COALESCE(status,'submitted')='submitted' AND kind IN {_in(MONTH_KINDS)}",
                    (branch_id, count_date)).fetchone():
         raise ValueError(f"วันที่ {_fmt_day(count_date)} มีผลนับที่ส่งแล้ว จึงนำเข้าซ้ำไม่ได้")
+    check_count_date(con, branch_id, count_date)
     conv = Converter(con)
     known = {c for c, in con.execute("SELECT code FROM bc_ingredient")}
     unknown = sorted({ln["code"] for ln in lines if ln["code"] not in known})

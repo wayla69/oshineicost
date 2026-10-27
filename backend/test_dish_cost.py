@@ -271,7 +271,7 @@ def test_pull_from_live_mirrors_both_tables_by_code_and_never_raises(tmp_path, m
     sq = sqlite3.connect(str(tmp_path / "staging.db"))                         # different sku ids on the other side
     sq.executescript("CREATE TABLE skus(sku_id INTEGER PRIMARY KEY, sku_code TEXT);"
                      "INSERT INTO skus VALUES (77, 'DCT-A'), (78, 'DCT-C');")
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_SYNC_ON_LIVE", raising=False)
     seen = []
 
@@ -402,7 +402,7 @@ def test_http_roles_token_and_preview(web, auth_on):
 def test_http_import_refreshes_the_reports_and_the_sync_route_is_token_gated(web, monkeypatch):
     import main
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
-    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "backup:tok")
+    monkeypatch.setenv("OSHINEI_SEED_TOKEN", "admin:tok")   # the machine endpoints take the owner ("admin") token only
     monkeypatch.delenv("OSHINEI_WRITE_TOKEN", raising=False)
     c = TestClient(main.app)
     calls = []

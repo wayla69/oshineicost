@@ -485,7 +485,13 @@ def receive(con, branch_id: int, order_id: int, lines: list, who: str, receipt_d
                                     " FROM bc_order_line WHERE order_id=?", (order_id,)):
         units[c] = u
         sent[c] = float(pu if pu is not None else (cf or 0))
-    recv = {c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
+    # Audit 2026-10: the order becomes "received" in this one save, so a line the warehouse shipped and the request leaves out
+    # would get neither a receipt nor a claim - its goods would disappear. Every shipped line needs a quantity (0 is a quantity).
+    missing = [c for c in sorted(sent) if sent[c] > 1e-9 and c not in got]
+    if missing:
+        raise ValueError(f"ยังไม่ได้กรอกจำนวนที่รับ {len(missing)} รายการ ({', '.join(_item(con, c) for c in missing[:3])}"
+                         f"{' …' if len(missing) > 3 else ''}) · กรอกจำนวนที่รับทุกรายการที่คลังส่ง ไม่ได้รับให้กรอก 0")
+    recv ={c: r for c, r in con.execute("SELECT code, recv_unit FROM bc_ingredient")}
     base = {c: b for c, b in con.execute("SELECT code, base_unit FROM bc_ingredient")}
     names = {c: n for c, n in con.execute("SELECT code, name_th FROM bc_ingredient")}
     conv = Converter(con)

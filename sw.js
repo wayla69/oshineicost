@@ -9,7 +9,7 @@
    - api-v1: the GET endpoints the phone summary reads, network-first. When the network
      is gone the last copy is served with X-SW-Cache: <when it was stored> and the
      page is told (postMessage offline-fallback) so it can show "ออฟไลน์ · ข้อมูลเมื่อ".
-     Nothing else under /api is cached; no POST ever is; logout clears it (message
+     Nothing else under /api is cached (never /api/auth/me); no POST ever is; logout, a sign-in and an expired session clear it (message
      clear-api-cache).
 
    A new build: the page compares its meta app-build with GET /api/meta/build, calls registration.update() and waits
@@ -25,15 +25,18 @@ const BUILD = '__BUILD__';
 // build's first offline open still has its styles (it replaced the in-browser runtime vendor/tailwind.js, 2026-10-26)
 const TW_CSS = '__TW_CSS__';
 const SHELL = 'oshinei-shell-' + BUILD;
-const API = 'oshinei-api-v1';
+// v2 (2026-10-26): v1 held /api/auth/me — who is signed in — which a later visitor on the same phone could be served
+// offline; activate deletes every cache that is not SHELL or API, so the old v1 copy goes with this change.
+const API = 'oshinei-api-v2';
 const API_MAX = 80;
 
+// /api/auth/me is deliberately NOT here: the session's identity is never answered from a cache.
 const API_OK = [
   /^\/api\/reports\/management(\/months)?(\?|$)/, /^\/api\/home\/brief(\?|$)/, /^\/api\/home\/branch-scorecard(\?|$)/,
   /^\/api\/sales\/daily(\?|$)/, /^\/api\/sales\/top_ordered(\?|$)/, /^\/api\/sales\/cost-per-head(\?|$)/,
   /^\/api\/forecast(\?|$)/, /^\/api\/analysis\/(table-turnover|daypart-economics)(\?|$)/,
   /^\/api\/feedback\/items(\?|$)/, /^\/api\/months(\?|$)/, /^\/api\/branches(\?|$)/,
-  /^\/api\/data-coverage(\?|$)/, /^\/api\/auth\/me(\?|$)/,
+  /^\/api\/data-coverage(\?|$)/,
 ];
 const SHELL_PREFIX = /^\/(js\/|vendor\/|docs\/ui-kit\/|pwa\/|tabs\.html)/;
 
@@ -116,7 +119,9 @@ async function pageNetworkFirst(req) {
   for (let i = 0; i < 2; i++) {
     try {
       const resp = await pageFetchOnce(req);
-      if (resp && resp.ok) cache.put('/', resp.clone());
+      // only the app shell itself is stored as '/': any other page a navigation reaches (/docs/…, a report link,
+      // /survey/…) would otherwise overwrite the offline shell with itself
+      if (resp && resp.ok && new URL(req.url).pathname === '/') cache.put('/', resp.clone());
       return resp;
     } catch (err) {
       last = err;

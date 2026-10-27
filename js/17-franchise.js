@@ -814,6 +814,28 @@ function fmCount(id, max) {
   const el = document.getElementById(id), c = document.getElementById(id + 'Count');
   if (el && c) c.textContent = `${fmtN(String(el.value || '').length)} / ${fmtN(max)}`;
 }
+// Audit 2026-10: a re-render of the same view (the foreground refresh, a reload of the inbox) must not erase what a person is typing.
+// Call before box.innerHTML = …; the returned function puts back the values (and the caret of the focused box) of `ids` when the box
+// still shows the same `key` (a thread id, the new-question form). _fmForget(box) after a send, or when a fresh form is wanted.
+function _fmKeep(box, key, ids) {
+  const same = !!box && box.dataset.fmKey === key;
+  const act = document.activeElement;
+  const saved = same ? ids.map(id => {
+    const el = /** @type {HTMLTextAreaElement|null} */ (document.getElementById(id));
+    return el ? { id, v: el.value, f: act === el, s: el.selectionStart, e: el.selectionEnd } : null;
+  }).filter(Boolean) : [];
+  return () => {
+    if (box) box.dataset.fmKey = key;
+    saved.forEach(k => {
+      const el = document.getElementById(k.id);
+      if (!el) return;
+      el.value = k.v;
+      if (el.tagName === 'TEXTAREA') fmCount(k.id, Number(el.maxLength) > 0 ? Number(el.maxLength) : 1000);
+      if (k.f) { try { el.focus({ preventScroll: true }); if (k.s != null && el.setSelectionRange) el.setSelectionRange(k.s, k.e); } catch (e) { /* no focus */ } }
+    });
+  };
+}
+function _fmForget(box) { if (box) delete box.dataset.fmKey; }
 
 async function frcMsgLoad() {
   const box = document.getElementById('frcMsg');
@@ -841,7 +863,10 @@ function frcMsgRender() {
   if (_fmView.mode === 'new') inner = _fmNewHtml();
   else if (_fmView.mode === 'thread' && _fmThread) inner = _fmThreadHtml(_fmThread);
   else inner = _fmListHtml();
+  const keep = _fmKeep(box, _fmView.mode === 'thread' && _fmThread ? 'thread:' + _fmThread.id : _fmView.mode,
+    ['frcMsgTopic', 'frcMsgText', 'frcMsgReply']);
   box.innerHTML = head + inner;
+  keep();
   if (_fmView.mode !== 'new' && _fmView.mode !== 'thread') {
     const sp = uiStateFilter.split(_fmData.threads || [], t => t.status === 'closed' && !t.unread);
     uiStateFilter.bar('frcMsgFilter', { counts: sp.counts, f: uiStateFilter.get(['todo', 'done', 'all']), pick: 'frcMsgFilter', opts: _FM_FILTER });
@@ -891,7 +916,7 @@ async function frcMsgOpen(tid, scroll) {
   if (scroll !== false) _fmScrollIn();
   try { navBadgesRefresh(true); } catch (e) { /* no launcher slice: no badge to redraw */ }
 }
-function frcMsgNew() { _fmView = { mode: 'new', tid: 0, ctx: null, topic: '' }; frcMsgRender(); _fmScrollIn('frcMsgTopic'); }
+function frcMsgNew() { _fmView = { mode: 'new', tid: 0, ctx: null, topic: '' }; _fmForget(document.getElementById('frcMsg')); frcMsgRender(); _fmScrollIn('frcMsgTopic'); }
 function frcMsgBack() { _fmView = { mode: 'list', tid: 0, ctx: null, topic: '' }; _fmThread = null; frcMsgLoad(); }
 function frcMsgDropCtx() {
   const topic = (document.getElementById('frcMsgTopic') || {}).value || _fmView.topic, text = (document.getElementById('frcMsgText') || {}).value || '';
@@ -904,6 +929,7 @@ function frcAskAbout(level, i) {
   const line = _frcVerdictLast && _frcVerdictLast[level] ? _frcVerdictLast[level][i] : '';
   if (!line) return;
   _fmView = { mode: 'new', tid: 0, ctx: { level, month: _frcMonth || '', line: String(line).slice(0, 300) }, topic: _fmGuessTopic(line) };
+  _fmForget(document.getElementById('frcMsg'));
   if (!_fmData) { frcMsgLoad().then(() => { frcMsgRender(); _fmScrollIn('frcMsgText'); }); return; }
   frcMsgRender();
   _fmScrollIn('frcMsgText');
@@ -940,6 +966,7 @@ async function frcMsgSendReply(tid) {
   try {
     _fmThread = await _fmPost(`/api/franchise/messages/${Number(tid) || 0}/reply`, { body: text });
     uiToast('ส่งข้อความแล้ว', 'success');
+    _fmForget(document.getElementById('frcMsg'));      // the reply is sent: the box starts empty
     frcMsgRender();
   } catch (e) {
     uiToast(e.message, 'error');
