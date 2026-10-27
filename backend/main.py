@@ -29,6 +29,7 @@ except ImportError:                     # …and as `main:app` from inside backe
 
 
 import json as _json
+import re
 import time as _time_mod
 from fastapi.responses import Response as _Response
 
@@ -1019,9 +1020,56 @@ def _js_hash(p) -> str:
         return "0"
 
 
-def _versioned_index_html() -> str:
+# Per-role code (code guard, owner 2026-10-27): the logins a branch holds - the branch's own stock login
+# and the franchise owner - get the lazy slices and the panels of their own pages only, so head office's
+# analysis, cost, P&L and report code never reaches a branch's browser. Every other role gets everything.
+# The eager slices (index.html's five plain <script> tags: login, boot, phone summary) go to every role.
+# A slice a role lacks answers 404; tests/test_role_code_split.py checks no kept slice calls into a dropped one.
+ROLE_LAZY_SLICES = {
+    "branch": {"13-bom-center.js", "14-branch.js", "15-orderhub.js", "16-supplyhome.js", "18-launcher.js"},
+    "franchise": {"17-franchise.js", "18-launcher.js"},
+}
+ROLE_PANELS = {
+    "branch": {"47-manual.html", "52-bomcenter.html", "53-branchstock.html", "54-orderhub.html",
+               "55-supplyhome.html", "57-launcher.html", "58-allpages.html"},
+    "franchise": {"47-manual.html", "56-franchise.html", "57-launcher.html", "58-allpages.html"},
+}
+_LAZY_TAG_RE = re.compile(r'[ \t]*<script type="text/plain" class="lazy-slice" data-lazy="/js/([0-9a-z-]+\.js)"></script>\r?\n?')
+
+
+def _role_of(request: Request):
+    """The live role of a signed-in request (enforce_auth put it on request.state), or None."""
+    if not _auth.auth_enabled():
+        return None
+    return (getattr(request.state, "auth_user", None) or {}).get("r") or None
+
+
+def _slice_allowed(role, name: str) -> bool:
+    keep = ROLE_LAZY_SLICES.get(role or "")
+    return keep is None or name in keep or name not in _lazy_slice_names()
+
+
+_lazy_names_cache: dict = {}
+
+
+def _lazy_slice_names() -> set:
+    """The slices index.html loads lazily (the rest are eager and go to every role)."""
+    try:
+        st = INDEX.stat()
+        key = (st.st_mtime_ns, st.st_size)
+        if _lazy_names_cache.get("key") != key:
+            _lazy_names_cache.update(key=key, names=set(_LAZY_TAG_RE.findall(INDEX.read_text(encoding="utf-8"))))
+        return _lazy_names_cache["names"]
+    except OSError:
+        return set()
+
+
+def _versioned_index_html(role=None) -> str:
     import re as _re
     html = _cg.strip_html_comments(INDEX.read_text(encoding="utf-8"))
+    if role in ROLE_LAZY_SLICES:
+        keep = ROLE_LAZY_SLICES[role]
+        html = _LAZY_TAG_RE.sub(lambda m: m.group(0) if m.group(1) in keep else "", html)
     def sub(m):
         p = _JS_DIR / m.group(1)
         return f'src="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
@@ -1037,7 +1085,7 @@ def _versioned_index_html() -> str:
     # GET /api/meta/build and loads the new version after a deploy (js/01-core.js appUpdateCheck)
     html = html.replace('<head>', f'<head>\n<meta name="app-build" content="{_build_id()}">', 1)
     return html.replace('<div id="tabsRoot"></div>',
-                        f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle()[1]}"></div>', 1)
+                        f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle(role)[1]}"></div>', 1)
 
 
 _LOGIN_PAGE = INDEX.parent / "login.html"
@@ -1078,7 +1126,7 @@ def root(request: Request):
                 html = _cg.strip_html_comments(_LOGIN_PAGE.read_text(encoding="utf-8"))
                 return _Response(content=html.replace("<head>", "<head>\n" + _CG_PROBE, 1), media_type="text/html",
                                  headers={"Cache-Control": "no-store", "Vary": "Cookie", "X-Login-Page": "1"})
-            return _Response(content=_versioned_index_html().replace("<head>", "<head>\n" + _CG_PROBE, 1),
+            return _Response(content=_versioned_index_html(row["role"]).replace("<head>", "<head>\n" + _CG_PROBE, 1),
                              media_type="text/html", headers={"Cache-Control": "no-cache, private", "Vary": "Cookie"})
         # no-cache: the shell must always be fresh — it carries the js hashes
         return _Response(content=_versioned_index_html(), media_type="text/html",
@@ -1125,10 +1173,10 @@ def usage_security(request: Request, mark: Optional[str] = Query(None), limit: i
 
 
 _TABS_DIR = INDEX.parent / "tabs"
-_tabs_cache = {"key": None, "html": "", "hash": ""}
+_tabs_cache = {"key": None, "parts": [], "by_role": {}}
 
 
-def _tabs_bundle() -> tuple:
+def _tabs_bundle(role=None) -> tuple:
     """The 48 tab panels, concatenated in file order, with a content hash.
 
     Re-read when any fragment's mtime or size changes, so an edit shows up on
@@ -1137,15 +1185,20 @@ def _tabs_bundle() -> tuple:
     files = sorted(_TABS_DIR.glob("*.html")) if _TABS_DIR.exists() else []
     key = tuple((f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in files)
     if key != _tabs_cache["key"]:
-        html = _cg.strip_html_comments("".join(f.read_text(encoding="utf-8") for f in files))
-        _tabs_cache.update(key=key, html=html,
-                           hash=hashlib.sha1(html.encode("utf-8")).hexdigest()[:10])
-    return _tabs_cache["html"], _tabs_cache["hash"]
+        _tabs_cache.update(key=key, by_role={},
+                           parts=[(f.name, _cg.strip_html_comments(f.read_text(encoding="utf-8"))) for f in files])
+    rk = role if role in ROLE_PANELS else None      # a branch login gets its own pages' panels only
+    hit = _tabs_cache["by_role"].get(rk)
+    if hit is None:
+        keep = ROLE_PANELS.get(rk)
+        html = "".join(h for n, h in _tabs_cache["parts"] if keep is None or n in keep)
+        hit = _tabs_cache["by_role"][rk] = (html, hashlib.sha1(html.encode("utf-8")).hexdigest()[:10])
+    return hit
 
 
 @app.get("/tabs.html", include_in_schema=False)
 def tabs_html(request: Request, v: Optional[str] = Query(None)):
-    html, h = _tabs_bundle()
+    html, h = _tabs_bundle(_role_of(request))
     cache = "public, max-age=31536000, immutable" if v == h else "no-cache"
     mark = _code_mark(request)
     if mark:                                     # per login, so never in a shared cache
@@ -1244,7 +1297,7 @@ def app_js_slice(request: Request, name: str, v: Optional[str] = Query(None)):
     if not _re.fullmatch(r"[0-9a-z][0-9a-z-]*\.js", name):
         raise HTTPException(status_code=404, detail="not found")
     p = _JS_DIR / name
-    if p.exists() and p.parent == _JS_DIR:
+    if p.exists() and p.parent == _JS_DIR and _slice_allowed(_role_of(request), name):
         cache = ("public, max-age=31536000, immutable"
                  if v and v == _js_hash(p) else "no-cache")
         mark = _code_mark(request)
@@ -1258,12 +1311,12 @@ def app_js_slice(request: Request, name: str, v: Optional[str] = Query(None)):
 
 
 @app.get("/app.js", include_in_schema=False)
-def app_js():
+def app_js(request: Request):
     """Back-compat during the P2 rollout: a browser holding a CACHED shell
     still references /app.js — serve the concatenation of the js/ slices
     (sorted = load order) so it keeps working; the fresh shell loads the
-    slices individually. Droppable once caches have cycled."""
-    if _JS_DIR.exists():
+    slices individually. Droppable once caches have cycled. Never for a branch login (it is every slice)."""
+    if _JS_DIR.exists() and _role_of(request) not in ROLE_LAZY_SLICES:
         parts = [p.read_text(encoding="utf-8") for p in sorted(_JS_DIR.glob("*.js"))]
         if parts:
             return _Response(content="\n".join(parts),

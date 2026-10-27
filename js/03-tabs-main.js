@@ -232,8 +232,9 @@ async function retryConnection() {
     clearInterval(_healthTimer);
     _healthTimer = setInterval(checkApiHealth, 30000);
     await Promise.all([loadBranches(), loadMonths()]);
-    populateTargetMonths();
-    initCostCategories();
+    // a branch login is served its own pages' code only (backend/main.py ROLE_LAZY_SLICES): settings code may be absent
+    if (typeof populateTargetMonths === 'function') populateTargetMonths();
+    if (typeof initCostCategories === 'function') initCostCategories();
     renderUserPresets();
     gPeriodWrite(); gPeriodRender();
     loadActiveTab();
@@ -289,7 +290,7 @@ function ensureDesktopBooted(opts) {
     // on a phone the permissions ran before the fragments existed — the Settings →
     // ผู้ใช้งาน sub-tab lives in one, so apply them again now
     if (lazy && window.AUTH && window.AUTH.enabled) applyPermissions();
-    populateTargetMonths();
+    if (typeof populateTargetMonths === 'function') populateTargetMonths();   // absent for a branch login (ROLE_LAZY_SLICES)
     try { await initCostCategories(); } catch(e) { console.warn('initCostCategories:', e); }
     try { renderUserPresets(); } catch(e) { console.warn('renderUserPresets:', e); }
     // PR-PP1: the period is the ONE period bar's (PERIOD_DEFAULT_KIND to date - the month since PP3 - unless this device chose another)

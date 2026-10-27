@@ -4860,8 +4860,8 @@ function switchBperfTab(name) {
   }
   // Resize charts so anything rendered while hidden gets correct dimensions
   setTimeout(() => { Object.values(chartInstances).forEach(c => { try { c.resize(); } catch(e){} }); }, 30);
-  // Re-run observer so lazy panels in newly visible subtab get picked up
-  _observeBuffetPanels();
+  // Re-run observer so lazy panels in newly visible subtab get picked up (absent for a branch login, ROLE_LAZY_SLICES)
+  if (typeof _observeBuffetPanels === 'function') _observeBuffetPanels();
   // Phase 4: lazy-init BoM deep-dive panels
   if (name === 'bomdeep' && typeof initBomDeepDive === 'function') {
     initBomDeepDive();
