@@ -7,6 +7,7 @@ Same host-module pattern as routers/reports.py.
 from fastapi import HTTPException, Query
 from fastapi.responses import StreamingResponse
 from typing import Optional
+from downloads import attachment
 import io as _io
 from rules import ALL_TIER_CODES as _ALL_TIER_CODES, EASY_TIER_CODES_SQL as _EASY_TIER_CODES_SQL, ex_vat, food_cost_target, net_revenue_row, net_revenue_sum, scope_filter
 from rules import (GRAND_MENU_FROM, PRICE_TIERS_GRAND, base_to_net, is_grand_menu,
@@ -1350,16 +1351,18 @@ def _bp_query(*, grp_sql, params_sku, params_tx, tier_named, tier_ph, waste_name
                      WHEN CAST(strftime('%H', st.sold_at) AS INT) BETWEEN 17 AND 22 THEN 'dinner'
                      ELSE 'other' END AS daypart,
                    CASE
-                     WHEN (st.food_subtotal/st.customer_count) < 450 THEN 'BUFFET350'
-                     WHEN (st.food_subtotal/st.customer_count) < 600 THEN 'BUFFET500'
-                     WHEN (st.food_subtotal/st.customer_count) < 720 THEN 'BUFFET590'
+                     WHEN ({net_revenue_row('st')}/st.customer_count) < 450 THEN 'BUFFET350'
+                     WHEN ({net_revenue_row('st')}/st.customer_count) < 600 THEN 'BUFFET500'
+                     WHEN ({net_revenue_row('st')}/st.customer_count) < 720 THEN 'BUFFET590'
                      ELSE 'BUFFET799' END AS tier,
                    SUM(st.customer_count) AS pax
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where_tx}
-              AND st.customer_count > 0 AND st.food_subtotal > 0
-              AND (st.food_subtotal / st.customer_count) BETWEEN 380 AND 1000
+              -- per head = NET bill revenue ÷ covers: the buffet charge sits in other_subtotal,
+              -- so food_subtotal ÷ covers (until 2026-10) let only the à-la-carte bills through
+              AND st.customer_count > 0 AND st.total_inc_vat > 0
+              AND ({net_revenue_row('st')} / st.customer_count) BETWEEN 200 AND 1500
             GROUP BY daypart, tier
         """, params_tx).fetchall()
 
@@ -1961,9 +1964,9 @@ def buffet_gp(
                 DATE(st.sold_at)                 AS d,
                 SUBSTR(st.sold_at, 1, 7)         AS m,
                 SUM(st.customer_count)           AS covers,
-                SUM(COALESCE(st.food_subtotal,0)
-                  + COALESCE(st.drink_subtotal,0)
-                  + COALESCE(st.other_subtotal,0)) AS rev_tx
+                -- the day's SHARE of its month only: net of VAT and service charge
+                -- (the subtotals carry the 5 % charge inside other_subtotal)
+                {net_revenue_sum('st')}           AS rev_tx
             FROM sales_transaction st
             JOIN branches b ON b.branch_id = st.branch_id
             {where_tx}
@@ -2051,20 +2054,25 @@ def buffet_gp(
                 "covers":   b["covers"],
             })
     else:
-        # Day or week: pro-rate monthly BoM by daily revenue fraction
+        # Day or week: pro-rate the month's revenue AND BoM by the day's share of the
+        # month's bill revenue, so the days add back to month mode exactly (the old
+        # code added raw food+drink+other subtotals, which carry the 5 % service charge:
+        # Sep 2026 read ฿93.2M / 53.4 % margin against month mode's ฿86.2M / 49.6 %).
         # fix F7: pre-index covers to avoid O(days × tx_rows) linear rescan
         daily_covers_idx = {(r2["branch"], r2["d"]): (r2["covers"] or 0) for r2 in daily_tx_rows}
         daily_bucket: dict = defaultdict(lambda: {"rev": 0.0, "bom_cost": 0.0, "covers": 0})
         for br, months in daily_tx.items():
             for m, days in months.items():
                 m_rev_tx = monthly_rev_tx[br][m]
-                m_bom    = sum(monthly_agg[br][mm]["bom_cost"] for mm in monthly_agg[br] if mm == m)
+                m_agg    = monthly_agg[br].get(m) if br in monthly_agg else None
+                m_bom    = m_agg["bom_cost"] if m_agg else 0.0
+                m_rev    = m_agg["rev"] if m_agg else None
                 for d, d_rev_tx in days.items():
                     fraction   = (d_rev_tx / m_rev_tx) if m_rev_tx else 0.0
                     d_bom_cost = m_bom * fraction
                     bucket = d if granularity == "day" else week_bucket(d)
                     db = daily_bucket[bucket]
-                    db["rev"]      += d_rev_tx
+                    db["rev"]      += (m_rev * fraction) if m_rev is not None else d_rev_tx
                     db["bom_cost"] += d_bom_cost
                     db["covers"]   += daily_covers_idx.get((br, d), 0)
         series = []
@@ -2715,7 +2723,7 @@ def buffet_heavy_eater_tail(branch: Optional[str] = Query(None), group: Optional
     filt = ["t.source='Easy'", "b.name!='ALL'", "t.total_inc_vat>0", "t.customer_count>0"]
     p: dict = {}
     scope_filter(filt, p, branch, group)
-    JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no "
+    JN = ("FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no AND c.branch_id=t.branch_id "
           "JOIN branches b ON b.branch_id=t.branch_id WHERE " + " AND ".join(filt))
     rev = f"{net_revenue_row('t')}"                # ex-VAT paid
     mh  = f"({rev} - c.cogs_bom)/t.customer_count"   # margin per head
@@ -2795,7 +2803,7 @@ def buffet_turn_efficiency(branch: Optional[str] = Query(None), group: Optional[
               WHERE {tw} AND x.day>=:since GROUP BY x.branch_id),
             gp AS (
               SELECT t.branch_id, SUM({net_revenue_row('t')} - c.cogs_bom) gp, SUM(t.customer_count) cov
-              FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no
+              FROM sales_transaction t JOIN sale_bill_cogs c ON c.receipt_no=t.receipt_no AND c.branch_id=t.branch_id
               JOIN branches b ON b.branch_id=t.branch_id WHERE {tw} AND t.customer_count>0 GROUP BY t.branch_id)
             SELECT b.name branch, ROUND(tt.turn_min,1) turn_min, tt.cov_day, tt.tabs_day,
                    ROUND(tt.cov_per_tab,2) cov_per_tab,
@@ -3125,5 +3133,5 @@ def buffet_gp_export(
     return StreamingResponse(
         buf,
         media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f"attachment; filename={filename}"},
+        headers={"Content-Disposition": attachment(filename)},
     )

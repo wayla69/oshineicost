@@ -6,6 +6,7 @@ from fastapi import Query
 from typing import Optional
 import json as _json
 from rules import (
+    bill_item_branch_sql,
     discount_base_row,
     discount_excess,
     discount_policy_pct,
@@ -568,10 +569,10 @@ def analysis_discount_bills(
             _live_cogs = (f"(SELECT SUM(i.qty * CASE WHEN {tier_code_sql('s2.sku_code')} THEN 0 "
                           f"ELSE {effective_unit_cost_sql('i', 'substr(st.sold_at, 1, 7)')} END) "
                           f"FROM sale_bill_item i JOIN skus s2 ON s2.sku_id=i.sku_id "
-                          f"WHERE i.receipt_no=st.receipt_no)")
+                          f"WHERE i.receipt_no=st.receipt_no{bill_item_branch_sql(con, 'i', 'st')})")
         else:
             _live_cogs = "NULL"
-        _snap_cogs = ("(SELECT c.cogs_bom FROM sale_bill_cogs c WHERE c.receipt_no=st.receipt_no)"
+        _snap_cogs = ("(SELECT c.cogs_bom FROM sale_bill_cogs c WHERE c.receipt_no=st.receipt_no AND c.branch_id=st.branch_id)"
                       if "sale_bill_cogs" in tabs else "NULL")
         sel_cogs = (f"ROUND(COALESCE({_live_cogs}, {_snap_cogs}))"
                     if (_live_cogs != "NULL" or _snap_cogs != "NULL") else "NULL")

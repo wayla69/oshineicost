@@ -39,7 +39,7 @@ GOLDEN = HERE / "golden" / "sync_main.json"
 UPDATE = os.environ.get("GOLDEN_UPDATE") == "1"
 
 BID_A, BID_B, BID_X = BID_POS, 11, BID_UNKNOWN     # MSSQL BranchIds: BranchA, BranchB, unmapped
-TODAY = dt.date.today()
+TODAY = sync.bkk_today()     # the sync's own Bangkok day (CI runs on UTC)
 THIS_YM = TODAY.isoformat()[:7]
 
 

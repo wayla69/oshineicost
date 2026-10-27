@@ -4,6 +4,7 @@ Moved out of main.py in Phase 2b (2026-09) by the AST: these endpoints and
 the helpers only they use, unchanged. URLs are unchanged.
 """
 from fastapi import APIRouter
+from downloads import attachment
 from core import _cogs_case
 from core import _costed_rev_case
 from core import _ym_parts
@@ -668,5 +669,5 @@ def export_monthly_pack(
     return StreamingResponse(
         _io.BytesIO(data),
         media_type=media,
-        headers={"Content-Disposition": f"attachment; filename={fname}"},
+        headers={"Content-Disposition": attachment(fname)},
     )
