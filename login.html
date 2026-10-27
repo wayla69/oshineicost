@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex, nofollow, noarchive">
+<title>Oshinei — เข้าสู่ระบบ</title>
+<!-- The page a browser gets before signing in (backend/main.py root, code guard 2026-10-27): the app's markup and
+     code are served only to a signed-in login. After signing in the page reloads into the app. -->
+<meta name="theme-color" content="#1f3a6b">
+<link rel="manifest" href="/pwa/manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="/pwa/icon-192.png">
+<link rel="apple-touch-icon" href="/pwa/apple-touch-icon.png">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Oshinei">
+<link rel="stylesheet" href="/vendor/kira-ui-font.css?v=7.0">
+<style>
+* { font-family: 'KIRA UI', 'Noto Sans Thai', system-ui, -apple-system, 'Segoe UI', sans-serif; box-sizing: border-box; }
+html, body { margin: 0; height: 100%; }
+body { background: #16294d; display: flex; align-items: center; justify-content: center; font-weight: 500; }
+form { width: min(380px, 92vw); background: #fff; border-radius: 12px; padding: 34px 30px; box-shadow: 0 30px 80px rgba(0,0,0,.5); }
+h1 { text-align: center; margin: 0 0 2px; font-size: 20px; font-weight: 800; color: #1e293b; }
+.sub { text-align: center; margin: 0 0 22px; font-size: 13px; color: #64748b; }
+label.f { display: block; font-size: 13px; font-weight: 600; color: #475569; margin-bottom: 4px; }
+input[type=text], input[type=password] { width: 100%; border: 1px solid #cbd5e1; border-radius: 12px; padding: 11px 12px; font-size: 15px; margin-bottom: 14px; }
+.rm { display: flex; align-items: center; gap: 8px; font-size: 13px; color: #475569; margin: 0 0 6px; cursor: pointer; min-height: 44px; }
+.rm input { width: 18px; height: 18px; margin: 0; flex-shrink: 0; }
+#err { display: none; color: #b91c1c; font-size: 13px; margin: 4px 0 10px; }
+button { width: 100%; min-height: 46px; margin-top: 6px; background: #1f3a6b; color: #fff; border: none; border-radius: 12px; font-size: 15px; font-weight: 700; cursor: pointer; }
+button:disabled { opacity: .7; cursor: default; }
+</style>
+</head>
+<body>
+<form id="f" autocomplete="on">
+  <h1>Oshinei</h1>
+  <p class="sub">เข้าสู่ระบบเพื่อใช้งาน</p>
+  <label class="f" for="u">ชื่อผู้ใช้</label>
+  <input id="u" type="text" autocomplete="username" autocapitalize="none" required>
+  <label class="f" for="p">รหัสผ่าน</label>
+  <input id="p" type="password" autocomplete="current-password" required>
+  <label class="rm"><input id="r" type="checkbox"> จำการเข้าสู่ระบบบนเครื่องนี้ไว้ 30 วัน</label>
+  <div id="err"></div>
+  <button type="submit" id="b">เข้าสู่ระบบ</button>
+</form>
+<script>
+(function () {
+  var f = document.getElementById('f'), err = document.getElementById('err'), b = document.getElementById('b');
+  // a phone keeps the login for a month unless unticked; a desktop asks again after 12 hours
+  try { document.getElementById('r').checked = window.matchMedia('(max-width:700px)').matches; } catch (e) {}
+  setTimeout(function () { document.getElementById('u').focus(); }, 50);
+  f.addEventListener('submit', function (ev) {
+    ev.preventDefault();
+    err.style.display = 'none';
+    b.disabled = true; b.textContent = 'กำลังเข้าสู่ระบบ…';
+    fetch('/api/auth/login', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: document.getElementById('u').value.trim(),
+                             password: document.getElementById('p').value,
+                             remember: document.getElementById('r').checked })
+    }).then(function (res) {
+      if (res.ok) {
+        // the offline copy kept for a previous session goes (sw.js), then the app loads
+        try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: 'clear-api-cache' }); } catch (e) {}
+        location.replace('/' + location.search + location.hash);
+        return;
+      }
+      return res.json().catch(function () { return {}; }).then(function (d) {
+        err.textContent = d.detail || 'เข้าสู่ระบบไม่สำเร็จ';
+        err.style.display = 'block';
+        b.disabled = false; b.textContent = 'เข้าสู่ระบบ';
+      });
+    }).catch(function () {
+      err.textContent = 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้';
+      err.style.display = 'block';
+      b.disabled = false; b.textContent = 'เข้าสู่ระบบ';
+    });
+  });
+})();
+</script>
+</body>
+</html>

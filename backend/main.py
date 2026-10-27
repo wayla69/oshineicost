@@ -21,12 +21,15 @@ from fastapi.responses import FileResponse, JSONResponse
 try:                                   # works as `backend.main:app`
     from . import auth as _auth
     from . import month_summary as _month_summary
+    from . import code_guard as _cg
 except ImportError:                     # …and as `main:app` from inside backend/
     import auth as _auth                # role-based authentication (backend/auth.py)
     import month_summary as _month_summary   # sales_month_summary self-heal (backend/month_summary.py)
+    import code_guard as _cg            # login-gated code, code marks, bot/AI detection (backend/code_guard.py)
 
 
 import json as _json
+import time as _time_mod
 from fastapi.responses import Response as _Response
 
 
@@ -188,7 +191,12 @@ __all__ = [
 ]
 
 
-app = FastAPI(title="Oshinei Dashboard API")
+# No public API map (code guard, owner 2026-10-27): /openapi.json listed every endpoint and its
+# parameters to anyone. OSHINEI_API_DOCS=1 turns /openapi.json + /redoc back on for local work.
+_api_docs = _os_db.environ.get("OSHINEI_API_DOCS") == "1"
+app = FastAPI(title="Oshinei Dashboard API", docs_url=None,
+              redoc_url="/redoc" if _api_docs else None,
+              openapi_url="/openapi.json" if _api_docs else None)
 
 # The SPA is served same-origin from this app (GET /), so it needs no CORS at all.
 # We allow only explicit localhost origins for local dev tooling. NEVER use "*"/"null"
@@ -234,11 +242,61 @@ _DOCS_401_HTML = (
     "<p><a href='/'>ไปหน้าเข้าสู่ระบบ / open the dashboard</a> "
     "แล้วกลับมาเปิดลิงก์นี้อีกครั้ง</p></body>")
 
+# the app's code and panels: only a signed-in browser gets them (code guard); "/" itself answers
+# the login page instead (root)
+def _code_path(path: str) -> bool:
+    return path.startswith("/js/") or path in ("/tabs.html", "/app.js")
+
+
+def _loopback(request: Request) -> bool:
+    """The machine talking to itself (a report render, a cloud job): no Fly edge header, local peer."""
+    if request.headers.get("fly-client-ip"):
+        return False
+    host = getattr(request.client, "host", "") if request.client else ""
+    return host in ("127.0.0.1", "::1", "localhost", "testclient")
+
+
+def _cg_alert(kind, username, ip, detail):
+    """Push a code-guard event to every admin's device (silent when push is not set up)."""
+    try:
+        if __package__:
+            from .routers import push_api as _push
+        else:
+            from routers import push_api as _push
+        with get_db() as con:
+            admins = [u for u, role in con.execute("SELECT username, role FROM app_user WHERE active=1")
+                      if "system.admin" in _auth.modules_for_role(role or "")]
+            if admins:
+                _push.send_to_all(con, {"title": "ความปลอดภัย: " + _cg.KIND_TH.get(kind, kind),
+                                        "body": " · ".join(x for x in (username, ip, detail) if x),
+                                        "url": "/?go=usage", "tag": "oshinei-sec"}, only_users=admins)
+    except Exception:
+        pass
+
+
+def _cg_record(request: Request, kind: str, username: str = "", detail: str = "") -> None:
+    _cg.record(_usage_db_path(), kind, username, _auth.client_ip(request),
+               request.headers.get("user-agent", ""), request.url.path, detail, alert=_cg_alert)
+
+
+_cg_sweep = _cg.Sweep()
+_CG_BLOCK_SECS = 1800.0
+_cg_blocked: dict = {}      # username → until (epoch): a session the page itself found automated
+
+
 @app.middleware("http")
 async def enforce_auth(request: Request, call_next):
     if not _auth.auth_enabled():
         return await call_next(request)
     path = request.url.path
+    # Code guard: an AI agent, crawler or scripted HTTP client gets nothing from the pages, the
+    # code or the API (the machine endpoints below keep their own token and stay reachable).
+    machine = path.startswith(("/api/_admin/", "/api/feedback/webhook/", "/api/analysis/health")) \
+        or path == "/api/meta/build"
+    if not machine and not _loopback(request) and _cg.bot_ua(request.headers.get("user-agent", "")) \
+            and (path == "/" or _code_path(path) or path.startswith(("/api/", "/docs"))):
+        _cg_record(request, "bot_ua")
+        return JSONResponse({"detail": "ไม่อนุญาตให้โปรแกรมอัตโนมัติเข้าถึงระบบ"}, status_code=403)
     # /docs/ui-kit/ stays OPEN: index.html's <head> loads its design tokens
     # (tokens.css) as the SPA's single :root variable source — gating it breaks
     # the styling of the LOGIN page itself. It is CSS only, no business data.
@@ -254,10 +312,11 @@ async def enforce_auth(request: Request, call_next):
     # stay open so an unauthenticated browser can load the login form.
     # login / me / logout are matched EXACTLY: a prefix match let /api/auth/me/password
     # (and anything else that ever lands under /api/auth/me…) skip the session check.
-    if not (path.startswith("/api/") or docs_req) or path == "/api/auth/login" \
+    code_req = _code_path(path)
+    if not (path.startswith("/api/") or docs_req or code_req) or path == "/api/auth/login" \
             or path == "/api/auth/me" or path == "/api/auth/logout" \
             or path.startswith("/api/analysis/health") \
-            or path == "/api/meta/build" \
+            or path == "/api/meta/build" or path == "/api/sec/signal" \
             or path.startswith("/api/_admin/seed-db") \
             or path.startswith("/api/_admin/export-state")             or path.startswith("/api/_admin/cost-overrides")             or path.startswith("/api/_admin/task-health") \
             or path.startswith("/api/_admin/bc-sku-cost-month") \
@@ -278,6 +337,8 @@ async def enforce_auth(request: Request, call_next):
     def _deny():
         # a human opening a report link directly gets a pointer to the login
         # page instead of a bare JSON blob; API callers keep the JSON contract
+        if code_req:
+            return _Response(content="", status_code=401, headers={"Cache-Control": "no-store"})
         if docs_req:
             return _Response(content=_DOCS_401_HTML, media_type="text/html",
                              status_code=401)
@@ -295,12 +356,20 @@ async def enforce_auth(request: Request, call_next):
         row = None
     if not row or not row["active"]:
         return _deny()
+    if _cg_blocked.get(row["username"], 0) > _time_mod.time():
+        return _deny()
     # the LIVE identity for every helper downstream (auth.live_session: request_modules,
     # scope_branch, core.is_branch_session, auth_api._require_admin) so none of them
     # trusts the cookie's copy of role / branch
     request.state.auth_user = _auth.identity_from_row(row)
-    if docs_req:                                   # any active user may read docs
+    if docs_req or code_req:                       # any active user may read docs (the code is marked per login)
         return await call_next(request)
+    # a session walking far more distinct API paths than a person does is recorded (not blocked:
+    # a fast manager is not a crawler, and the admins see it)
+    n = _cg_sweep.hit(row["username"], path)
+    limit = _cg.SWEEP_LIMIT_BRANCH if row["role"] in _auth.PINNED_ROLES else _cg.SWEEP_LIMIT
+    if n == limit + 1:
+        _cg_record(request, "sweep", row["username"], f"{n} paths / {int(_cg.SWEEP_WINDOW // 60)} min")
     mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
     if not _auth.path_allowed(request.method, path, mods):
         # X-Denied: role — the page must not mistake this for a missing write token
@@ -309,6 +378,32 @@ async def enforce_auth(request: Request, call_next):
             {"detail": "บทบาทของคุณไม่มีสิทธิ์เข้าถึงส่วนนี้ (forbidden).", "code": "role"},
             status_code=403, headers={"X-Denied": "role"})
     return await call_next(request)
+
+# Browser hardening on every answer (code guard): no framing by another site, no MIME sniffing,
+# no referrer to other sites, HTTPS only, and no search or AI indexing of anything.
+_SEC_HEADERS = {
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "SAMEORIGIN",
+    "Referrer-Policy": "same-origin",
+    "Strict-Transport-Security": "max-age=31536000",
+    "Permissions-Policy": "geolocation=(), microphone=(), payment=(), usb=()",
+    "Content-Security-Policy": "frame-ancestors 'self'; object-src 'none'; base-uri 'self'; form-action 'self'",
+    "X-Robots-Tag": "noindex, nofollow, noarchive, noai, noimageai",
+}
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    resp = await call_next(request)
+    for k, v in _SEC_HEADERS.items():
+        resp.headers.setdefault(k, v)
+    return resp
+
+
+@app.get("/robots.txt", include_in_schema=False)
+def robots_txt():
+    return _Response(content="User-agent: *\nDisallow: /\n", media_type="text/plain")
+
 
 # ---------------------------------------------------------------------------
 # Usage telemetry  (lean-overhaul Phase 0 — docs/LEAN_OVERHAUL_PLAN.md)
@@ -926,7 +1021,7 @@ def _js_hash(p) -> str:
 
 def _versioned_index_html() -> str:
     import re as _re
-    html = INDEX.read_text(encoding="utf-8")
+    html = _cg.strip_html_comments(INDEX.read_text(encoding="utf-8"))
     def sub(m):
         p = _JS_DIR / m.group(1)
         return f'src="/js/{m.group(1)}?v={_js_hash(p)}"' if p.exists() else m.group(0)
@@ -945,13 +1040,88 @@ def _versioned_index_html() -> str:
                         f'<div id="tabsRoot" data-tabs-v="{_tabs_bundle()[1]}"></div>', 1)
 
 
+_LOGIN_PAGE = INDEX.parent / "login.html"
+
+# The page's own automation check (code guard): a browser driven by a program (navigator.webdriver,
+# headless Chrome, PhantomJS) reports itself, the page stops loading and is emptied. Served only with auth on
+# (the test-suite's Playwright runs with auth off).
+_CG_PROBE = (
+    "<script>(function(){var n=navigator,a=n.userAgent||'';"
+    "if(n.webdriver||/HeadlessChrome|PhantomJS/.test(a)||window.callPhantom||window._phantom||"
+    "window.__nightmare||document.documentElement.getAttribute('webdriver')){"
+    "try{fetch('/api/sec/signal',{method:'POST',headers:{'Content-Type':'application/json'},"
+    "body:JSON.stringify({w:!!n.webdriver}),keepalive:true});}catch(e){}"
+    "try{window.stop();}catch(e){}document.documentElement.innerHTML='';throw new Error('blocked');}})();</script>")
+
+
+def _live_user(request: Request):
+    """The signed-in ACTIVE account of this request, or None."""
+    try:
+        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
+        if not payload:
+            return None
+        with get_db() as con:
+            row = _auth.get_user(con, payload.get("u", ""))
+        return row if row and row["active"] else None
+    except Exception:
+        return None
+
+
 @app.get("/", include_in_schema=False)
-def root():
+def root(request: Request):
     if INDEX.exists():
+        if _auth.auth_enabled():
+            # code guard: before a login the browser gets the login page only (none of the app's
+            # markup; its code is refused by enforce_auth); the service worker does not keep it
+            row = _live_user(request)
+            if row is None or _cg_blocked.get(row["username"], 0) > _time_mod.time():
+                html = _cg.strip_html_comments(_LOGIN_PAGE.read_text(encoding="utf-8"))
+                return _Response(content=html.replace("<head>", "<head>\n" + _CG_PROBE, 1), media_type="text/html",
+                                 headers={"Cache-Control": "no-store", "Vary": "Cookie", "X-Login-Page": "1"})
+            return _Response(content=_versioned_index_html().replace("<head>", "<head>\n" + _CG_PROBE, 1),
+                             media_type="text/html", headers={"Cache-Control": "no-cache, private", "Vary": "Cookie"})
         # no-cache: the shell must always be fresh — it carries the js hashes
         return _Response(content=_versioned_index_html(), media_type="text/html",
                          headers={"Cache-Control": "no-cache"})
     return {"message": "Oshinei API running. Dashboard file not found."}
+
+
+def _code_mark(request: Request):
+    """This login's code mark (code_guard.mark_for), or None with auth off."""
+    who = (getattr(request.state, "auth_user", None) or {}).get("u") if _auth.auth_enabled() else None
+    return _cg.mark_for(who, _auth._secret()) if who else None
+
+
+@app.post("/api/sec/signal", include_in_schema=False)
+async def sec_signal(request: Request):
+    """The page found itself driven by a program (_CG_PROBE): record it, alert the admins, end
+    the session and refuse that login's pages for 30 minutes."""
+    if not _auth.auth_enabled():
+        return {"ok": True}
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    row = _live_user(request)
+    user = row["username"] if row else ""
+    _cg_record(request, "automation", user, f"webdriver={bool((body or {}).get('w'))}")
+    if user:
+        _cg_blocked[user] = _time_mod.time() + _CG_BLOCK_SECS
+    resp = JSONResponse({"ok": True})
+    resp.delete_cookie(_auth.SESSION_COOKIE, path="/")
+    return resp
+
+
+@app.get("/api/usage/security")
+def usage_security(request: Request, mark: Optional[str] = Query(None), limit: int = Query(200, ge=1, le=1000)):
+    """Code-guard events, newest first, and (?mark=) which login a copied code mark belongs to (admins)."""
+    _usage_admin(request)
+    out = {"events": _cg.recent(_usage_db_path(), limit)}
+    if mark:
+        with get_db() as con:
+            users = [r[0] for r in con.execute("SELECT username FROM app_user")]
+        out["mark"] = {"mark": mark, "username": _cg.who_has(mark, users, _auth._secret())}
+    return out
 
 
 _TABS_DIR = INDEX.parent / "tabs"
@@ -967,16 +1137,20 @@ def _tabs_bundle() -> tuple:
     files = sorted(_TABS_DIR.glob("*.html")) if _TABS_DIR.exists() else []
     key = tuple((f.name, f.stat().st_mtime_ns, f.stat().st_size) for f in files)
     if key != _tabs_cache["key"]:
-        html = "".join(f.read_text(encoding="utf-8") for f in files)
+        html = _cg.strip_html_comments("".join(f.read_text(encoding="utf-8") for f in files))
         _tabs_cache.update(key=key, html=html,
                            hash=hashlib.sha1(html.encode("utf-8")).hexdigest()[:10])
     return _tabs_cache["html"], _tabs_cache["hash"]
 
 
 @app.get("/tabs.html", include_in_schema=False)
-def tabs_html(v: Optional[str] = Query(None)):
+def tabs_html(request: Request, v: Optional[str] = Query(None)):
     html, h = _tabs_bundle()
     cache = "public, max-age=31536000, immutable" if v == h else "no-cache"
+    mark = _code_mark(request)
+    if mark:                                     # per login, so never in a shared cache
+        html = f'<i hidden data-cg="{mark}"></i>' + html
+        cache = cache.replace("public", "private") if "public" in cache else cache + ", private"
     return _Response(content=html, media_type="text/html; charset=utf-8",
                      headers={"Cache-Control": cache, "X-Tabs-Version": h})
 
@@ -1058,7 +1232,7 @@ def service_worker():
 
 
 @app.get("/js/{name}", include_in_schema=False)
-def app_js_slice(name: str, v: Optional[str] = Query(None)):
+def app_js_slice(request: Request, name: str, v: Optional[str] = Query(None)):
     """One slice of the SPA JS (P2 refactor: app.js split into js/01…09,
     loaded sequentially by index.html — shared global scope, order matters).
     Requested WITH the current ?v=<content-hash> (as the served shell always
@@ -1073,6 +1247,11 @@ def app_js_slice(name: str, v: Optional[str] = Query(None)):
     if p.exists() and p.parent == _JS_DIR:
         cache = ("public, max-age=31536000, immutable"
                  if v and v == _js_hash(p) else "no-cache")
+        mark = _code_mark(request)
+        if mark:                                 # the login's mark rides in the code itself (code_guard.mark_js)
+            return _Response(content=_cg.mark_js(p.read_bytes(), mark), media_type="application/javascript",
+                             headers={"Cache-Control": cache.replace("public", "private") if "public" in cache
+                                      else cache + ", private"})
         return FileResponse(str(p), media_type="application/javascript",
                             headers={"Cache-Control": cache})
     raise HTTPException(status_code=404, detail="not found")

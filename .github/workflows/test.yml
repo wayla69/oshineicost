@@ -104,6 +104,10 @@ jobs:
         # without `npm run build:css` would render unstyled, so the merge is blocked instead (about 2 s)
         working-directory: tests/e2e
         run: npm run check:css
+      - name: Minify the browser code as the image does
+        # code guard: the Docker build ships js/ minified (scripts/minify-js.js), so the smoke test runs that code
+        working-directory: tests/e2e
+        run: NODE_PATH=$PWD/node_modules node ../../scripts/minify-js.js ../../js
       - name: Run smoke
         working-directory: tests/e2e
         env:
