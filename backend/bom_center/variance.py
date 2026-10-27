@@ -199,7 +199,14 @@ def delete_receipt(con, branch_id: int, receipt_id: int, who: str, reason: str) 
     closed = _closed_through(con, branch_id)
     if closed and r[0] < closed:
         raise ValueError(f"ใบรับของวันที่ {_fmt_day(r[0])} อยู่ในเดือนที่ปิดแล้ว ({_fmt_day(closed)}) จึงลบไม่ได้ · แจ้งฝ่ายวิเคราะห์")
-    cur = con.execute("SELECT * FROM bc_receipt_line WHERE receipt_id=? ORDER BY ingredient_code", (receipt_id,))
+    m = re.fullmatch(r"ORDER-(\d+)", str(r[2] or ""))
+    if r[1] == "order" or (m and con.execute("SELECT 1 FROM bc_order WHERE order_id=? AND branch_id=? AND status='received'",
+                                             (int(m.group(1)), branch_id)).fetchone()):
+        # Audit 2026-10: the receipt of an order is booked by รับของ, and the order stays "received" with its received quantities
+        # (and any shortage claim) - deleting only the receipt would leave the order received with no goods in stock.
+        raise ValueError("ใบรับของนี้บันทึกจากการรับของตามใบสั่งซื้อ จึงยกเลิกไม่ได้ · ของขาดหรือเสียให้ใช้ “แจ้งของขาด/เสีย” "
+                         "หากบันทึกจำนวนผิดให้แจ้งประสานงานขาย")
+    cur =con.execute("SELECT * FROM bc_receipt_line WHERE receipt_id=? ORDER BY ingredient_code", (receipt_id,))
     cols = [d[0] for d in cur.description]
     lines = [dict(zip(cols, row)) for row in cur.fetchall()]
     snap = {"receipt_id": receipt_id, "branch_id": branch_id, "receipt_date": r[0], "source": r[1], "ref": r[2], "note": r[3],

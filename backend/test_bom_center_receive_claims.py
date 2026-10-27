@@ -23,7 +23,7 @@ from bom_center import claims as CL
 from bom_center import hub as HB
 from bom_center import orders as OR
 from bom_center import variance as VA
-from test_bom_center_claims import (CODE, _branch_user, _cleanup, _login, _received_qty_base,  # noqa: F401
+from test_bom_center_claims import (CODE, _branch_user, _cleanup, _login, _received_qty_base, _shipped_rest,  # noqa: F401
                                     auth_on)
 from test_bom_center_s4b import con  # noqa: F401
 from test_bom_center_s9 import _submitted  # noqa: F401
@@ -44,7 +44,7 @@ def _receive(con, oid, got, reason="short", note=None, ack=True, claim_note=None
         ln["reason"] = reason
     if note:
         ln["note"] = note
-    out = OR.receive(con, 1, oid, [ln], "udon", receipt_date="2026-10-07", ack=ack, claim_note=claim_note, **kw)
+    out = OR.receive(con, 1, oid, [ln] + _shipped_rest(con, oid), "udon", receipt_date="2026-10-07", ack=ack, claim_note=claim_note, **kw)
     con.commit()                                                       # the router's _write commits a successful call
     return out
 
