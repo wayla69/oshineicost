@@ -487,9 +487,15 @@ function _renderLockChip() {
 // Session-expiry handler — re-open the login overlay (guarded so a burst of
 // concurrent 401s only prompts once).
 let _sessionExpiredShown = false;
+// The service worker's offline copy of /api answers (sw.js, cache oshinei-api-*) belongs to ONE session: it is dropped on
+// logout, on a session that expired, and on every successful sign-in, so the next person on this phone never sees it.
+function _swClearApiCache() {
+  try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: 'clear-api-cache' }); } catch(e){}
+}
 function onSessionExpired() {
   if (_sessionExpiredShown) return;
   _sessionExpiredShown = true;
+  _swClearApiCache();
   if (window.AUTH) window.AUTH.authenticated = false;
   const err = document.getElementById('loginError');
   if (err) { err.textContent = 'หมดเวลาเข้าสู่ระบบ · เข้าสู่ระบบอีกครั้ง'; err.style.display = 'block'; }
@@ -852,6 +858,7 @@ async function doLogin(ev) {
       return;
     }
     const data = await res.json();
+    _swClearApiCache();                       // a new session: no answer cached for the previous one may be served offline
     window.AUTH = { enabled:true, authenticated:true, username:data.username,
                     role:data.role, branch:data.branch || null, modules:data.modules || [] };
     _sessionExpiredShown = false;
@@ -873,7 +880,7 @@ async function doLogin(ev) {
 async function doLogout() {
   try { await fetch(`${API}/api/auth/logout`, { method:'POST' }); } catch(e){}
   // the offline copy of this person's numbers goes with the session (sw.js)
-  try { navigator.serviceWorker && navigator.serviceWorker.controller && navigator.serviceWorker.controller.postMessage({ type: 'clear-api-cache' }); } catch(e){}
+  _swClearApiCache();
   location.reload();
 }
 

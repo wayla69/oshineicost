@@ -59,12 +59,14 @@ def _require_admin(request: Request):
     is disabled (local dev) this is a no-op so the user-admin UI works offline."""
     if not _auth.auth_enabled():
         return None
-    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
-    if not payload:
+    # the LIVE account (role / active), not the cookie's copy: a demoted or switched-off
+    # manager loses user administration on the next request, not when the cookie expires
+    ident = _auth.live_session(request)
+    if not ident:
         raise HTTPException(status_code=401, detail="Authentication required.")
-    if "system.admin" not in _auth.modules_for_role(payload.get("r", "")):
+    if "system.admin" not in _auth.modules_for_role(ident.get("r") or ""):
         raise HTTPException(status_code=403, detail="ต้องเป็น Management เท่านั้น.")
-    return payload
+    return ident
 
 
 class _PwChangeBody(BaseModel):
@@ -73,11 +75,9 @@ class _PwChangeBody(BaseModel):
 
 
 def _client_ip(request: Request) -> str:
-    # Behind Fly's proxy the real client is the first X-Forwarded-For hop.
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        return xff.split(",")[0].strip()
-    return request.client.host if request.client else "?"
+    # Fly-Client-IP (set by Fly's proxy), else the socket peer. NOT the first
+    # X-Forwarded-For hop: the client writes that one, so it would reset the throttle.
+    return _auth.client_ip(request)
 
 
 def _log_auth_event(con, action: str, username: str, ip: str = "") -> None:
@@ -142,20 +142,22 @@ def auth_change_own_password(body: _PwChangeBody, request: Request):
     password). Bypasses _require_admin — it only ever affects the caller's own row."""
     if not _auth.auth_enabled():
         raise HTTPException(status_code=400, detail="auth disabled")
-    payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, ""))
-    if not payload:
+    # an ACTIVE live account only: a deactivated / deleted login must not be able to
+    # keep its cookie useful by rotating the password
+    ident = _auth.live_session(request)
+    if not ident or not ident.get("active") or not ident.get("live", True):
         raise HTTPException(status_code=401, detail="Authentication required.")
+    user = str(ident.get("u") or "")
     try:
         _auth.check_password_policy(body.new_password)          # AUD-1 (≥10, not the shared default)
         with get_db() as con:
-            ok = _auth.change_own_password(con, payload.get("u", ""),
-                                           body.current_password, body.new_password)
+            ok = _auth.change_own_password(con, user, body.current_password, body.new_password)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     if not ok:
         raise HTTPException(status_code=403, detail="รหัสผ่านปัจจุบันไม่ถูกต้อง.")
     with get_db() as con:
-        _log_auth_event(con, "password_change", payload.get("u", ""), _client_ip(request))
+        _log_auth_event(con, "password_change", user, _client_ip(request))
     return {"ok": True}
 
 

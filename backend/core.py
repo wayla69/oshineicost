@@ -739,13 +739,15 @@ def is_branch_session(request: Request) -> bool:
     That login is already confined to its own branch and to the branch.stock routes by
     the auth middleware (a path with no rule is closed to it), so the owner write-token
     adds nothing for it — a branch phone never has to be unlocked (owner, 2026-10-08).
-    False with auth off, no/forged cookie, or any other role."""
+    False with auth off, no/forged cookie, an inactive account, or any other role.
+    Role and branch are the LIVE account's (auth.live_session), not the cookie's: a
+    login switched off the branch role must stop skipping the write token at once."""
     try:
         import auth as _auth
         if not _auth.auth_enabled():
             return False
-        payload = _auth.parse_token(request.cookies.get(_auth.SESSION_COOKIE, "")) or {}
-        return payload.get("r") == "branch" and bool(payload.get("b"))
+        s = _auth.live_session(request)
+        return s.get("r") == "branch" and bool(s.get("b"))
     except Exception:
         return False
 
@@ -886,6 +888,16 @@ def get_db():
             con = _new_conn()
             _tls.con = con
             _tls.con_gen = _db_gen
+        elif depth == 0:
+            # A previous request on this thread left a transaction open (an
+            # exception the handler caught, a forgotten commit). The connection is
+            # reused per thread, so that open transaction would hold SQLite's write
+            # lock for everyone ("database is locked"). Drop it before reuse.
+            try:
+                if con.in_transaction:
+                    con.rollback()
+            except sqlite3.Error:
+                pass
         try:
             yield con
         except sqlite3.Error:
@@ -896,6 +908,28 @@ def get_db():
                 except ValueError: pass
             _tls.con = None
             raise
+        except BaseException:
+            # HTTPException, a caught-and-re-raised IntegrityError turned into a 409,
+            # any bug: never hand the thread's connection back mid-transaction.
+            if depth == 0:
+                try:
+                    if con.in_transaction:
+                        con.rollback()
+                except sqlite3.Error:
+                    pass
+            raise
+        else:
+            # the outermost `with get_db()` ended cleanly but left its writes
+            # uncommitted. Before this they stayed open (holding the write lock for
+            # everyone) until some later request on the thread happened to commit
+            # them; commit now, which keeps that outcome and frees the lock at once.
+            if depth == 0:
+                try:
+                    if con.in_transaction:
+                        con.commit()
+                except sqlite3.Error:
+                    try: con.rollback()
+                    except sqlite3.Error: pass
     finally:
         _tls.rw_depth -= 1
         if _tls.rw_depth == 0:
@@ -927,14 +961,18 @@ def _apply_incoming_live() -> bool:
         try: inc.unlink()
         except OSError: pass
         return False
-    # Carry forward reconciliation tables so a refresh never wipes them.
-    # FAIL-CLOSED: don't hot-swap unless the carry-forward is verified intact.
-    safe, reason = _carry_forward_and_verify(str(DB_PATH), str(inc))
-    if not safe:
-        print(f"[hot-swap] ABORTED — {reason}; live DB kept, {inc.name} left for inspection")
-        return False
+    # The exclusive lock is taken BEFORE the carry-forward: a write that lands
+    # between copying the live-owned tables and os.replace() would otherwise be
+    # lost with the old file. Requests wait (they cannot write) until the swap
+    # finishes or aborts; every path below releases the lock in `finally`.
     _db_rw.acquire_write()
     try:
+        # Carry forward reconciliation tables so a refresh never wipes them.
+        # FAIL-CLOSED: don't hot-swap unless the carry-forward is verified intact.
+        safe, reason = _carry_forward_and_verify(str(DB_PATH), str(inc))
+        if not safe:
+            print(f"[hot-swap] ABORTED — {reason}; live DB kept, {inc.name} left for inspection")
+            return False
         with _conn_reg_lock:
             for c in _conn_reg:
                 try: c.close()
