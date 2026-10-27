@@ -1457,7 +1457,11 @@ def franchise_decide(request: Request, kind: str = Query("week"), pick: Optional
 #   month   the month that holds the day, from the management report the summary reads (to date through its last finished
 #           day): sales so far, against last month and last year on the same days (the summary's own fields), the sales
 #           target (_target: targets.py, weekday-fair while open) and the month's voided bills (home_extra.extra_cancel_bills,
-#           monthly only: the POS gives voided bills per month) with the controls card's bands T_CANCEL_WATCH / T_CANCEL_FIX
+#           monthly only: the POS gives voided bills per month) with the controls card's bands T_CANCEL_WATCH / T_CANCEL_FIX.
+#           When the report counts a later day than the card (the newest finished day has not fully arrived - latest_settled_day
+#           skipped it, e.g. พิษณุโลก 26 Oct 2026 with 14 bills at 10:00), the month ends on the card's day instead (_month_to_day,
+#           owner 2026-10-27): the same to-date windows (periods.windows: days 1..n of last month, the same dates last year), the
+#           same revenue rule and the report's weekday-fair projection (rules.month_projection) for the target to date
 def _daily_day(con, bid: int, name: str, day: str) -> dict:
     import period_cost as PC
     from rules import (discount_base_row, discount_policy_pct, food_cost_status_th, food_cost_target, net_revenue_sum)
@@ -1499,6 +1503,39 @@ def _daily_voids(name: str, month: str) -> dict:
             "watch_pct": T_CANCEL_WATCH, "fix_pct": T_CANCEL_FIX}
 
 
+def _month_to_day(con, bid: int, name: str, day: str) -> Optional[dict]:
+    """The month that holds `day`, to date through `day` (see the block comment above); the shape of the report path."""
+    import periods as P
+    from rules import month_projection, net_revenue_sum
+    w = P.windows(con, "month", "t.source='Easy' AND t.branch_id=:bid", {"bid": bid}, anchor_day=day)
+    if not w:
+        return None
+
+    def rev(span):
+        r = con.execute(f"SELECT {net_revenue_sum('t')} FROM sales_transaction t WHERE t.branch_id=:bid AND t.source='Easy' "
+                        f"AND date(t.sold_at) BETWEEN :s AND :e", {"bid": bid, "s": span[0], "e": span[1]}).fetchone()
+        return float(r[0]) if r and r[0] is not None else None
+    mtd = rev(w["cur"])
+    if mtd is None:
+        return None
+    prev = rev(w["prev"]) if w.get("has_prev") else None
+    ly = rev(w["ly"]) if w.get("has_ly") else None
+    first = date.fromisoformat(w["cur"][0])
+    d = date.fromisoformat(day)
+    days_total = _cal.monthrange(first.year, first.month)[1]
+    pr = month_projection(con, "st.source='Easy' AND st.branch_id=:bid", {"bid": bid}, first, d.day, days_total, mtd)
+    sales = {"mtd": _num(mtd, 2), "month_complete": bool(w["complete"])}
+    pace = {"proj_method": pr["method"], "projected": pr["projected"], "mtd_revenue": mtd, "days_elapsed": d.day,
+            "days_total": days_total}
+    mon = day[:7]
+    return {"month": mon, "label": f"เดือน {_TH_MON[first.month - 1]} {first.year}" + ("" if w["complete"] else f" (1–{d.day})"),
+            "through": day, "complete": bool(w["complete"]), "mtd": sales["mtd"],
+            "vs_last_month_pct": _num(P.pct(mtd, prev)) if prev else None, "mom_basis": "month" if w["complete"] else "to_date",
+            "vs_last_year_pct": _num(P.pct(mtd, ly)) if ly else None,
+            "target": _safe("daily target", lambda: _target(con, {"pace": pace}, sales, name, mon)),
+            "voids": _safe("daily voids", lambda: _daily_voids(name, mon))}
+
+
 def franchise_daily_data(branch_id: int) -> dict:
     """สรุปประจำวัน of one branch (see the block comment above). NOT wrapped in core.ttl_cache: the report it reads is cached."""
     from rules import latest_settled_day
@@ -1513,7 +1550,9 @@ def franchise_daily_data(branch_id: int) -> dict:
         mon = day[:7]
         rep = _safe("daily report", lambda: _report(name, mon), {}) or {}
         sales = _sales_and_gp(rep, name)[0] if rep.get("selected_month") == mon else None
-        if sales:
+        if sales and sales.get("through") and sales["through"] > day:     # the report counts a day the card skipped
+            out["month"] = _safe("daily month to day", lambda: _month_to_day(con, branch_id, name, day))
+        elif sales:
             out["month"] = {"month": mon, "label": rep.get("label"), "through": sales["through"],
                             "complete": sales["month_complete"], "mtd": sales["mtd"],
                             "vs_last_month_pct": sales["mtd_vs_last_month_pct"], "mom_basis": sales["mom_basis"],

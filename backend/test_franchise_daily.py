@@ -146,3 +146,22 @@ def test_the_page_draws_the_card_first_and_fetches_the_day():
     hero = card[card.index("const hero"):card.index("const fc")]
     assert "ปีก่อน" not in hero and "_frcHeroChip(" in hero                  # no last-year chip for the day (owner 2026-10-27)
     assert "verdict" not in card and "frcAskAbout" not in card              # no ควรดู items in the card
+
+
+def test_the_month_ends_on_the_cards_day_when_the_newest_day_has_not_fully_arrived(world, monkeypatch):
+    """Owner 2026-10-27: on the live app at 10:00 the card showed 25 Oct (26 Oct held 14 bills, skipped) but the month ran to
+    26 Oct. When latest_settled_day skips the newest day, the month block stops on the card's day, on the same to-date rules."""
+    import rules
+    full = _daily(world["b"])["month"]                                  # the report path: through 2026-06-03
+    daily = world["b"].get("/api/franchise/summary", params={"month": "2026-06"}).json()["sales"]["daily"]
+    monkeypatch.setattr(rules, "latest_settled_day",
+                        lambda con, where, params=None, **k: {"day": "2026-06-02", "skipped_day": "2026-06-03", "skipped_bills": 1})
+    d = _daily(world["b"])
+    M = d["month"]
+    assert d["day"]["date"] == "2026-06-02" and d["skipped_day"] == "2026-06-03"
+    assert M["through"] == "2026-06-02" and M["complete"] is False and M["label"].endswith("(1–2)")
+    assert M["mtd"] == round(sum(x["revenue"] or 0 for x in daily if x["date"] <= "2026-06-02"), 2) < full["mtd"]
+    assert set(M) == set(full) and set(M["target"] or {}) == set(full["target"] or {})
+    if M["target"] and M["target"]["source"] != "none":
+        assert M["target"]["to_date"] <= full["target"]["to_date"]
+    assert M["voids"] == full["voids"]                                  # voided bills are monthly either way
