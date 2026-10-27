@@ -242,9 +242,19 @@ def test_month_in_progress_is_to_date_for_covers_and_spend_too(mm):
         assert cur["mom"]["revenue"] == t["mom_pct"]
         assert cur["mom"]["customers"] == t["cust_mom_pct"]
         assert cur["mom"]["rev_per_head"] == t["rph_mom_pct"]
-    # a part month must never be judged against a whole one: the raw whole-month figure differs
-    prev_full = mm.get("/api/reports/management", params={"period": "monthly", "month": cur["mom"]["range"][0][:7]}).json()["headline"]["revenue"]
-    assert cur["revenue"] < prev_full
+    # a part month must never be judged against a whole one: the comparison window is the same days of the
+    # previous month, and the figure behind the % is that window's, not the previous whole month's.
+    # (The old check "to-date < previous whole month" only held early in the month: on the 27th the
+    # fixture's 26 October days already out-earn all of September - main went red 2026-10-27.)
+    lo, hi = cur["mom"]["range"]
+    py, pm = int(lo[:4]), int(lo[5:7])
+    last = calendar.monthrange(py, pm)[1]
+    assert lo == f"{py:04d}-{pm:02d}-01"
+    assert int(hi[8:]) == min(int(cur["range"][1][8:]), last)
+    if int(hi[8:]) < last:
+        prev_full = mm.get("/api/reports/management", params={"period": "monthly", "month": lo[:7]}).json()["headline"]["revenue"]
+        prev_to_date = cur["revenue"] / (1 + cur["mom"]["revenue"] / 100)
+        assert prev_to_date < prev_full
 
 
 # ── cost data and the year-on-year guard ─────────────────────────────────────
