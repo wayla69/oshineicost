@@ -103,6 +103,7 @@ _THAI_MONTHS = {
 }
 _THAI_DATE_RE = re.compile(r"^\s*(\d{1,2})\s*[-/\s]\s*([ก-๙.]+?)\s*[-/\s]\s*(\d{4}|\d{2})(?!\d)")
 _NUM_DATE_RE  = re.compile(r"^(\d{1,2})[/-](\d{1,2})[/-](\d{4}|\d{2})$")
+_ISO_BE_RE    = re.compile(r"^(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?$")
 
 
 def _ce_year(year_text: str) -> int:
@@ -132,6 +133,15 @@ def _parse_thai_date(raw: Any) -> str | None:
     if not raw:
         return None
     s = str(raw).strip()
+    # ISO-shaped date with a Buddhist-era year ("2567-02-29", "2569-06-05 12:46"):
+    # correct the year BEFORE building the date — fromisoformat would reject a
+    # 29 Feb whose BE year isn't a leap year (2567 BE = 2024 CE is).
+    m = _ISO_BE_RE.match(s)
+    if m and int(m.group(1)) > 2500:
+        try:
+            return date(int(m.group(1)) - 543, int(m.group(2)), int(m.group(3))).strftime("%Y-%m-%d")
+        except ValueError:
+            return None
     # ISO date or datetime, e.g. "2026-06-05" / "2026-06-05 12:46:38.379"
     # (LINE MAN Balance-Report CSV writes capture_time as a string with time +
     # fractional seconds). fromisoformat accepts the space/'T' separator and ms.

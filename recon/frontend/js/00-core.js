@@ -75,6 +75,16 @@ async function api(path,opts={}){
     const err=new Error(d||('HTTP '+r.status));err.status=r.status;throw err;}
   return r.json();
 }
+// ค่าที่ทุกเดือนอ่าน (รหัสชำระเงิน / ค่าวิธีกระทบยอด / MID): ถ้าจะทำให้ผลของเดือนที่ปิดแล้วเปลี่ยน
+// เซิร์ฟเวอร์ตอบ 409 พร้อมรายชื่อเดือน → ถามยืนยัน แล้วส่งใหม่พร้อม ?confirm_locked=1
+async function lockedOk(path,opts={},fn=api){
+  try{return await fn(path,{...opts});}
+  catch(e){
+    if(e.status!==409||!String(e.message).includes('ยืนยันเพื่อบันทึก'))throw e;
+    if(!confirm(e.message))throw new Error('ยกเลิก — ยังไม่ได้บันทึก');
+    return fn(path+(path.includes('?')?'&':'?')+'confirm_locked=1',{...opts});
+  }
+}
 function _mgrHdr(){const c=sessionStorage.getItem('mgr_code')||'';return c?{'X-Manager-Token':c}:{};}
 async function mgrApi(path,opts={}){
   if(ME.login_enabled)return api(path,opts);       // login on: the backend checks the ROLE, no shared code

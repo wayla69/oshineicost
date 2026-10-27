@@ -15,6 +15,7 @@ import recon.main as main  # noqa: E402
 import recon.core as core  # noqa: E402
 import recon.routers.daily as daily_router  # noqa: E402
 from test_recon import _make_db, DEMO_POS  # noqa: E402
+from approval_helpers import make_approvable  # noqa: E402
 
 PM = "2026-06"
 EVIL = "<img src=x onerror=alert(1)>"
@@ -123,7 +124,7 @@ def test_daily_report_escapes_stored_text(client, monkeypatch):
 def test_manual_rejects_foreign_locked_excluded_and_duplicate_lines(client):
     lid = _manual_setup(client)
     other_branch = _line(100, branch_id=5)
-    other_month = _line(100, date="2026-07-01")
+    other_month = _line(100, date="2026-07-20")      # past the lane's next-month window
     excluded = _line(100, status="excluded")
     t = "recon_bank_lines"
     for eid, code in ((other_branch, 400), (other_month, 400), (excluded, 409), (999999, 404)):
@@ -208,8 +209,10 @@ def test_channel_move_rejects_identical_double_submit(client):
 
 # ── 5/6/7. sign-off transitions ───────────────────────────────────────────────
 def _session(client, created_by="alice", pm=PM):
-    return client.post("/api/sessions", json={"branch_id": 4, "period_month": pm,
-                                              "created_by": created_by}).json()["session_id"]
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": pm,
+                                             "created_by": created_by}).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
+    return sid
 
 
 def test_close_requires_an_approved_month(client):

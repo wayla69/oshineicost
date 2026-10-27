@@ -31,7 +31,7 @@ from .buckets import (
     _apply_transfer_any,
     _external_buckets_daily,
     _settlement_claimed_ids,
-    channel_move_deltas,
+    channel_move_day_deltas,
 )
 from .coverage import _coverage
 
@@ -77,19 +77,23 @@ def daily_reconciliation(conn, branch_id, period_month):
         b = ext.setdefault((kd, "CASH", "NONE"), {"amount": 0.0, "net": 0.0})
         b["amount"] += c["amount"]; b["net"] += c["amount"]
 
-    # Manual cross-channel moves (booked-in-wrong-channel): no per-day grain, so land
-    # each lane's net delta on that lane's last populated POS day (else the month's
-    # last active day). Keeps the daily rollup tied to the monthly figure (no false
-    # drift-escalation); intentionally not attributed to a specific sale.
-    mv = channel_move_deltas(conn, branch_id, period_month)
+    # Manual cross-channel moves (booked-in-wrong-channel): a move saved with its sale
+    # day shifts THAT day on both lanes. A legacy move (no day) has no per-day grain,
+    # so its net delta lands on the lane's last populated POS day (else the month's
+    # last active day). Either way the daily rollup stays tied to the monthly figure
+    # (no false drift-escalation).
+    mv = channel_move_day_deltas(conn, branch_id, period_month)
     if mv:
         eom = max((dy for (dy, _c, _b) in pos), default=f"{period_month}-28")
-        for (cat, bank), d in mv.items():
-            if abs(d) < 0.005:
-                continue
+        legacy_tgt = {}
+        for (cat, bank) in {(c, b) for (dd, c, b) in mv if dd is None}:
             lane_days = sorted(dy for (dy, c, b) in pos
                                if c == cat and b == bank and abs(pos[(dy, c, b)]) > 0.005)
-            tgt = lane_days[-1] if lane_days else eom
+            legacy_tgt[(cat, bank)] = lane_days[-1] if lane_days else eom
+        for (mday, cat, bank), d in mv.items():
+            if abs(d) < 0.005:
+                continue
+            tgt = mday or legacy_tgt[(cat, bank)]
             pos[(tgt, cat, bank)] = pos.get((tgt, cat, bank), 0.0) + d
 
     # Multi-bank TRANSFER codes (bank='ANY'): per-bank lanes consume their own

@@ -202,16 +202,26 @@ def _cash_dep_credits(conn, branch_id, period_month, max_lag, exclude_ids=None):
 
 
 def _prev_month_claims(conn, branch_id, period_month) -> set:
-    """Bank-line ids dated in THIS month that last month's cash or payout matcher
-    already claimed (a 1-Jul deposit that banked 30-Jun cash, a 1-Jul transfer that
-    paid June's Grab). Last month's matchers run non-recursively (_dedup_prev=False)."""
+    """Bank-line ids dated in THIS month that last month's cash, payout or card
+    matcher already claimed (a 1-Jul deposit that banked 30-Jun cash, a 1-Jul
+    transfer that paid June's Grab, a 1-Jul KBank รับโอนเงิน that settled June's
+    30th card batch). Last month's matchers run non-recursively: cash with
+    _dedup_prev=False, card with _dedup=False (given last month's own cash claims
+    instead, so it picks what it really picked) — neither looks back again."""
     from .payout import _prev_payout_consumed_ids     # payout → buckets → cash: lazy
+    from .credit import credit_three_way              # credit → cash: lazy
     y, m = int(period_month[:4]), int(period_month[5:7])
     prev = f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
-    ids = set(cash_deposit_matching(conn, branch_id, prev, _dedup_prev=False)["consumed_ids"])
+    prev_cash = set(cash_deposit_matching(conn, branch_id, prev, _dedup_prev=False)["consumed_ids"])
+    ids = set(prev_cash)
     try:
         for s in _prev_payout_consumed_ids(conn, branch_id, period_month).values():
             ids |= set(s)
+    except sqlite3.OperationalError:
+        pass
+    try:
+        ids |= set(credit_three_way(conn, branch_id, prev, exclude_ids=frozenset(prev_cash),
+                                    _dedup=False)["bank_line_ids"])
     except sqlite3.OperationalError:
         pass
     return ids

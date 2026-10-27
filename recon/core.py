@@ -235,8 +235,13 @@ def require_write_token(request: Request, x_upload_token: str = Header(None)):
     passes — the middleware already refused viewers and anonymous callers; a
     caller with no session must hold the write token (the bulk-upload script).
     Login OFF: unchanged — the token when OSHINEI_SEED_TOKEN is set, open locally."""
-    if _auth.login_enabled() and _auth.current_user(request) is not None:
-        return
+    if _auth.login_enabled():
+        if _auth.current_user(request) is not None:
+            return
+        # Session-less with the login ON: the token opens the upload endpoints only
+        # (the bulk uploader) — never matching, sign-off evidence or config.
+        if not _auth.machine_path_ok(request):
+            raise HTTPException(401, _auth.MSG_NEED_LOGIN)
     toks = _accepted_tokens()
     if toks:
         provided = (x_upload_token or "").strip()      # header only - a ?token= would be logged
@@ -321,6 +326,78 @@ def _assert_period_open(conn, branch_id: int, period_month: str):
         raise HTTPException(
             423, f"{period_month} is {row['status']} for this branch — set the "
                  "session back to In-Review to make changes.")
+
+
+def _prev_month(period_month: str) -> str:
+    y, m = int(period_month[:4]), int(period_month[5:7])
+    return f"{y - 1}-12" if m == 1 else f"{y}-{m - 1:02d}"
+
+
+def _is_locked(conn, branch_id: int, period_month: str) -> bool:
+    row = conn.execute(
+        "SELECT status FROM recon_sessions WHERE branch_id=? AND period_month=?",
+        (branch_id, period_month)).fetchone()
+    return bool(row and row["status"] in ("approved", "closed"))
+
+
+def _locked_prev_claims(conn, branch_id: int, txn_date: str | None, cache: dict | None = None):
+    """(prev_month, claimed bank-line ids) when the line's date falls in the window
+    LAST month's matchers read (the first max-lag days of its month) and last month
+    is approved/closed for the branch; else None. The cash / card / payout matchers
+    of month M read bank credits up to lag_days into M+1, so such a line can be part
+    of a signed-off month's result. `cache` (per request) avoids recomputing."""
+    from .matcher import max_lag_days, month_claimed_bank_line_ids
+    d = str(txn_date or "")[:10]
+    if not _DAY_RE.match(d):
+        return None
+    if cache is not None and "lag" in cache:
+        lag = cache["lag"]
+    else:
+        lag = max_lag_days(conn)
+        if cache is not None:
+            cache["lag"] = lag
+    if int(d[8:10]) > lag:                      # outside every next-month window
+        return None
+    prev = _prev_month(d[:7])
+    if not _is_locked(conn, branch_id, prev):
+        return None
+    # Cached per request WITHOUT total_changes: the cache serves removal checks only,
+    # and taking out a credit the month did not claim leaves its claims unchanged.
+    key = (branch_id, prev)
+    if cache is not None and key in cache:
+        return prev, cache[key]
+    ids = month_claimed_bank_line_ids(conn, branch_id, prev)
+    if cache is not None:
+        cache[key] = ids
+    return prev, ids
+
+
+def _lock_msg(prev: str, txn_date: str) -> str:
+    return (f"รายการวันที่ {str(txn_date)[:10]} ถูกใช้กระทบยอดของเดือน {prev} ซึ่งปิด/อนุมัติแล้ว "
+            f"— แก้ไขไม่ได้ (เปิดงวด {prev} ก่อนหากจำเป็น)")
+
+
+def _assert_bank_line_open(conn, branch_id: int, line_id: int, txn_date: str | None,
+                           cache: dict | None = None) -> None:
+    """423 when a bank line may not change: its own month is approved/closed, or it
+    is one of the credits a signed-off PREVIOUS month's result rests on (a 1st-of-
+    month deposit that banked last month's 31st). Use before a change that takes the
+    line OUT of the matchers (ignore, manual match, delete): a credit last month did
+    not claim can't alter last month's figures when it leaves."""
+    _assert_period_open(conn, branch_id, str(txn_date or "")[:7])
+    hit = _locked_prev_claims(conn, branch_id, txn_date, cache)
+    if hit and line_id in hit[1]:
+        raise HTTPException(423, _lock_msg(hit[0], txn_date))
+
+
+def _assert_bank_line_release_ok(conn, branch_id: int, line_id: int, txn_date: str | None) -> None:
+    """After a change that puts a bank line BACK into the matchers (undo an ignore,
+    undo a manual match) — call inside the transaction, after the UPDATE: 423 when a
+    signed-off previous month would now claim it (its figures would change). The
+    caller's uncommitted UPDATE is discarded with the refusal."""
+    hit = _locked_prev_claims(conn, branch_id, txn_date, None)
+    if hit and line_id in hit[1]:
+        raise HTTPException(423, _lock_msg(hit[0], txn_date))
 
 
 _CATEGORIES = {"CASH", "QR", "TRANSFER", "CREDIT", "GRAB", "LINEMAN", "COUPON", "ENTERTAIN", "OTHER"}
