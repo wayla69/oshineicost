@@ -54,7 +54,7 @@ def test_month_windows_are_contiguous_and_honour_since_day():
         assert hi == lo2, "windows must be contiguous"
         assert lo2.endswith("-01")
     # covers up to (and including) the current month: last hi is next month's 1st
-    today = datetime.date.today()
+    today = sync.bkk_today()       # the sync's own Bangkok day (CI runs on UTC)
     last_hi = datetime.date.fromisoformat(wins[-1][1])
     assert (last_hi.year, last_hi.month) > (today.year, today.month) or (
         last_hi.year == today.year + (today.month == 12)

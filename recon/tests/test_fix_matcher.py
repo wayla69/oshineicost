@@ -166,7 +166,8 @@ def test_03_coupon_no_source_does_not_block_close(tmp_path):
     with TestClient(main.app) as c:
         r = c.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
         assert r["can_close"] and not r["todo"]
-        sid = c.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+        sid = c.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06",
+                                            "created_by": "prep"}).json()["session_id"]
         c.post(f"/api/sessions/{sid}/run-match")
         r = c.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "Boss"})
         assert r.status_code == 200, r.text
@@ -189,7 +190,8 @@ def test_03_day_acked_channel_closes(tmp_path):
             "variance": -10000, "note": "ธนาคารตัดยอดผิดวัน ตรวจกับสลิปแล้ว"}).status_code == 200
         r = c.get("/api/v2/reconcile", params={"branch_id": 4, "month": "2026-06"}).json()
         assert r["can_close"], r["todo"]
-        sid = c.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+        sid = c.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06",
+                                            "created_by": "prep"}).json()["session_id"]
         c.post(f"/api/sessions/{sid}/run-match")
         ds = c.get(f"/api/sessions/{sid}/discrepancies", params={"resolution": "all"}).json()
         assert [(d["category"], d["resolution"]) for d in ds] == [("QR", "accepted")]

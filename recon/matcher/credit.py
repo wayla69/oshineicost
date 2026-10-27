@@ -248,3 +248,28 @@ def credit_three_way(conn, branch_id, period_month, exclude_ids=None, _dedup=Tru
             "bank_groups":   groups,
         })
     return {"rows": rows, "bank_line_ids": bank_line_ids}
+
+
+def month_claimed_bank_line_ids(conn, branch_id, period_month) -> set:
+    """Every bank-line id this month's result rests on: the cash deposits its cash
+    matcher grouped, the settlements its card bank leg matched and the payouts its
+    provider matcher matched. The windows reach lag_days into the NEXT month, so
+    some of these lines are dated next month — the lock guard uses this to refuse
+    an edit that would change a signed-off month's figures."""
+    from .payout import payout_matching            # payout → buckets → cash: lazy
+    ids: set = set()
+    try:
+        ids |= set(cash_deposit_matching(conn, branch_id, period_month)["consumed_ids"])
+    except sqlite3.OperationalError:
+        pass
+    try:
+        ids |= set(credit_three_way(conn, branch_id, period_month)["bank_line_ids"])
+    except sqlite3.OperationalError:
+        pass
+    try:
+        for r in payout_matching(conn, branch_id, period_month).values():
+            ids |= {p["credit_id"] for p in r.get("payouts", [])
+                    if p.get("status") == "matched" and p.get("credit_id")}
+    except sqlite3.OperationalError:
+        pass
+    return ids

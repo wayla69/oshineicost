@@ -129,6 +129,8 @@ _MIGRATIONS = {
     # Ties the frozen working paper to the exact source documents (name + sha256) that
     # produced it, so a later upload delete/replace can't silently break the chain.
     "recon_close_snapshot": [("source_manifest", "TEXT")],
+    # The sale day a channel MOVE corrects (NULL on older rows → last POS day of the lane).
+    "recon_channel_move":  [("day", "TEXT")],
 }
 
 
@@ -464,9 +466,11 @@ _SENSITIVE_GET = re.compile(
 # cookie no longer counts; every /api call needs a recon session, except
 #   • /api/me, /api/auth/login, /api/auth/logout (the SPA must reach its login screen;
 #     /app/* static and /health are outside /api and stay open);
-#   • a session-less WRITE carrying a valid X-Upload-Token (the bulk-upload script) —
-#     the endpoint's require_write_token re-checks it; manager-only actions still
-#     refuse it (they need a manager SESSION).
+#   • a session-less POST to the upload endpoints (/api/uploads/<type>/confirm and
+#     /api/uploads/bulk) carrying a valid X-Upload-Token — the bulk-upload script.
+#     Nothing else: matching, acks, sign-off, deposit slips and config need a recon
+#     session (2026-10 audit; before, the token alone passed every non-manager write).
+#     The endpoint's require_write_token re-checks both the token and the path.
 # Roles: viewer → every POST/PATCH/PUT/DELETE 403; accountant → work actions, not
 # approve/close/reopen nor the manager setup (core._require_manager /
 # require_manager_token check the role) nor /api/users; manager → everything.
@@ -487,9 +491,8 @@ async def _recon_login_gate(request: Request):
         return JSONResponse({"detail": _auth.MSG_NO_SECRET}, status_code=503)
     user = await run_in_threadpool(_auth.current_user, request)
     if user is None:
-        if (request.method in _MUTATING and not path.startswith(("/api/users", "/api/auth/"))
-                and _auth.machine_token_label(request)):
-            return None                                     # bulk uploader (write token)
+        if _auth.machine_path_ok(request) and _auth.machine_token_label(request):
+            return None                                     # bulk uploader: upload POSTs only
         return JSONResponse({"detail": _auth.MSG_NEED_LOGIN}, status_code=401)
     if user["must_change_pw"] and path not in _SELF_SERVICE:
         return JSONResponse({"detail": _auth.MSG_MUST_CHANGE}, status_code=403)
@@ -578,6 +581,16 @@ async def _enforce_recon_session(request: Request, call_next):
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
+
+
+@app.middleware("http")
+async def _nosniff(request, call_next):
+    """Registered LAST so it is the OUTERMOST middleware and also covers the
+    login gate's early refusals. X-Content-Type-Options: nosniff on every response, so a browser never
+    second-guesses a declared type (an uploaded file must not render as HTML)."""
+    resp = await call_next(request)
+    resp.headers.setdefault("X-Content-Type-Options", "nosniff")
+    return resp
 
 
 # ── Routers by family (Phase 7c, 2026-09) ─────────────────────────────────

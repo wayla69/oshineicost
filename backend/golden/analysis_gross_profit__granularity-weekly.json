@@ -1,18 +1,18 @@
 [
  {
-  "cogs": 1800.0,
-  "gross_profit": 4200.0,
-  "margin_pct": 70.0,
-  "period": "2026-W18",
-  "revenue": 6000.0,
-  "week_start": "2026-05-01"
- },
- {
-  "cogs": 1800.0,
-  "gross_profit": 4200.0,
+  "cogs": 7200.0,
+  "gross_profit": 16800.0,
   "margin_pct": 70.0,
   "period": "2026-W23",
-  "revenue": 6000.0,
+  "revenue": 24000.0,
   "week_start": "2026-06-01"
+ },
+ {
+  "cogs": 9000.0,
+  "gross_profit": 21000.0,
+  "margin_pct": 70.0,
+  "period": "2026-W18",
+  "revenue": 30000.0,
+  "week_start": "2026-05-01"
  }
 ]

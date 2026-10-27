@@ -11,6 +11,8 @@ from ..core import _DAY_RE
 from ..core import _SNAPSHOT_DIR
 from ..core import _actor
 from ..core import _assert_period_open
+from ..core import _assert_bank_line_open
+from ..core import _assert_bank_line_release_ok
 from ..core import _audit
 from ..core import _require_manager
 from ..core import _validate_master_branch
@@ -56,16 +58,19 @@ class _BulkIgnoreBody(BaseModel):
     by:       str = ""
 
 
-def _set_ignore(conn, line_id: int, ignored: bool, by: str, note: str) -> str:
+def _set_ignore(conn, line_id: int, ignored: bool, by: str, note: str,
+                lock_cache: dict | None = None) -> str:
     """Flag one bank credit as not-revenue (or undo it). Raises HTTPException with
     the reason a line cannot be changed; the caller commits. Shared by the
-    single PATCH and the bulk POST so both apply exactly the same rules."""
+    single PATCH and the bulk POST so both apply exactly the same rules.
+    Lock: the line's own month must be open, and a signed-off PREVIOUS month must
+    not rest on it (ignoring a credit it claimed) nor start claiming it (restoring)."""
     line = conn.execute(
         "SELECT branch_id, txn_date, description, credit, match_status "
         "FROM recon_bank_lines WHERE id=?", (line_id,)).fetchone()
     if not line:
         raise HTTPException(404, "bank line not found")
-    _assert_period_open(conn, line["branch_id"], str(line["txn_date"])[:7])
+    _assert_bank_line_open(conn, line["branch_id"], line_id, line["txn_date"], lock_cache)
     if ignored and line["match_status"] == "manual":
         raise HTTPException(409, "line is manually matched — undo the manual match first")
     if ignored and line["match_status"] == "excluded":
@@ -73,8 +78,19 @@ def _set_ignore(conn, line_id: int, ignored: bool, by: str, note: str) -> str:
     if not ignored and line["match_status"] != "excluded":
         raise HTTPException(409, "line is not ignored")
     new_status = "excluded" if ignored else "unmatched"
+    if not conn.in_transaction:
+        conn.execute("BEGIN")                  # so RELEASE below never commits on its own
+    conn.execute("SAVEPOINT set_ignore")
     conn.execute("UPDATE recon_bank_lines SET match_status=? WHERE id=?",
                  (new_status, line_id))
+    if not ignored:
+        try:
+            _assert_bank_line_release_ok(conn, line["branch_id"], line_id, line["txn_date"])
+        except HTTPException:
+            conn.execute("ROLLBACK TO set_ignore")
+            conn.execute("RELEASE set_ignore")
+            raise
+    conn.execute("RELEASE set_ignore")
     _audit(conn, "bank_line", line_id, "update", by or "staff",
            [{"field": "match_status", "old": line["match_status"], "new": new_status},
             {"field": "note", "old": None,
@@ -106,10 +122,11 @@ def bulk_bank_line_ignore(body: _BulkIgnoreBody, request: Request):
         raise HTTPException(400, "at most 500 lines per request")
     done, skipped = [], []
     actor = _actor(request, body.by)
+    lock_cache: dict = {}
     with get_db() as conn:
         for line_id in ids:
             try:
-                _set_ignore(conn, line_id, body.ignored, actor, body.note)
+                _set_ignore(conn, line_id, body.ignored, actor, body.note, lock_cache)
                 done.append(line_id)
             except HTTPException as e:
                 skipped.append({"line_id": line_id, "reason": e.detail})
@@ -209,13 +226,24 @@ def update_session_status(
     if status in ("approved", "closed"):
         _require_manager(x_manager_token, request)
     actor = _actor(request, approved_by, default="")        # blank when unknown → SoD-safe
+    if status == "approved":
+        # Freshness: the approval snapshot, Excel export and the pending gate below
+        # read the PERSISTED match results (recon_category_result / discrepancies),
+        # which only Run Match refreshes. If data changed since (an upload, manual
+        # match, adjustment, ignore) re-run it first; the locked section re-checks.
+        with get_db() as conn:
+            s0 = conn.execute("SELECT branch_id, period_month, status FROM recon_sessions "
+                              "WHERE session_id=?", (session_id,)).fetchone()
+            if s0 and s0["status"] not in ("approved", "closed") and \
+                    _match_freshness(conn, session_id, s0["branch_id"], s0["period_month"])["stale"]:
+                run_auto_match(conn, session_id, s0["branch_id"], s0["period_month"])
     with get_db() as conn:
         # Read-check-write under one write lock: two managers approving at the same
         # moment must not both pass the checks below (the UPDATEs are guarded too).
         conn.execute("BEGIN IMMEDIATE")
         old_row = conn.execute(
-            "SELECT status, created_by FROM recon_sessions WHERE session_id=?",
-            (session_id,)).fetchone()
+            "SELECT status, created_by, branch_id, period_month FROM recon_sessions "
+            "WHERE session_id=?", (session_id,)).fetchone()
         if not old_row:
             raise HTTPException(404, f"session {session_id} not found")
         old_status = old_row["status"]
@@ -248,15 +276,18 @@ def update_session_status(
                     409, f"ยังปิดไม่ได้ — มีข้อแตกต่างค้าง {pending} รายการ (ระบบเพิ่งจับคู่ใหม่ก่อนลงนาม) · "
                          "จัดการหรือรับทราบในหน้า ข้อแตกต่าง ก่อน แล้วลงนามอีกครั้ง")
         if status == "approved":
-            # Segregation of duties (AUD-4): the person who prepared the month
-            # cannot also approve it. A classic audit finding; enforced when both
-            # identities are known.
-            prep = (old_row["created_by"] or "").strip().lower()
-            appr = (actor or "").strip().lower()
-            if prep and appr and prep == appr:
+            # Data changed between the re-run above and this lock → refuse, never
+            # sign off figures the persisted results no longer reflect.
+            if _match_freshness(conn, session_id, old_row["branch_id"],
+                                old_row["period_month"])["stale"]:
                 raise HTTPException(
-                    409, "แบ่งแยกหน้าที่ (SoD): ผู้จัดทำไม่สามารถอนุมัติงานของตัวเองได้ — "
-                         "ต้องให้ผู้อื่นเป็นผู้อนุมัติ")
+                    409, "ข้อมูลของเดือนนี้เปลี่ยนหลังการจับคู่ล่าสุด — กดจับคู่ใหม่ แล้วอนุมัติอีกครั้ง")
+            # Segregation of duties (AUD-4, widened 2026-10): nobody who worked on the
+            # month — opened it, submitted it for review, matched/moved/adjusted/
+            # acknowledged/resolved/ignored anything in it — may approve it. And the
+            # month must HAVE an identifiable preparer: a blank or machine-token
+            # creator with no other named worker is refused (send it for review first).
+            _assert_sod(conn, session_id, old_row, actor)
         # Step-up (login ON): a sign-off is the user's own act — re-enter the password.
         # Last gate, so a refused attempt never burns a try on a month that could not
         # be signed anyway; a wrong one counts toward the same lockout as the login.
@@ -299,6 +330,66 @@ def update_session_status(
         except Exception:
             snap = None
     return {"session_id": session_id, "status": status, "snapshot": snap}
+
+
+# Placeholder names older code stamped when the actor was unknown — not identities.
+_NO_IDENTITY = {"", "staff", "manual", "manager", "system"}
+
+
+def _ident(v) -> str:
+    """Normalised identity, or '' for a placeholder / machine-token actor."""
+    s = str(v or "").strip().lower()
+    return "" if (s in _NO_IDENTITY or s.startswith("token")) else s
+
+
+def _month_preparers(conn, session_id: int, branch_id: int, period_month: str,
+                     created_by) -> set:
+    """Every named person who did work on this branch-month (see _assert_sod)."""
+    names = {created_by}
+    q = [
+        ("SELECT matched_by FROM recon_manual_match WHERE branch_id=? AND period_month=?",
+         (branch_id, period_month)),
+        ("SELECT created_by FROM recon_lane_adj WHERE branch_id=? AND period_month=?",
+         (branch_id, period_month)),
+        ("SELECT created_by FROM recon_day_ack WHERE branch_id=? AND period_month=?",
+         (branch_id, period_month)),
+        ("SELECT created_by FROM recon_channel_move WHERE branch_id=? AND period_month=?",
+         (branch_id, period_month)),
+        ("SELECT created_by FROM recon_deposit_slip WHERE branch_id=? AND substr(sale_day,1,7)=?",
+         (branch_id, period_month)),
+        ("SELECT resolved_by FROM recon_discrepancies WHERE session_id=? AND resolution!='pending'",
+         (session_id,)),
+        # who sent it for review (draft → in_review)
+        ("SELECT by FROM recon_audit_log WHERE entity='session' AND entity_id=? "
+         "AND field='status' AND new_val='in_review'", (session_id,)),
+        # who ignored / restored a bank line of the month
+        ("SELECT a.by FROM recon_audit_log a JOIN recon_bank_lines l ON l.id=a.entity_id "
+         "WHERE a.entity='bank_line' AND l.branch_id=? AND substr(l.txn_date,1,7)=?",
+         (branch_id, period_month)),
+    ]
+    for sql, params in q:
+        try:
+            names |= {r[0] for r in conn.execute(sql, params)}
+        except sqlite3.OperationalError:          # table absent on an old DB
+            pass
+    return {n for n in (_ident(x) for x in names) if n}
+
+
+def _assert_sod(conn, session_id: int, row, actor: str) -> None:
+    appr = _ident(actor)
+    if not appr:
+        raise HTTPException(
+            409, "แบ่งแยกหน้าที่ (SoD): ไม่ทราบตัวผู้อนุมัติ — เข้าสู่ระบบหรือระบุชื่อผู้อนุมัติ")
+    preparers = _month_preparers(conn, session_id, row["branch_id"], row["period_month"],
+                                 row["created_by"])
+    if appr in preparers:
+        raise HTTPException(
+            409, "แบ่งแยกหน้าที่ (SoD): ผู้อนุมัติได้ทำรายการในเดือนนี้แล้ว (เป็นผู้จัดทำ) — "
+                 "ต้องให้ผู้อื่นเป็นผู้อนุมัติ")
+    if not preparers:
+        raise HTTPException(
+            409, "แบ่งแยกหน้าที่ (SoD): เดือนนี้ไม่มีผู้จัดทำที่ระบุตัวได้ — "
+                 "ให้ผู้จัดทำกด ส่งตรวจ ก่อน แล้วจึงอนุมัติ")
 
 
 def _stepup(conn, request, password: str, session_id: int, status: str) -> None:

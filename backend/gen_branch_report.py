@@ -12,7 +12,7 @@ the branch's own menu cost drivers · findings + recommendations.
 → docs/BRANCH_REPORT_<slug>_<m1>_<m2>.html (+ .pdf via Chrome headless).
 
 Same money basis as the app (backend/rules.py): revenue = Σ subtotal_ex_vat of
-sales_sku_monthly; COGS = qty × effective unit cost with buffet tier rows at 0
+v_sales_sku_monthly (no service charge); COGS = qty × effective unit cost with buffet tier rows at 0
 (cogs_expr); covers = Σ customer_count of sales_month_summary; cost/head =
 COGS ÷ covers; food % = COGS ÷ revenue; GP/head = (revenue − COGS) ÷ covers.
 Benchmark = every active branch, same month. Rewritten 2026-09-04 — the
@@ -81,6 +81,13 @@ def find_db(explicit) -> Path:
 
 
 # ── data ─────────────────────────────────────────────────────────────────────
+# The SKU roll-up WITHOUT the SERVICECHARGE pseudo-SKU: the 5 % service charge is not revenue
+# (core._REV_VIEWS' v_sales_sku_monthly, inlined because this script opens the DB read-only and a
+# freshly synced copy has no views yet). Until 2026-10 the base table put the charge in revenue.
+_SSM = ("(SELECT * FROM sales_sku_monthly WHERE sku_id NOT IN "
+        "(SELECT sku_id FROM skus WHERE UPPER(sku_code) IN ('SERVICECHARGE','SERVICE')))")
+
+
 def _ids_sql(ids):
     return "(" + ",".join(str(int(i)) for i in ids) + ")" if ids else "(-1)"
 
@@ -88,12 +95,12 @@ def _ids_sql(ids):
 def scope_month(con, ids, period) -> dict:
     """Revenue / covers / bills / COGS for a set of branches in one month."""
     ph = _ids_sql(ids)
-    rev = con.execute(f"SELECT COALESCE(SUM(subtotal_ex_vat),0) FROM sales_sku_monthly "
+    rev = con.execute(f"SELECT COALESCE(SUM(subtotal_ex_vat),0) FROM {_SSM} "
                       f"WHERE period_month=? AND branch_id IN {ph}", (period,)).fetchone()[0] or 0.0
     covers, bills = con.execute(
         f"SELECT COALESCE(SUM(customer_count),0), COALESCE(SUM(transaction_count),0) "
         f"FROM sales_month_summary WHERE period_month=? AND branch_id IN {ph}", (period,)).fetchone()
-    cogs = con.execute(f"SELECT COALESCE(SUM({cogs_expr('ssm')}),0) FROM sales_sku_monthly ssm "
+    cogs = con.execute(f"SELECT COALESCE(SUM({cogs_expr('ssm')}),0) FROM {_SSM} ssm "
                        f"WHERE ssm.period_month=? AND ssm.branch_id IN {ph}", (period,)).fetchone()[0] or 0.0
     covers = int(covers or 0)
     return {
@@ -112,7 +119,7 @@ def menu_drivers(con, branch_id, m1, m2, covers1, covers2, top_n=10) -> list:
         for r in con.execute(
                 f"SELECT ssm.sku_id, sk.sku_code, sk.description, SUM(ssm.qty) qty, "
                 f"       SUM({cogs_expr('ssm')}) cogs, SUM(ssm.subtotal_ex_vat) rev "
-                f"FROM sales_sku_monthly ssm JOIN skus sk ON sk.sku_id = ssm.sku_id "
+                f"FROM {_SSM} ssm JOIN skus sk ON sk.sku_id = ssm.sku_id "
                 f"WHERE ssm.branch_id=? AND ssm.period_month=? GROUP BY ssm.sku_id",
                 (branch_id, period)):
             if is_tier_code(r["sku_code"] or ""):

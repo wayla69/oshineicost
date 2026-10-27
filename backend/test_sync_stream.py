@@ -76,7 +76,7 @@ def test_a_private_build_is_published_only_when_finished(tmp_path, monkeypatch, 
     try:
         assert con.execute("SELECT COUNT(*) FROM sales_transaction").fetchone()[0] == 4
         # the full-run clock is written into the build BEFORE it is published (the poller may swap it at once)
-        assert con.execute("SELECT v FROM sync_state WHERE k='last_full_sync'").fetchone()[0] == dt.date.today().isoformat()
+        assert con.execute("SELECT v FROM sync_state WHERE k='last_full_sync'").fetchone()[0] == sync.bkk_today().isoformat()
     finally:
         con.close()
 
@@ -209,7 +209,7 @@ def test_a_full_run_over_a_synthetic_history_stays_under_the_ceiling(tmp_path, m
     """22 months of ~1,500 bills / 3,000 discount lines / 1,400 payment lines each. Python-allocated memory (tracemalloc) must stay
     far below what holding that history would take (the old whole-history lists peaked at 51 MB for this size, 1.3-1.6 GB at production size; this stays near 7 MB)."""
     tsm.seed_current_db(tmp_path / "oshinei.db")
-    patterns = [(r"MAX\(SaleDate\)", [{"mx": dt.date.today().isoformat()}])] + tsm.make_source() + STAGE_PATTERNS
+    patterns = [(r"MAX\(SaleDate\)", [{"mx": sync.bkk_today().isoformat()}])] + tsm.make_source() + STAGE_PATTERNS
     monkeypatch.setattr(sync, "DB", tmp_path / "oshinei.db")
     monkeypatch.setattr(sync, "INCOMING", tmp_path / "oshinei.db.incoming")
     monkeypatch.setattr(sync, "STAGE_FALLBACK", tmp_path / "oshinei.db.incoming.new")

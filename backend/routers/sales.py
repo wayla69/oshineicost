@@ -10,7 +10,7 @@ from rules import VAT_DIVISOR, closed_branches, closed_day_clause, drop_closed, 
 from core import (
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
-    ex_vat, get_db, ttl_cache,
+    get_db, ttl_cache,
 )
 
 import threading as _threading
@@ -968,7 +968,7 @@ def heavy_eaters(
             SELECT b.name br, sbc.day day, sbc.receipt_no rcpt, t.customer_count cov,
                    {net_revenue_row('t')} rev, sbc.cogs_bom cogs
             FROM sale_bill_cogs sbc
-            JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no
+            JOIN sales_transaction t ON t.receipt_no = sbc.receipt_no AND t.branch_id = sbc.branch_id
             JOIN branches b ON b.branch_id = sbc.branch_id
             WHERE {' AND '.join(base)}""", p).fetchall()
     bills = []
@@ -2459,6 +2459,7 @@ def summary(
             r = con.execute(
                 f"""
                 SELECT SUM(st.total_inc_vat)   AS rev_inc,
+                       {net_revenue_sum('st')} AS rev_net,
                        COUNT(*)                AS tx,
                        SUM(st.customer_count)  AS cust
                 FROM sales_transaction st
@@ -2470,7 +2471,7 @@ def summary(
         rev_inc = r["rev_inc"] or 0.0
         tx      = r["tx"] or 0
         cust    = r["cust"] or 0
-        rev_ex  = ex_vat(rev_inc)          # VAT is never revenue
+        rev_ex  = r["rev_net"] or 0.0      # VAT and the 5 % service charge are never revenue (= month mode)
         return {
             "revenue":         round(rev_ex, 2),
             "revenue_ex_vat":  round(rev_ex, 2),

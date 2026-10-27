@@ -92,7 +92,7 @@ function _mxSum(){
 function _mxSortedExt(){
   const M=MX, s=_mxSum(), need=s.p-s.e;
   const ref=(Object.keys(M.tickP).length?Object.keys(M.tickP):(M.day?[M.day]:[])).map(_mxDayNum);
-  const dist=l=>ref.length?Math.min(...ref.map(r=>Math.abs(_mxDayNum(l.date)-r))):0;
+  const dist=l=>ref.length?Math.min(...ref.map(r=>Math.abs(_mxDayNum(l.date)+(l.next_month?31:0)-r))):0;   // next-month window lines sit after day 31
   // score = days away + up to 3 "days" for a poor amount fit (an exact amount a few days off still ranks high)
   const fit=l=>need>0.5?Math.min(1,Math.abs(l.amount-need)/need):0;
   return M.ext.map(l=>({l,blk:_mxBlock(l),on:M.tickE.has(l._k),sc:dist(l)+3*fit(l),need}))
@@ -121,6 +121,7 @@ function _mxExtHtml(){
       <td>${blk?'':`<input type="checkbox" id="${id}"${on?' checked':''}${M.closed?' disabled':''} onchange="mxTickE(${jsa(l._k)},this.checked)">`}</td>
       <td class="tl nowrap">${blk?_mxD(l.date):`<label for="${id}">${_mxD(l.date)}</label>`}</td>
       <td class="tl mx-ref"><span class="mx-ref-t" title="${esc(l.ref||'')}">${esc(l.ref||l.detail||'—')}</span>
+        ${l.next_month?'<span class="chip c-mut ov-mini">เดือนถัดไป</span>':''}
         ${blk?`<span class="chip c-mut ov-mini">${esc(blk)}</span>`:fit?'<span class="chip c-ok ov-mini">ยอดพอดี</span>':''}</td>
       <td class="mono">${fmt2(l.amount)}</td></tr>`;}).join('')}</tbody></table>`;
 }

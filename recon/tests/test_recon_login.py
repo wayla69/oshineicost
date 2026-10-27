@@ -22,6 +22,7 @@ import recon.core as core  # noqa: E402
 import recon.auth as A  # noqa: E402
 from test_recon import _make_db, DEMO_POS  # noqa: E402
 from test_fix_routers import _manual_setup, _manual_body  # noqa: E402
+from approval_helpers import make_approvable  # noqa: E402
 
 PM = "2026-06"
 BOSS_PW = "Bx-" + secrets.token_hex(6)          # generated per run — test-only values
@@ -111,11 +112,12 @@ def test_flag_off_keeps_todays_behaviour(env):
         assert _login(cl, "amy", "Amy-pass-123").status_code == 200   # login works before enforcement
         assert cl.get("/api/me").json()["user"]["username"] == "amy"
         assert cl.post("/api/sessions", json={"branch_id": 5, "period_month": PM}).status_code == 403
-        assert cl.post("/api/sessions", json={"branch_id": 5, "period_month": PM},
+        assert cl.post("/api/sessions", json={"branch_id": 5, "period_month": PM, "created_by": "prep"},
                        headers={"X-Upload-Token": "tok-x"}).status_code == 200
         # the shared manager code still gates approval (not the recon role)
         env.setenv("OSHINEI_MANAGER_TOKEN", "mgr-x")
         sid = _q("SELECT session_id FROM recon_sessions WHERE branch_id=5")[0]["session_id"]
+        make_approvable(main._DB_PATH, sid)
         h = {"X-Upload-Token": "tok-x"}
         assert cl.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "zed"},
                         headers=h).status_code == 403
@@ -265,6 +267,7 @@ def test_accountant_works_but_cannot_approve_or_admin(on):
     sid = acc.post("/api/sessions", json={"branch_id": 4, "period_month": PM,
                                           "created_by": "boss"}).json()["session_id"]
     assert _q("SELECT created_by FROM recon_sessions WHERE session_id=?", sid)[0]["created_by"] == "acc1"
+    make_approvable(main._DB_PATH, sid)
     assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
     r = acc.patch(f"/api/sessions/{sid}/status", data={"status": "approved"})
     assert r.status_code == 403 and r.json()["detail"] == A.MSG_MANAGER_ONLY
@@ -292,6 +295,7 @@ def test_sod_with_two_real_users(on):
     m2 = _as("boss2", pw)
     sid = mgr.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
     assert _q("SELECT created_by FROM recon_sessions WHERE session_id=?", sid)[0]["created_by"] == "boss"
+    make_approvable(main._DB_PATH, sid)
     own = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "boss2"})
     assert own.status_code == 409 and "SoD" in own.json()["detail"]     # the body can't fake another approver
     assert m2.patch(f"/api/sessions/{sid}/status", data={"status": "approved",
@@ -304,6 +308,7 @@ def _in_review(mgr):
     _, pw = _add(mgr, "acc1", "accountant")
     acc = _as("acc1", pw)
     sid = acc.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     assert acc.patch(f"/api/sessions/{sid}/status", data={"status": "in_review"}).status_code == 200
     return acc, sid
 
@@ -365,6 +370,7 @@ def test_stepup_reopen_and_the_ordinary_moves(on):
 def test_stepup_sod_refusal_burns_no_password_try(on):
     mgr = _boss(on)
     sid = mgr.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+    make_approvable(main._DB_PATH, sid)
     r = mgr.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "password": "wrong-password-1"})
     assert r.status_code == 409 and "SoD" in r.json()["detail"]
     assert _fails()["failed_count"] == 0
@@ -395,7 +401,9 @@ def test_stepup_login_off_keeps_the_manager_code(env):
     """Login OFF: no password is asked or checked — the manager code is the gate."""
     env.setenv("OSHINEI_MANAGER_TOKEN", "mgr-x")
     with TestClient(main.app) as cl:
-        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).json()["session_id"]
+        sid = cl.post("/api/sessions", json={"branch_id": 4, "period_month": PM,
+                                             "created_by": "prep"}).json()["session_id"]
+        make_approvable(main._DB_PATH, sid)
         f = {"status": "approved", "approved_by": "zed", "password": "anything-at-all"}
         assert cl.patch(f"/api/sessions/{sid}/status", data=f).status_code == 403
         assert cl.patch(f"/api/sessions/{sid}/status", data={"status": "approved", "approved_by": "zed"},
@@ -412,9 +420,14 @@ def test_write_token_still_works_for_machine_writes(on, monkeypatch):
     m = TestClient(main.app)                                           # no cookie at all
     h = {"X-Upload-Token": "tok-123"}
     assert m.post("/api/sessions", json={"branch_id": 4, "period_month": PM}).status_code == 401
+    # 2026-10 audit: the token alone opens the UPLOAD endpoints only — not sessions,
+    # matching, deposit slips or config (those need a recon session)
     r = m.post("/api/sessions", json={"branch_id": 4, "period_month": PM}, headers=h)
-    assert r.status_code == 200
-    assert _q("SELECT created_by FROM recon_sessions")[0]["created_by"] == "token:bulk"
+    assert r.status_code == 401
+    assert m.post("/api/deposit-slips", headers=h,
+                  json={"branch_id": 4, "sale_day": "2026-06-10", "amount": 100}).status_code == 401
+    assert m.post("/api/manual", headers=h, json={}).status_code == 401
+    assert not _q("SELECT * FROM recon_sessions")
     up = m.post("/api/uploads/bank/confirm", headers=h,
                 files={"file": ("x.csv", b"not,a,statement\n", "text/csv")},
                 data={"branch_id": "4", "period_month": PM, "provider": "kbank"})
@@ -422,8 +435,10 @@ def test_write_token_still_works_for_machine_writes(on, monkeypatch):
     assert m.post("/api/uploads/bank/confirm", headers={"X-Upload-Token": "wrong"},
                   files={"file": ("x.csv", b"a\n", "text/csv")},
                   data={"branch_id": "4", "period_month": PM}).status_code == 401
-    sid = r.json()["session_id"]
+    _x("INSERT INTO recon_sessions(branch_id, period_month, status) VALUES (4, ?, 'draft')", PM)
+    sid = _q("SELECT session_id FROM recon_sessions")[0]["session_id"]
     assert m.patch(f"/api/sessions/{sid}/status", data={"status": "approved"}, headers=h).status_code == 401
+    assert m.delete("/api/uploads/1", headers=h).status_code == 401    # upload POSTs only
     assert m.get("/api/branches", headers=h).status_code == 401        # the token is for writes only
     assert m.get("/api/users", headers=h).status_code == 401
     # a logged-in accountant needs no token even though one is configured

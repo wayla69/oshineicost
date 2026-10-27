@@ -471,6 +471,16 @@ def publish_staging(stage) -> bool:
     return False
 
 
+def bkk_today():
+    """Today in Bangkok (UTC+7), whatever the host's clock. The sync runs on Fly since 2026-10-25
+    (cloud_sync), where date.today() is the UTC date: the 06:00 Bangkok run of the 1st is still
+    the last day of the previous month in UTC, so the new month got no window, the incremental
+    cut-off and the full-rebuild clock were a day behind (2026-10-26). Same clock as the app's
+    rules.TH_TODAY_SQL = date('now','+7 hours')."""
+    import datetime
+    return (datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=7)).date()
+
+
 def _month_windows(since, today=None):
     """Calendar-month [lo, hi) windows from `since` up to and including the current
     month. The first window honours the exact `since` day; the rest start on the
@@ -480,7 +490,7 @@ def _month_windows(since, today=None):
     import datetime
     parts = since[:10].split("-")
     start = datetime.date(int(parts[0]), int(parts[1]), 1)
-    today = today or datetime.date.today()
+    today = today or bkk_today()
     last = datetime.date(today.year, today.month, 1)
     wins, cur = [], start
     while cur <= last:
@@ -577,7 +587,7 @@ def _sync_cutoff(*, args):
     import datetime as _dtm          # NOT `dt`: that name is a per-row datetime later in main()
     incr_from = None
     if args.window_days and args.window_days > 0:
-        _c = _dtm.date.today() - _dtm.timedelta(days=args.window_days)
+        _c = bkk_today() - _dtm.timedelta(days=args.window_days)
         incr_from = _c.replace(day=1).isoformat()
         if incr_from <= args.since[:10]:
             incr_from = None          # window reaches back past --since: just do it all
@@ -590,7 +600,7 @@ def _sync_cutoff(*, args):
             row = sq0.execute("SELECT v FROM sync_state WHERE k='last_full_sync'").fetchone()
             sq0.close()
             last_full = row[0] if row else None
-            if not last_full or (_dtm.date.today() - _dtm.date.fromisoformat(last_full[:10])).days >= args.full_every_days:
+            if not last_full or (bkk_today() - _dtm.date.fromisoformat(last_full[:10])).days >= args.full_every_days:
                 print(f"      [incremental] last full rebuild {last_full or 'never'} — forcing a FULL run")
                 incr_from = None
         except Exception as e:
@@ -991,7 +1001,7 @@ def _sync_publish(*, _dtm, args, incr_from, staging):
             sq2 = sqlite3.connect(str(staging))
             sq2.execute("CREATE TABLE IF NOT EXISTS sync_state(k TEXT PRIMARY KEY, v TEXT)")
             sq2.execute("INSERT OR REPLACE INTO sync_state(k, v) VALUES('last_full_sync', ?)",
-                        (_dtm.date.today().isoformat(),))
+                        (bkk_today().isoformat(),))
             sq2.commit(); sq2.close()
         except Exception as e:
             print(f"      [incremental] could not record last_full_sync: {e}")
@@ -1341,21 +1351,25 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
     _bc_dated.pull_from_live(sq)
     dated_costs = _bc_dated.month_map(sq)
     dated_by_month = {}                      # month -> {sku_id: cost}, resolved once per month
+    # Keyed on (branch_id, receipt_no): receipt_no is a per-branch sequence and repeats across
+    # branches (24 pairs in the 31 days to 2026-10-22). Keyed on receipt_no alone, the two bills'
+    # lines were summed into one row under the first branch (2026-10-26).
     sq.executescript("DROP TABLE IF EXISTS sale_bill_cogs; CREATE TABLE sale_bill_cogs("
-                     "receipt_no TEXT PRIMARY KEY, branch_id INT, day TEXT, cogs_bom REAL);")
+                     "receipt_no TEXT NOT NULL, branch_id INT NOT NULL, day TEXT, cogs_bom REAL, "
+                     "PRIMARY KEY (branch_id, receipt_no));")
 
     # The loss-bill scope compares each bill's COGS with its revenue. Only the bills of the
     # rolling window are ever looked up, so read just those receipts (until 2026-10 this was a
     # dict of EVERY receipt in the history - ~800 k entries held for ~50 k lookups).
-    revmap = {row["receipt_no"]: (row["t"] or 0) / 1.07 for row in
-              sq.execute("SELECT receipt_no, total_inc_vat t FROM sales_transaction "
+    revmap = {(row["branch_id"], row["receipt_no"]): (row["t"] or 0) / 1.07 for row in
+              sq.execute("SELECT branch_id, receipt_no, total_inc_vat t FROM sales_transaction "
                          "WHERE total_inc_vat>0 AND substr(receipt_no,1,10) >= ?", (bill_since,))}
 
     # The 31-day pull, a month at a time: the raw per-line rows of a month are folded into the
     # per-bill totals and dropped. `bills` (one small list per receipt, ~50 k) and `lines` (the
     # per-menu-line detail the loss-bill drill keeps) are all that is held across months.
     bills = {}
-    lines = []   # (receipt_no, sku_id, qty, rev, bom_cost) — per-menu-line detail, kept for the loss-bill drill
+    lines = []   # (receipt_no, sku_id, qty, rev, bom_cost, branch_id) — per-menu-line detail, kept for the loss-bill drill
     for _lo, _hi, bill_rows in _chunk_iter(mc, f"""
         SELECT s.SaleId sid, s.BranchId bid, s.SaleNum num, CONVERT(char(10),s.SaleDate,126) d,
                si.ItemId iid, SUM({QTY_SANE}) qty,
@@ -1377,21 +1391,21 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
                 c = mc_.get(sid_local, c)
             qty = r["qty"] or 0
             rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
-            b = bills.get(rcpt)
+            b = bills.get((bid, rcpt))
             if b is None:
-                bills[rcpt] = [bid, r["d"], qty * c]
+                bills[(bid, rcpt)] = [bid, r["d"], qty * c]
             else:
                 b[2] += qty * c
             if sid_local is not None:
-                lines.append((rcpt, sid_local, round(qty, 2), round(r["rev"] or 0, 2), round(qty * c, 4)))
+                lines.append((rcpt, sid_local, round(qty, 2), round(r["rev"] or 0, 2), round(qty * c, 4), bid))
     sq.executemany("INSERT OR REPLACE INTO sale_bill_cogs VALUES(?,?,?,?)",
-        [(rc, v[0], v[1], round(v[2], 2)) for rc, v in bills.items()])
+        [(k[1], v[0], v[1], round(v[2], 2)) for k, v in bills.items()])
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbc ON sale_bill_cogs(branch_id, day)")
     print(f"        sale_bill_cogs: {len(bills)} bills (since {bill_since})")
     loss_set = {rc for rc, v in bills.items() if v[2] > revmap.get(rc, float("inf"))}
     # de-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount
     # would otherwise emit the same line twice → double-count in the P&L SUM.
-    loss_lines = {(ln[0], ln[1]): ln for ln in lines if ln[0] in loss_set}     # loss bills only
+    loss_lines = {(ln[5], ln[0], ln[1]): ln for ln in lines if (ln[5], ln[0]) in loss_set}     # loss bills only
     del bills, lines
 
     # ── sale_bill_item: per-receipt MENU LINES for LOSS bills (31d) + DISCOUNT bills ──
@@ -1404,13 +1418,19 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
     #    Discount bills are ~7–8% of bills; this keeps the table bounded (NOT every bill).
     #    rev = SUM(ExtendedPrice) treated ex-VAT (consistent with sales_sku_daily);
     #    bom_cost = qty × per-SKU BoM unit cost (BUFFET tier = 0; IRON RULE: BoM only).
+    # branch_id (2026-10-26): receipt_no repeats across branches. An older staged table gains
+    # the column in place (its lines keep NULL = matched on receipt_no alone, see
+    # rules.bill_item_branch_sql) so an incremental run keeps the full discount-bill history.
+    _sbi_cols = [r[1] for r in sq.execute("PRAGMA table_info(sale_bill_item)").fetchall()]
+    if _sbi_cols == ["receipt_no", "sku_id", "qty", "rev", "bom_cost"]:
+        sq.execute("ALTER TABLE sale_bill_item ADD COLUMN branch_id INT")
     _reset_table(sq, "sale_bill_item", incr_from, "substr(receipt_no,1,10)",
-                 "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL")
+                 "receipt_no TEXT, sku_id INT, qty REAL, rev REAL, bom_cost REAL, branch_id INT")
     if incr_from is not None:
         # the loss-bill lines reach back 31 days from the last sale — earlier than
         # the window can be — so replace those receipts too, never duplicate them
-        sq.executemany("DELETE FROM sale_bill_item WHERE receipt_no=?",
-                       [(rc,) for rc in {k[0] for k in loss_lines}])
+        sq.executemany("DELETE FROM sale_bill_item WHERE receipt_no=? AND (branch_id IS NULL OR branch_id=?)",
+                       [(rc, bid) for bid, rc in {(k[0], k[1]) for k in loss_lines}])
     # full-history per-line pull for discount bills (same shape/grouping as bill_rows), a month at
     # a time: ~1.8 M lines as Python dicts were the largest single allocation of the whole sync.
     # De-dup on (receipt_no, sku_id) — a 31-day bill that is BOTH loss and discount would otherwise
@@ -1428,7 +1448,8 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
     """, windows):
         month_items = {}
         for r in disc_line_rows:
-            if bid_map.get(r["bid"]) is None:
+            bid = bid_map.get(r["bid"])
+            if bid is None:
                 continue
             sid_local = item_map.get(r["iid"])
             if sid_local is None:
@@ -1438,17 +1459,17 @@ def _stage_bill_cogs(*, F, _dt, bid_map, dly_since, incr_from, item_map, mc, mx,
             qty = r["qty"] or 0
             c = costmap.get(sid_local, 0.0)
             rcpt = f"{r['d']}-{r['num']}-{r['sid']}"
-            disc_bill_set.add(rcpt)
-            month_items[(rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
-                                              round(r["rev"] or 0, 2), round(qty * c, 4))
+            disc_bill_set.add((bid, rcpt))
+            month_items[(bid, rcpt, sid_local)] = (rcpt, sid_local, round(qty, 2),
+                                                   round(r["rev"] or 0, 2), round(qty * c, 4), bid)
         for key, ln in loss_lines.items():
-            if key not in placed and lo <= key[0][:10] < hi:
+            if key not in placed and lo <= key[1][:10] < hi:
                 placed.add(key)
                 month_items.setdefault(key, ln)
-        sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", list(month_items.values()))
+        sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?,?)", list(month_items.values()))
         n_lines += len(month_items)
     rest = [ln for key, ln in loss_lines.items() if key not in placed]     # outside every month window
-    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?)", rest)
+    sq.executemany("INSERT INTO sale_bill_item VALUES(?,?,?,?,?,?)", rest)
     n_lines += len(rest)
     sq.execute("CREATE INDEX IF NOT EXISTS ix_sbi ON sale_bill_item(receipt_no)")
     print(f"        sale_bill_item: {n_lines} lines across "

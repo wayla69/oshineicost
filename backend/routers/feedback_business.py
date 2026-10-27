@@ -24,6 +24,7 @@ from fastapi import APIRouter, Query, Request
 
 from feedback_host import branch_rows, get_db, sales_available, scope_branch
 from feedback_nlp import clean_menu_name
+from rules import bill_item_branch_sql
 from routers.feedback import _ROW_COLS, _ensure, _thai_today
 
 router = APIRouter()
@@ -103,7 +104,7 @@ def _sales_by_dish(con, d_from: str, d_to: str, bids=None) -> dict:
         w.append(f"t.branch_id IN ({','.join('?' * len(bids))})"); p.extend(bids)
     out = {}
     for r in con.execute(f"SELECT s.description AS d, SUM(i.qty) AS qty, COALESCE(SUM(i.rev),0) AS rev, COALESCE(SUM(i.bom_cost),0) AS cost "
-                         f"FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no = i.receipt_no "
+                         f"FROM sale_bill_item i JOIN sales_transaction t ON t.receipt_no = i.receipt_no{bill_item_branch_sql(con)} "
                          f"JOIN skus s ON s.sku_id = i.sku_id WHERE {' AND '.join(w)} GROUP BY s.description", p):
         name = clean_menu_name(r["d"] or "")
         if not name:

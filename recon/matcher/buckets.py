@@ -181,6 +181,34 @@ def channel_move_deltas(conn, branch_id, period_month):
     return out
 
 
+def channel_move_day_deltas(conn, branch_id, period_month):
+    """{(day | None, category, bank): signed_amount} — channel_move_deltas split by
+    the move's sale day. day=None = a legacy move saved before the day column (the
+    daily board lands it on the lane's last POS day, as before). Same monthly sum."""
+    out: dict = {}
+    try:
+        rows = conn.execute(
+            "SELECT from_category, from_bank, to_category, to_bank, amount, day "
+            "FROM recon_channel_move WHERE branch_id=? AND period_month=?",
+            (branch_id, period_month)).fetchall()
+    except sqlite3.OperationalError:
+        try:                                    # DB not migrated yet: no day column
+            return {(None, c, b): d for (c, b), d in
+                    channel_move_deltas(conn, branch_id, period_month).items()}
+        except sqlite3.OperationalError:
+            return {}
+    for r in rows:
+        amt = float(r["amount"] or 0)
+        if amt == 0:
+            continue
+        day = r["day"] if (r["day"] or "")[:7] == period_month else None
+        fk = (day, r["from_category"], r["from_bank"] or "NONE")
+        tk = (day, r["to_category"],   r["to_bank"]   or "NONE")
+        out[fk] = out.get(fk, 0.0) - amt
+        out[tk] = out.get(tk, 0.0) + amt
+    return out
+
+
 def _external_buckets_daily(conn, branch_id, period_month, include_cash=True, exclude_ids=None):
     """{(day, category, bank): {amount, net}} from external lines, keyed by line date.
     Manually-matched lines (match_status='manual') are excluded — they're accounted

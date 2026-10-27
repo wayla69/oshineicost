@@ -702,6 +702,7 @@ function channelMovePanel(bid,closed){
   if(moves.length) body=`<table class="mv-tbl"><tbody>`+moves.map(m=>`<tr>
       <td>${esc(chLaneLabel(m.from_category,m.from_bank))} <span class="lbl">→</span> ${esc(chLaneLabel(m.to_category,m.to_bank))}</td>
       <td class="mono">฿${fmt2(m.amount)}</td>
+      <td class="lbl nowrap">${m.day?'วันที่ '+(+String(m.day).slice(8)):'ทั้งเดือน'}</td>
       <td class="lbl">${esc(m.note||'')}</td>
       <td class="tr">${closed?'':`<button class="btn btn-sm" onclick="undoMove(${m.id})">↩ ยกเลิก</button>`}</td>
     </tr>`).join('')+`</tbody></table>`;
@@ -718,6 +719,9 @@ function showChannelMove(bid,presetFrom,presetTo){
   const pf=presetFrom?opts.findIndex(o=>o.cat===presetFrom):-1;
   const pt=presetTo?opts.findIndex(o=>o.cat===presetTo):-1;
   const optHtml=sel=>opts.map((o,i)=>`<option value="${i}" ${i===sel?'selected':''}>${esc(o.label)}</option>`).join('');
+  // วันที่ของยอดที่ย้าย: ค่าเริ่มต้น = วันที่กำลังเปิดดูอยู่ (ถ้าอยู่ในเดือนนี้)
+  const od=WS.openDay&&String(WS.openDay.day||'').startsWith(MONTH)?WS.openDay.day:'';
+  const [yy,mm]=MONTH.split('-').map(Number), last=new Date(yy,mm,0).getDate();
   showSheet(`<div class="sheet-h">⇄ บันทึกผิดช่อง — ย้ายยอดไปช่องที่ถูก</div>
     <div class="lbl mb-8">โปรแกรมจะกระทบทั้งสองช่องพร้อมกัน (ลดช่องผิด เพิ่มช่องถูก) · ย้อนกลับได้</div>
     <div class="row gap-10 ai-end fx-wrap">
@@ -725,6 +729,7 @@ function showChannelMove(bid,presetFrom,presetTo){
       <div class="as-end fs-20 pb-4">→</div>
       <div><div class="lbl">ไปช่อง (ที่ถูก)</div><select id="mv-to" class="mv-sel">${optHtml(pt)}</select></div>
       <div><div class="lbl">จำนวนเงิน (฿)</div><input id="mv-amt" type="number" min="0" step="0.01" class="mv-sel" placeholder="0.00"></div>
+      <div><label class="lbl" for="mv-day">วันที่ขาย</label><input id="mv-day" type="date" class="mv-sel" value="${esc(od)}" min="${MONTH}-01" max="${MONTH}-${String(last).padStart(2,'0')}"></div>
     </div>
     <textarea id="mv-note" class="sheet-ta" placeholder="เหตุผล/หมายเหตุ (เช่น ลูกค้าสแกน QR แต่พนักงานกดเป็นเงินสด)"></textarea>
     <div class="row mt-10 gap-8">
@@ -737,13 +742,15 @@ async function submitMove(btn){
   const f=opts[+(($('mv-from')||{}).value)], t=opts[+(($('mv-to')||{}).value)];
   const amt=parseFloat((($('mv-amt')||{}).value)||'0');
   const note=(($('mv-note')||{}).value||'').trim();
+  const day=(($('mv-day')||{}).value||'').trim();
   if(!f||!t){toast('เลือกช่องไม่ถูกต้อง');return;}
+  if(day&&!day.startsWith(MONTH)){toast('วันที่ต้องอยู่ในเดือนนี้');return;}
   if(f.cat===t.cat&&f.bank===t.bank){toast('ช่องต้นทางและปลายทางต้องไม่ใช่ช่องเดียวกัน');return;}
   if(!(amt>0)){toast('ใส่จำนวนเงินมากกว่า 0');return;}
   if(note.length<10){toast('กรุณาระบุเหตุผลการย้ายช่อง (อย่างน้อย 10 ตัวอักษร)');const ta=$('mv-note');if(ta)ta.focus();return;}
   await busy('move',btn,async()=>{
     try{await api('/api/channel-move',{method:'POST',body:{branch_id:bid,period_month:MONTH,
-        from_category:f.cat,from_bank:f.bank,to_category:t.cat,to_bank:t.bank,amount:amt,note:note}});
+        from_category:f.cat,from_bank:f.bank,to_category:t.cat,to_bank:t.bank,amount:amt,note:note,day:day||null}});
       closeSheet();toast('ย้ายช่องแล้ว — กระทบสองยอดเรียบร้อย');route();}
     catch(e){toast('ไม่สำเร็จ: '+e.message);hint403(e);}
   });

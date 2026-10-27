@@ -373,9 +373,10 @@
    "sku_id",
    "qty",
    "rev",
-   "bom_cost"
+   "bom_cost",
+   "branch_id"
   ],
-  "sha1": "f61736fbbfb6"
+  "sha1": "ff2a6c6d4876"
  },
  "sale_payment": {
   "rows": 2,
