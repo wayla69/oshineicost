@@ -223,7 +223,7 @@ def run(api, rows: list, apply: bool, replace_pilot: bool = False, role: str = "
                     done.append(f"ปิดบัญชี {old} แล้ว" if st == 200 else f"ปิดบัญชี {old} ไม่สำเร็จ ({_detail(st, js, text)})")
                 p["note"] = "; ".join(done)
             elif not apply:
-                p["note"] = ("จะปิดบัญชีเดิม " if p["action"] == "exists" else "จะปิดบัญชีเดิม (ในการรันครั้งถัดไป) ") + ", ".join(p["retire"])
+                p["note"] = ""                            # the plan column (plan_word) already names the old logins
             elif p["action"] == "create" and p["result"] == BL.R_CREATED:
                 p["note"] = "บัญชีเดิม " + ", ".join(p["retire"]) + " ยังใช้งานได้ รันคำสั่งเดิมซ้ำหลังส่งข้อความแจกสาขาเพื่อปิดบัญชีเดิม"
     return plan

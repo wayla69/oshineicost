@@ -347,7 +347,7 @@ def test_replace_logins_creates_first_and_retires_on_the_second_run():
     api = ShortApi(SHORT_USERS)
     plan = AC.run(api, SHORT_ROWS, apply=False, replace_logins=True)                       # the plan changes nothing
     assert [p["result"] for p in plan] == [BL.R_PLAN] * 4 + [BL.R_EXISTS, BL.R_PLAN]
-    assert "จะปิดบัญชีเดิม" in plan[0]["note"] and "wh_chiangmai" in plan[0]["note"]
+    assert AC.plan_word(plan[0]) == "สร้าง · ปิด wh_chiangmai (รอบถัดไป)"
     assert not [c for c in api.calls if c[0] in ("POST", "PUT")]
     plan = AC.run(api, SHORT_ROWS, apply=True, replace_logins=True)                        # run 1: create only
     posts = [c[2] for c in api.calls if c[0] == "POST"]
