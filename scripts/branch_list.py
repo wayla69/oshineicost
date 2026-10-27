@@ -4,7 +4,7 @@
 One row per branch, in an Excel or CSV file:
 
     สาขา        the branch name exactly as the system shows it (required)
-    ตัวย่อ       the branch abbreviation, a-z 0-9 only (ubon, udon ...); the login becomes wh_<abbreviation>
+    ตัวย่อ       the branch abbreviation, a-z 0-9 only: the company's 3-letter code (cnx, ubn, kr1 ...); the login becomes wh_<abbreviation>
     ชื่อผู้ใช้     the login name; blank = wh_<ตัวย่อ> (owner 2026-10-10); only for an exception
     LINE/ผู้รับ   who receives the handout (a LINE group, a person) - optional
 
@@ -28,17 +28,19 @@ PREFIX = "wh_"                                   # every branch login is wh_<ต
 OWNER_PREFIX = "own_"                            # the franchise owner's login is own_<ตัวย่อ> (PR-L, owner 2026-10-10)
 ROLE_PREFIX = {"branch": PREFIX, "franchise": OWNER_PREFIX}
 
-# the five pilot branches (owner 2026-10-22, opening count 1 Nov 2026) and their abbreviations
+# the five pilot branches (owner 2026-10-22, opening count 1 Nov 2026) and their abbreviations: the company's 3-letter
+# branch codes (owner 2026-10-27; the same codes as SHEET2BR in backend/routers/requisition.py and bulk_recon_upload.py)
 PILOT_ABBRS = {
-    "เชียงใหม่": "chiangmai",
-    "อุบลราชธานี": "ubon",
-    "อุดรธานี": "udon",
-    "โคราช1": "korat",
-    "สุรินทร์": "surin",
+    "เชียงใหม่": "cnx",
+    "อุบลราชธานี": "ubn",
+    "อุดรธานี": "udn",
+    "โคราช1": "kr1",
+    "สุรินทร์": "srn",
 }
 PILOT_USERNAMES = {name: PREFIX + abbr for name, abbr in PILOT_ABBRS.items()}
 # the four logins created on 2026-10-07 under the old naming (the old pilot: ubon udon khonkaen rayong);
-# branch_accounts.py --replace-pilot retires exactly these. ขอนแก่น and ระยอง are no longer pilot branches.
+# branch_accounts.py --replace-pilot retires exactly these (--replace-logins retires every branch login that is not the
+# wanted wh_<ตัวย่อ>: these four and the long wh_* names of 2026-10-22 alike). ขอนแก่น and ระยอง are no longer pilot branches.
 LEGACY_PILOT_USERNAMES = {"อุบลราชธานี": "branch_ubon", "อุดรธานี": "branch_udon",
                           "ขอนแก่น": "branch_khonkaen", "ระยอง": "branch_rayong"}
 
@@ -97,8 +99,8 @@ def read_list(path) -> list:
             head_at, cols = i, m
             break
     if head_at < 0:
-        raise SystemExit(f"ไม่พบหัวตารางในไฟล์ (ต้องมีคอลัมน์ “{H_BRANCH}”) กรุณาใช้แม่แบบจาก branch_handout.py --template")
-    out, seen, problems = [], {}, []
+        raise SystemExit(f"ไม่พบหัวตารางในไฟล์ (ต้องมีคอลัมน์ “{H_BRANCH}”) ใช้แม่แบบจาก branch_handout.py --template")
+    out, seen, abbr_at, problems = [], {}, {}, []
     for i, row in enumerate(grid[head_at + 1:], start=head_at + 2):
         def cell(k):
             j = cols.get(k)
@@ -115,6 +117,9 @@ def read_list(path) -> list:
         if branch in seen:
             problems.append(f"แถวที่ {i}: สาขา “{branch}” ซ้ำกับแถวที่ {seen[branch]}")
         seen[branch] = i
+        if abbr and abbr in abbr_at:
+            problems.append(f"แถวที่ {i}: ตัวย่อ “{abbr}” ซ้ำกับแถวที่ {abbr_at[abbr]} (หนึ่งตัวย่อต่อหนึ่งสาขา)")
+        abbr_at.setdefault(abbr, i)
         out.append({"branch": branch, "abbr": abbr, "username": user, "recipient": cell("recip"),
                     "result": cell("result"), "line": i})
     names = [login_of(r) for r in out if login_of(r)]

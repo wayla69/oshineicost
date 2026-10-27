@@ -18,7 +18,7 @@ Which branches (the list is the same file branch_accounts.py reads):
     py -3.12 scripts/branch_handout.py --list D:/onboarding/accounts_result.csv  # the result of branch_accounts.py --yes
     py -3.12 scripts/branch_handout.py --all --db D:/copy/oshinei.db             # every active branch of a DB copy
     py -3.12 scripts/branch_handout.py                       # no option: the five pilot branches
-    py -3.12 scripts/branch_handout.py --list ... --only udon                    # a single branch
+    py -3.12 scripts/branch_handout.py --list ... --only udn                     # a single branch
     py -3.12 scripts/branch_handout.py --role franchise --list D:/onboarding/owner_accounts_result.csv
                                                                                  # the franchise owners' messages and cards (own_<ตัวย่อ>, page ร้านของฉัน)
 
@@ -250,7 +250,7 @@ def main(argv=None) -> None:
     ap.add_argument("--list", help="รายชื่อสาขา (.xlsx หรือ .csv) คอลัมน์ สาขา · ตัวย่อ · ชื่อผู้ใช้ · LINE/ผู้รับ")
     ap.add_argument("--all", action="store_true", help="ทุกสาขาที่เปิดใช้งานในฐานข้อมูลสำเนาที่ระบุด้วย --db")
     ap.add_argument("--db", help="ไฟล์ฐานข้อมูลสำเนา (อ่านอย่างเดียว) ใช้หา wh_<รหัสสาขา> เมื่อไม่มีตัวย่อ")
-    ap.add_argument("--only", help="เฉพาะสาขาเดียว (ชื่อผู้ใช้ ชื่อสาขา หรือชื่อย่อ เช่น udon)")
+    ap.add_argument("--only", help="เฉพาะสาขาเดียว (ชื่อผู้ใช้ ชื่อสาขา หรือตัวย่อ เช่น udn)")
     ap.add_argument("--include-existing", action="store_true", help="สร้างข้อความให้บัญชีที่มีอยู่แล้วด้วย")
     ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
                     help="branch = ข้อความและบัตรของทีมสาขา (ค่าเริ่มต้น) · franchise = ข้อความและบัตรของเจ้าของสาขา (own_<ตัวย่อ>, หน้า ร้านของฉัน)")

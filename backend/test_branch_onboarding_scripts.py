@@ -41,7 +41,7 @@ def test_the_template_round_trips_with_the_five_pilot_rows(tmp_path):
     p = BL.write_template(tmp_path / "branch_list_template.xlsx")
     rows = BL.read_list(p)
     assert [(r["branch"], r["abbr"]) for r in rows] == list(BL.PILOT_ABBRS.items())
-    assert [BL.login_of(r) for r in rows] == list(BL.PILOT_USERNAMES.values()) == ["wh_chiangmai", "wh_ubon", "wh_udon", "wh_korat", "wh_surin"]
+    assert [BL.login_of(r) for r in rows] == list(BL.PILOT_USERNAMES.values()) == ["wh_cnx", "wh_ubn", "wh_udn", "wh_kr1", "wh_srn"]
     assert all(r["recipient"] == "" and r["username"] == "" for r in rows)
     assert list(BL.LEGACY_PILOT_USERNAMES.values()) == ["branch_ubon", "branch_udon", "branch_khonkaen", "branch_rayong"]
     assert "ขอนแก่น" not in BL.PILOT_ABBRS and "ระยอง" not in BL.PILOT_ABBRS      # P5: only the retired logins remember them
@@ -76,7 +76,7 @@ def test_a_file_without_the_branch_column_is_refused(tmp_path):
 
 
 def test_username_for():
-    assert BL.username_for("อุดรธานี", 25) == "wh_udon"               # the pilot abbreviation is built in
+    assert BL.username_for("อุดรธานี", 25) == "wh_udn"                # the pilot abbreviation is built in
     assert BL.username_for("ชลบุรี", 1, "CBI") == "wh_cbi"            # wh_<ตัวย่อ>
     assert BL.username_for("ชลบุรี", 1) == "wh_1"                      # no abbreviation: the branch id
     assert BL.username_for("ชลบุรี") is None                          # no id, no guess
@@ -103,8 +103,8 @@ def test_handout_from_a_list_writes_messages_and_four_cards_a_page(tmp_path, cap
 def test_handout_without_options_keeps_the_four_pilot_branches(tmp_path):
     HO.main(["--out", str(tmp_path)])
     assert {f.name for f in tmp_path.glob("*.txt") if f.name != "README.txt"} == {f"{u}.txt" for u in BL.PILOT_USERNAMES.values()}
-    HO.main(["--out", str(tmp_path / "one"), "--only", "udon"])
-    assert [f.name for f in (tmp_path / "one").glob("wh_*.txt")] == ["wh_udon.txt"]
+    HO.main(["--out", str(tmp_path / "one"), "--only", "udn"])
+    assert [f.name for f in (tmp_path / "one").glob("wh_*.txt")] == ["wh_udn.txt"]
 
 
 def test_handout_template_option(tmp_path):
@@ -125,7 +125,7 @@ def _db(tmp_path, rows):
 def test_handout_all_uses_the_database_copy_and_branch_ids(tmp_path):
     db = _db(tmp_path, [(1, "ชลบุรี", 1), (2, "สุรินทร์", 1), (3, "ปิดแล้ว", 0), (4, "ALL", 1)])
     HO.main(["--all", "--db", str(db), "--out", str(tmp_path / "o")])
-    assert sorted(f.name for f in (tmp_path / "o").glob("wh_*.txt")) == ["wh_1.txt", "wh_surin.txt"]
+    assert sorted(f.name for f in (tmp_path / "o").glob("wh_*.txt")) == ["wh_1.txt", "wh_srn.txt"]
     with pytest.raises(SystemExit):
         HO.main(["--all", "--out", str(tmp_path / "o2")])             # --all needs the copy
 
@@ -288,6 +288,101 @@ def test_without_replace_pilot_the_old_logins_are_left_alone():
     assert not [c for c in api.calls if c[0] in ("POST", "PUT")]
 
 
+# ── short logins (owner 2026-10-27): wh_<long name> and branch_* become wh_<3-letter code> ───────────
+SHORT_BRANCHES = {"เชียงใหม่": 7, "โคราช1": 4, "อุดรธานี": 25, "ขอนแก่น": 30, "ชลบุรี": 1, "พัทยา": 12}
+SHORT_USERS = [{"username": "wh_chiangmai", "role": "branch", "active": 1, "branch": "เชียงใหม่"},
+               {"username": "wh_korat", "role": "branch", "active": 1, "branch": "โคราช1"},
+               {"username": "wh_udon", "role": "branch", "active": 1, "branch": "อุดรธานี"},
+               {"username": "branch_udon", "role": "branch", "active": 1, "branch": "อุดรธานี"},
+               {"username": "wh_khonkaen", "role": "branch", "active": 1, "branch": "ขอนแก่น"},
+               {"username": "branch_khonkaen", "role": "branch", "active": 1, "branch": "ขอนแก่น"},
+               {"username": "wh_cbr", "role": "branch", "active": 1, "branch": "ชลบุรี"},           # already the short name
+               {"username": "own_pty", "role": "franchise", "active": 1, "branch": "พัทยา"},       # an owner login is never touched
+               {"username": "wh_pattaya_old", "role": "branch", "active": 0, "branch": "พัทยา"},   # already off: ignored
+               {"username": "management1", "role": "management", "active": 1, "branch": None}]
+SHORT_ROWS = [{"branch": b, "abbr": a, "username": "", "recipient": ""} for b, a in
+              (("เชียงใหม่", "cnx"), ("โคราช1", "kr1"), ("อุดรธานี", "udn"), ("ขอนแก่น", "kkn"), ("ชลบุรี", "cbr"), ("พัทยา", "pty"))]
+
+
+class ShortApi(RecordingApi):
+    def request(self, method, path, body=None):
+        if path == "/api/branches":
+            self.calls.append((method, path, body))
+            return 200, [{"id": i, "name": n, "active": True} for n, i in SHORT_BRANCHES.items()], ""
+        return super().request(method, path, body)
+
+
+def test_kr1_and_three_letter_codes_are_accepted(tmp_path):
+    rows = BL.read_list(_csv(tmp_path, "สาขา,ตัวย่อ\nโคราช1,KR1\nเชียงใหม่,cnx\nนครพนม,npm\n"))
+    assert [BL.login_of(r) for r in rows] == ["wh_kr1", "wh_cnx", "wh_npm"]
+    assert BL.PILOT_ABBRS == {"เชียงใหม่": "cnx", "อุบลราชธานี": "ubn", "อุดรธานี": "udn", "โคราช1": "kr1", "สุรินทร์": "srn"}
+
+
+def test_the_same_code_for_two_branches_is_refused(tmp_path):
+    with pytest.raises(SystemExit) as e:
+        BL.read_list(_csv(tmp_path, "สาขา,ตัวย่อ\nนครปฐม,npt\nนครพนม,NPT\n"))
+    assert "npt" in str(e.value) and "ซ้ำ" in str(e.value)
+    with pytest.raises(SystemExit):                                   # the same code through an explicit username
+        BL.read_list(_csv(tmp_path, "สาขา,ตัวย่อ,ชื่อผู้ใช้\nนครปฐม,npt,\nนครพนม,,wh_npt\n"))
+
+
+def test_replace_logins_plan_create_retire_keep():
+    plan = {p["branch"]: p for p in AC.plan_rows(SHORT_ROWS, SHORT_BRANCHES, SHORT_USERS, replace_logins=True)}
+    assert plan["เชียงใหม่"]["action"] == "create" and plan["เชียงใหม่"]["username"] == "wh_cnx"
+    assert plan["เชียงใหม่"]["retire"] == ["wh_chiangmai"]
+    assert plan["โคราช1"]["username"] == "wh_kr1" and plan["โคราช1"]["retire"] == ["wh_korat"]
+    assert plan["อุดรธานี"]["retire"] == ["wh_udon", "branch_udon"]            # the long wh_* and the old pilot login
+    assert plan["ขอนแก่น"]["retire"] == ["wh_khonkaen", "branch_khonkaen"]
+    assert plan["ชลบุรี"]["action"] == "exists" and plan["ชลบุรี"]["retire"] == []   # already right: kept as it is
+    assert plan["พัทยา"]["action"] == "create" and plan["พัทยา"]["retire"] == []      # the owner and a switched-off login are not branch logins to retire
+    assert AC.plan_word(plan["เชียงใหม่"]) == "สร้าง · ปิด wh_chiangmai (รอบถัดไป)" and AC.plan_word(plan["ชลบุรี"]) == "คงไว้"
+    plain = {p["branch"]: p for p in AC.plan_rows(SHORT_ROWS, SHORT_BRANCHES, SHORT_USERS)}  # without the flag: as before
+    assert plain["เชียงใหม่"]["action"] == "exists" and plain["เชียงใหม่"]["username"] == "wh_chiangmai" and not plain["เชียงใหม่"]["retire"]
+    pilot = {p["branch"]: p for p in AC.plan_rows(SHORT_ROWS, SHORT_BRANCHES, SHORT_USERS, replace_pilot=True)}
+    assert pilot["อุดรธานี"]["action"] == "exists" and pilot["อุดรธานี"]["username"] == "wh_udon"   # --replace-pilot: only branch_*
+    assert pilot["อุดรธานี"]["retire"] == ["branch_udon"]
+
+
+def test_replace_logins_creates_first_and_retires_on_the_second_run():
+    api = ShortApi(SHORT_USERS)
+    plan = AC.run(api, SHORT_ROWS, apply=False, replace_logins=True)                       # the plan changes nothing
+    assert [p["result"] for p in plan] == [BL.R_PLAN] * 4 + [BL.R_EXISTS, BL.R_PLAN]
+    assert "จะปิดบัญชีเดิม" in plan[0]["note"] and "wh_chiangmai" in plan[0]["note"]
+    assert not [c for c in api.calls if c[0] in ("POST", "PUT")]
+    plan = AC.run(api, SHORT_ROWS, apply=True, replace_logins=True)                        # run 1: create only
+    posts = [c[2] for c in api.calls if c[0] == "POST"]
+    assert posts == [{"username": u, "role": "branch", "branch": b} for b, u in
+                     (("เชียงใหม่", "wh_cnx"), ("โคราช1", "wh_kr1"), ("อุดรธานี", "wh_udn"), ("ขอนแก่น", "wh_kkn"), ("พัทยา", "wh_pty"))]
+    assert all("password" not in p for p in posts)
+    assert not [c for c in api.calls if c[0] == "PUT"]
+    assert {u["username"] for u in api.users if u["active"]} >= {"wh_chiangmai", "branch_udon", "wh_cnx"}
+    plan = AC.run(api, SHORT_ROWS, apply=True, replace_logins=True)                        # run 2: the old ones off
+    puts = sorted(c[1].rsplit("/", 1)[1] for c in api.calls if c[0] == "PUT")
+    assert puts == sorted(["wh_chiangmai", "wh_korat", "wh_udon", "branch_udon", "wh_khonkaen", "branch_khonkaen"])
+    assert all(c[2] == {"active": False} for c in api.calls if c[0] == "PUT")              # switched off, never deleted
+    assert not [c for c in api.calls if c[0] == "DELETE"]
+    on = {u["username"]: u["active"] for u in api.users}
+    assert on["wh_cnx"] == 1 and on["wh_chiangmai"] == 0 and on["wh_cbr"] == 1 and on["own_pty"] == 1
+    assert "ปิดบัญชี wh_chiangmai แล้ว" in plan[0]["note"]
+    n = len([c for c in api.calls if c[0] in ("POST", "PUT")])
+    again = AC.run(api, SHORT_ROWS, apply=True, replace_logins=True)                       # run 3: nothing left to do
+    assert len([c for c in api.calls if c[0] in ("POST", "PUT")]) == n
+    assert all(p["action"] == "exists" and not p["retire"] for p in again)
+
+
+def test_replace_logins_keeps_the_old_login_when_the_new_one_is_switched_off():
+    users = [{"username": "wh_chiangmai", "role": "branch", "active": 1, "branch": "เชียงใหม่"},
+             {"username": "wh_cnx", "role": "branch", "active": 0, "branch": "เชียงใหม่"}]
+    p = AC.plan_rows(SHORT_ROWS[:1], SHORT_BRANCHES, users, replace_logins=True)[0]
+    assert p["action"] == "exists" and p["retire"] == [] and "wh_cnx" in p["note"]
+
+
+def test_replace_logins_flag_rules(tmp_path):
+    p = _csv(tmp_path, "สาขา,ตัวย่อ\nชลบุรี,cbr\n")
+    assert AC.main(["--list", str(p), "--replace-logins", "--replace-pilot", "--yes"]) == 2
+    assert AC.main(["--list", str(p), "--replace-logins", "--role", "franchise"]) == 2
+
+
 # ── against the real app (logins off in the test client, so sign-in is skipped) ────────────────
 class _ClientApi:
     def __init__(self, client):
@@ -324,10 +419,35 @@ def test_creating_logins_against_the_app(client, app_db):
         c.close()
 
 
+def test_replace_logins_against_the_app_allows_a_second_login_then_switches_the_old_one_off(client, app_db):
+    import main
+    name = "ทดสอบสาขาย่อ"
+    c = sqlite3.connect(str(main.DB_PATH))
+    c.execute("INSERT INTO branches(branch_id, name, active) VALUES(9103, ?, 1)", (name,))
+    c.commit()
+    try:
+        api = _ClientApi(client)
+        assert client.post("/api/auth/users", json={"username": "pi_long_name", "role": "branch", "branch": name}).status_code == 200
+        rows = [{"branch": name, "abbr": "pi9", "username": "", "recipient": ""}]
+        first = AC.run(api, rows, apply=True, replace_logins=True)                 # the server takes a 2nd login for the branch
+        assert first[0]["result"] == BL.R_CREATED and first[0]["username"] == "wh_pi9"
+        state = dict(c.execute("SELECT username, active FROM app_user WHERE username IN ('pi_long_name','wh_pi9')").fetchall())
+        assert state == {"pi_long_name": 1, "wh_pi9": 1}
+        assert c.execute("SELECT must_change FROM app_user WHERE username='wh_pi9'").fetchone()[0] == 1
+        AC.run(api, rows, apply=True, replace_logins=True)                         # run 2: the old one off, still there
+        state = dict(c.execute("SELECT username, active FROM app_user WHERE username IN ('pi_long_name','wh_pi9')").fetchall())
+        assert state == {"pi_long_name": 0, "wh_pi9": 1}
+    finally:
+        c.execute("DELETE FROM app_user WHERE username IN ('pi_long_name', 'wh_pi9')")
+        c.execute("DELETE FROM branches WHERE branch_id = 9103")
+        c.commit()
+        c.close()
+
+
 # ── PR-L: the franchise owners (own_<ตัวย่อ>, role franchise) from the same list ───────────────
 def test_owner_logins_are_own_prefix_and_ignore_a_branch_username_exception():
     assert BL.username_for("ชลบุรี", 1, "CBI", "franchise") == "own_cbi" and BL.username_for("ชลบุรี", 1, "", "franchise") == "own_1"
-    assert BL.username_for("อุดรธานี", 25, "", "franchise") == "own_udon"
+    assert BL.username_for("อุดรธานี", 25, "", "franchise") == "own_udn"
     assert BL.username_for("ชลบุรี", 1, "CBI") == "wh_cbi"                                  # the branch default is untouched
     row = {"branch": "พัทยา", "abbr": "pty", "username": "wh_special"}
     assert BL.login_of(row) == "wh_special" and BL.login_of(row, "franchise") == "own_pty"    # the column is the branch exception
