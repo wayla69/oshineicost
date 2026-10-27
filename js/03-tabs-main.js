@@ -342,6 +342,8 @@ async function init() {
   }
   await loadBcMode();             // PR-S1: the system mode, before the launcher, the rail and the pages are drawn
   applyPermissions();
+  // the login page (login.html) reloads into the app after signing in: a temporary password is changed here first
+  if (window.AUTH.enabled && window.AUTH.must_change) { hideLoadingBar(); openPasswordChange(true); return; }
   await startApp();
 }
 

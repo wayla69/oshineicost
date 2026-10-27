@@ -1,4 +1,13 @@
 # Oshinei Dashboard + Reconciliation — FastAPI + SQLite, deployed on Fly.io
+
+# Code guard (2026-10-27): the browser code ships minified, names mangled, comments gone (scripts/minify-js.js)
+FROM node:20-slim AS jsbuild
+WORKDIR /build
+RUN npm install --no-save --no-audit --no-fund terser@5.36.0
+COPY scripts/minify-js.js /build/minify-js.js
+COPY js/ /build/js/
+RUN rm -f /build/js/*.d.ts && node /build/minify-js.js /build/js
+
 FROM python:3.12-slim
 
 # System libs needed by matplotlib/reportlab, plus Tesseract (+ Thai language
@@ -22,7 +31,8 @@ COPY recon/   /app/recon/
 COPY index.html /app/index.html
 # the service worker, served at /sw.js (backend/main.py) — Docker takes no comment on a COPY line
 COPY sw.js      /app/sw.js
-COPY js/        /app/js/
+COPY --from=jsbuild /build/js/ /app/js/
+COPY login.html /app/login.html
 COPY tabs/      /app/tabs/
 COPY vendor/    /app/vendor/
 COPY docs/      /app/docs/

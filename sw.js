@@ -121,7 +121,8 @@ async function pageNetworkFirst(req) {
       const resp = await pageFetchOnce(req);
       // only the app shell itself is stored as '/': any other page a navigation reaches (/docs/…, a report link,
       // /survey/…) would otherwise overwrite the offline shell with itself
-      if (resp && resp.ok && new URL(req.url).pathname === '/') cache.put('/', resp.clone());
+      // …and never the login page the server answers once the session has ended (X-Login-Page)
+      if (resp && resp.ok && new URL(req.url).pathname === '/' && !resp.headers.get('X-Login-Page')) cache.put('/', resp.clone());
       return resp;
     } catch (err) {
       last = err;
