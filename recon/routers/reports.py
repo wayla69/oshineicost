@@ -2147,6 +2147,19 @@ def audit_trail_xlsx(period_month: str, branch_id: int | None = None, limit: int
         f"audit_trail_{period_month}.xlsx")
 
 
+def _working_paper(branch_id: int, pm: str) -> Response:
+    """The branch-month session workbook (routers/sessions._build_export) for the Auditor Pack."""
+    from .sessions import _build_export
+    with get_db() as conn:
+        session = conn.execute(
+            "SELECT s.*, b.name AS branch_name FROM recon_sessions s "
+            "JOIN branches b ON b.branch_id = s.branch_id "
+            "WHERE s.branch_id=? AND s.period_month=?", (branch_id, pm)).fetchone()
+        if not session:
+            raise ValueError("ยังไม่มีงวดกระทบยอดของสาขานี้ในเดือนที่เลือก")
+        return Response(content=_build_export(conn, session))
+
+
 # ── Auditor Pack: one-click ZIP of all control evidence for a period ──────────
 @router.get("/api/reports/auditor-pack.zip")
 def auditor_pack_zip(period_month: str, branch_id: int | None = None):
@@ -2175,6 +2188,8 @@ def auditor_pack_zip(period_month: str, branch_id: int | None = None):
         (f"05_สรุปผลต่างที่รับทราบ_{pm}.xlsx", lambda: accepted_variance_xlsx(pm, branch_id, 1000.0)),
         (f"06_ประวัติการแก้ไข_{pm}.xlsx", lambda: audit_trail_xlsx(pm, branch_id, 5000)),
     ]
+    if branch_id:                       # one branch: its working paper (tie-out & sign-off + line detail)
+        parts.append((f"07_กระดาษทำการ_{pm}.xlsx", lambda: _working_paper(branch_id, pm)))
     readme = (
         "ชุดเอกสารผู้สอบบัญชี (Auditor Pack)\n"
         f"งวด: {pm}{(' · สาขา ' + str(branch_id)) if branch_id else ' · ทุกสาขาหลัก'}\n"
@@ -2185,7 +2200,9 @@ def auditor_pack_zip(period_month: str, branch_id: int | None = None):
         "  03 อายุรายการค้าง (0-7/8-30/เกิน 30 วัน)\n"
         "  04 ทะเบียนการปิดเดือน (ทุกสาขา × 6 เดือน · ใครอนุมัติ)\n"
         "  05 สรุปผลต่างที่รับทราบ / write-off (แยกตามเหตุผล·สาขา)\n"
-        "  06 ประวัติการแก้ไข (audit trail — เพิ่มอย่างเดียว แก้ไม่ได้)\n")
+        "  06 ประวัติการแก้ไข (audit trail — เพิ่มอย่างเดียว แก้ไม่ได้)\n"
+        + ("  07 กระดาษทำการของสาขา (Tie-out & Sign-off พร้อมช่องเซ็น + รายการเอกสารทุกบรรทัด"
+           " สถานะจับคู่ รายการไม่ตรง การจับคู่ด้วยมือ และไฟล์ต้นทางพร้อม SHA-256)\n" if branch_id else ""))
     buf = io.BytesIO()
     failed = []
     memo_token = _PACK_RM.set({})        # one reconcile per branch-month for the whole pack
