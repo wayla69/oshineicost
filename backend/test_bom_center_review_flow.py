@@ -233,8 +233,7 @@ def _http_flow(label):
     assert wb.sheetnames == ["สูตรตามระดับราคา", "รหัส POS", "รหัสวัตถุดิบ", "วิธีใช้"]
     # the kitchen opens a fresh draft (no source release) and cannot send it back, release it or run checks
     body = {"effective_month": "2099-01", "price_month": "2026-07", "label": label}
-    assert kitchen.post("/api/bom-center/release-act/new-draft", json=body).headers.get("X-Denied") == "token"
-    r = kitchen.post("/api/bom-center/release-act/new-draft", json=body, headers=TOKEN)
+    r = kitchen.post("/api/bom-center/release-act/new-draft", json=body)   # the kitchen login needs no token (2026-10-28)
     assert r.status_code == 200, r.text
     rid = r.json()["release_id"]
     rel = next(x for x in kitchen.get("/api/bom-center/releases").json()["releases"] if x["release_id"] == rid)

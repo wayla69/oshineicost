@@ -45,8 +45,12 @@ ROLES: List[str] = [
 ]
 
 # roles whose account is tied to ONE branch (the branch works it, the franchise owner reads it); the server pins every
-# request of such a login to that branch (scope_branch). Only `branch` also skips the write token (core.is_branch_session).
+# request of such a login to that branch (scope_branch). Only `branch` of these skips the write token (core.is_token_free_session).
 PINNED_ROLES = ("branch", "franchise")
+
+# roles whose signed-in login is enough to save — no write token (owner 2026-10-28: สาขา คลัง ครัว วิเคราะห์ นวัตกรรม).
+# Skipping the token is not a role grant: the role rules still decide which writes each one reaches.
+TOKEN_FREE_ROLES = ("branch", "warehouse", "innovation", "analyst")
 
 MODULES: List[str] = [
     "sales.overview",      # หน้าแรก, ภาพรวม&KPI, ต้องดูวันนี้, รายวัน, แนวโน้ม, A/B, insight

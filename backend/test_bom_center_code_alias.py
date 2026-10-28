@@ -524,9 +524,8 @@ def test_http_flow_ask_decide_import_and_export(client, app_db, auth_on):
         # she cannot decide, the analyst can
         dec = {"request_id": rid, "decision": "applied"}
         assert ss.post("/api/bom-center/codes/request/decide", json=dec, headers=TOK).headers.get("X-Denied") == "role"
-        assert ana.post("/api/bom-center/codes/request/decide", json=dec).headers.get("X-Denied") == "token"
-        assert ana.post("/api/bom-center/codes/request/decide", json={**dec, "decision": "rejected"}, headers=TOK).status_code == 400
-        done = ana.post("/api/bom-center/codes/request/decide", json=dec, headers=TOK)
+        assert ana.post("/api/bom-center/codes/request/decide", json={**dec, "decision": "rejected"}).status_code == 400
+        done = ana.post("/api/bom-center/codes/request/decide", json=dec)   # the analyst login needs no token (2026-10-28)
         assert done.status_code == 200 and "สูตรไม่ต้องแก้" in done.json()["message"], done.text
         # the register row now shows it as the code in use
         row = next(x for x in ana.get("/api/bom-center/ingredients?q=T-AL1").json()["rows"] if x["code"] == "T-AL1")

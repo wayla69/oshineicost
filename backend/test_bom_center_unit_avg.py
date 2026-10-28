@@ -506,12 +506,11 @@ def test_http_flow_receive_pieces_pack_report_and_the_decisions(client, app_db, 
         assert a.get("/api/bom-center/units/pack-reports").status_code == 403
         assert a.post("/api/bom-center/units/pack-report/decide", json={"report_ids": [r.json()["report_id"]], "decision": "applied"}).status_code == 403
         assert a.get("/api/bom-center/units/avg-proposals").status_code == 403
-        # the analyst reads and decides (the owner's token, like every central write)
+        # the analyst reads and decides (its own login, no token since 2026-10-28)
         lst = ana.get("/api/bom-center/units/pack-reports").json()
         assert lst["pending"] == 1 and lst["groups"][0]["reported_text"] == "1 กล่อง = 12 แพ็ค" and lst["groups"][0]["system_text"] == "1 กล่อง = 10 แพ็ค"
         dec = {"report_ids": lst["groups"][0]["report_ids"], "decision": "applied"}
-        assert ana.post("/api/bom-center/units/pack-report/decide", json=dec).headers.get("X-Denied") == "token"
-        done = ana.post("/api/bom-center/units/pack-report/decide", json=dec, headers=tok)
+        done = ana.post("/api/bom-center/units/pack-report/decide", json=dec)
         assert done.status_code == 200 and done.json()["reports"] == 1, done.text
         lad = ana.get("/api/bom-center/units/ladder?code=T-AV1").json()["ladder"]
         assert next(x for x in lad if x["unit"] == "กล่อง")["qty_in_parent"] == 12
@@ -520,9 +519,8 @@ def test_http_flow_receive_pieces_pack_report_and_the_decisions(client, app_db, 
         row = next(x for x in pr["rows"] if x["code"] == "T-AV1")
         assert pr["need"] == {"receipts": 3, "pieces": 10, "diff_pct": 3.0} and row["n_receipts"] == 1 and row["n_pieces"] == 4
         assert row["state"] == "insufficient" and not row["proposal"]
-        no_data = ana.post("/api/bom-center/units/avg-decision", headers=tok, json={"code": "T-AV1", "unit": "ตัว", "decision": "applied"})
-        assert no_data.status_code == 400 and "ข้อมูลยังไม่พอ" in no_data.json()["detail"]
-        assert ana.post("/api/bom-center/units/avg-decision", json={"code": "T-AV1", "unit": "ตัว", "decision": "kept", "note": "x"}).headers.get("X-Denied") == "token"
+        no_data = ana.post("/api/bom-center/units/avg-decision", json={"code": "T-AV1", "unit": "ตัว", "decision": "applied"})
+        assert no_data.status_code == 400 and "ข้อมูลยังไม่พอ" in no_data.json()["detail"]   # no token asked: the rule answers
     finally:
         _cleanup_http(oid_a, oid_b)
 
