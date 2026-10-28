@@ -89,6 +89,11 @@ def _dept_visible(role):
         if pages:
             rows.append((role in d["roles"], order, d, pages))
     rows.sort(key=lambda r: (-int(r[0]), r[1]))
+    # owner 2026-10-28 (หนึ่งแผนก หนึ่งหน้าจอ, js/18 deptHome): the home screen, the rail and the manual's row show the role's OWN
+    # department(s) only; management keeps every department
+    home = [r for r in rows if r[0]]
+    if role != "management" and home:
+        rows = home
     return [(r[2], r[3]) for r in rows]
 
 
