@@ -200,12 +200,31 @@ function lnchWho() {   // the name a person recognises: the display name, else t
 function lnchFocusDept(key) {
   const el = document.getElementById('lnch-dept-' + key);
   if (!el) return;
+  const box = document.getElementById('lnchMoreBox');
+  if (box && box.contains(el)) box.open = true;            // a folded department opens before it is scrolled to
   document.querySelectorAll('#lnchDepts .lnch-dept.is-focus').forEach(x => x.classList.remove('is-focus'));
   el.classList.add('is-focus');
   try { el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } catch (e) { el.scrollIntoView(); }
   const h = el.querySelector('.lnch-dept-name');
   if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: true }); } catch (e) { /* no focus on a hidden page */ } }
   setTimeout(() => el.classList.remove('is-focus'), 2500);
+}
+// owner 2026-10-28: a person opens หน้าแรก on their own department; the other departments they may open a page of sit folded under
+// one line ("หน้าอื่นที่เปิดได้"), opened on demand and remembered. Management (every department is its work) is never folded.
+const _LNCH_MORE_KEY = 'oshinei_lnch_more';
+function _lnchSplit(vis) {
+  const own = vis.filter(r => r.home), more = vis.filter(r => !r.home);
+  const fold = _deptRole() !== 'management' && own.length > 0 && more.length > 0;
+  return fold ? { own, more } : { own: vis, more: [] };
+}
+function _lnchMoreOpen() { try { return localStorage.getItem(_LNCH_MORE_KEY) === 'open'; } catch (e) { return false; } }
+function lnchMoreToggle(el) { try { localStorage.setItem(_LNCH_MORE_KEY, el.open ? 'open' : 'closed'); } catch (e) { /* memory only */ } }
+function _lnchMoreHtml(more) {
+  if (!more.length) return '';
+  const n = more.reduce((s, r) => s + r.pages.length, 0);
+  return `<details class="lnch-more" id="lnchMoreBox"${_lnchMoreOpen() ? ' open' : ''} ontoggle="lnchMoreToggle(this)">`
+    + `<summary><span class="lnch-more-t">หน้าอื่นที่เปิดได้</span><span class="lnch-more-n">${n} หน้า · ${more.length} แผนก</span></summary>`
+    + `<div class="lnch-grid">${_lnchDeptsHtml(more)}</div></details>`;
 }
 function _lnchDeptsHtml(vis) {
   return vis.map(r => {
@@ -225,7 +244,10 @@ async function loadLauncher() {
   const vis = deptVisible();
   document.getElementById('lnchDate').textContent = lnchDateLabel();
   document.getElementById('lnchGreet').textContent = `สวัสดี ${lnchWho()}`;
-  document.getElementById('lnchDepts').innerHTML = _lnchDeptsHtml(vis);
+  const sp = _lnchSplit(vis);
+  document.getElementById('lnchDepts').innerHTML = _lnchDeptsHtml(sp.own);
+  document.getElementById('lnchMore').innerHTML = _lnchMoreHtml(sp.more);
+  document.getElementById('lnchDeptTitle').textContent = sp.more.length ? 'แผนกของฉัน' : 'แผนก';
   document.getElementById('lnchFoot').innerHTML = _lnchFootHtml();
   updateDeptNav('launcher');
   if (_deptFocus) lnchFocusDept(_deptFocus);

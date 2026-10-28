@@ -59,6 +59,17 @@
     #tab-launcher :is(.lnch-tile, .lnch-go, .lnch-all, .lnch-tab, .lnch-search, .lnch-foot a):focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
     #tab-launcher .lnch-foot { display: flex; flex-wrap: wrap; gap: 4px 24px; font-size: 14px; border-top: 1px solid var(--border); padding-top: 12px; }
     #tab-launcher .lnch-foot a { display: inline-flex; align-items: center; min-height: 44px; color: var(--accent); }
+    /* the other departments a person may open, folded under one line (owner 2026-10-28; js/18-launcher.js _lnchMoreHtml) */
+    #tab-launcher .lnch-more { margin-top: 16px; border-top: 1px solid var(--border); padding-top: 4px; }
+    #tab-launcher .lnch-more summary { display: flex; align-items: center; gap: 12px; min-height: 48px; cursor: pointer; list-style: none; color: var(--text-primary); font-size: 15px; }
+    #tab-launcher .lnch-more summary::-webkit-details-marker { display: none; }
+    #tab-launcher .lnch-more summary::before { content: ''; width: 8px; height: 8px; border-right: 2px solid var(--text-secondary); border-bottom: 2px solid var(--text-secondary);
+      transform: rotate(-45deg); margin: 0 4px 0 6px; transition: transform .15s; flex: 0 0 auto; }
+    #tab-launcher .lnch-more[open] summary::before { transform: rotate(45deg); margin-top: -4px; }
+    #tab-launcher .lnch-more-t { font-weight: 600; }
+    #tab-launcher .lnch-more-n { font-size: 13px; color: var(--text-secondary); }
+    #tab-launcher .lnch-more summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #tab-launcher .lnch-more .lnch-grid { padding-top: 8px; }
     @media (max-width: 900px) { #tab-launcher .lnch-tiles { gap: 6px; padding: 10px; } }
   </style>
   <div class="lnch">
@@ -86,6 +97,7 @@
         <h2 id="lnchDeptTitle">แผนก</h2>
       </div>
       <div id="lnchDepts" class="lnch-grid"></div>
+      <div id="lnchMore"></div>
     </section>
 
     <footer class="lnch-foot" id="lnchFoot"></footer>

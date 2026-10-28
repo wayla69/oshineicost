@@ -237,18 +237,30 @@ function _phHero(inner) {
     + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button>`
     + `<button type="button" class="ph-hav" onclick="phOpenMe()" aria-label="ฉัน">${esc(_phInitial())}</button></div>${inner}</header>`;
 }
+// the other departments on the phone home: one row that opens them (same memory key as the desktop fold, js/18-launcher.js)
+function phMoreToggle() {
+  const btn = document.getElementById('phMoreBtn'), box = document.getElementById('phMoreDepts');
+  if (!btn || !box) return;
+  const open = box.hidden; box.hidden = !open; btn.setAttribute('aria-expanded', String(open));
+  try { localStorage.setItem(_LNCH_MORE_KEY, open ? 'open' : 'closed'); } catch (e) { /* memory only */ }
+}
+function _phDeptTiles(rows) {
+  return rows.map(r => { const d = r.dept;
+    return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)" onclick="phOpenDept('${d.key}');return false">`
+      + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('');
+}
 function _phCentreHome() {
-  const vis = deptVisible();
+  const vis = deptVisible(), sp = _lnchSplit(vis), open = _lnchMoreOpen();
   const yest = hasModule('report.management')
     ? `<button type="button" class="ph-yest" id="phYest" onclick="phShowSummary()" aria-label="ยอดขายเมื่อวาน เปิดสรุปผู้บริหาร"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
   return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
-    + `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">แผนก</h2>`
-    + (vis.length ? `<div class="ph-depts">${vis.map(r => { const d = r.dept;
-      return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)" onclick="phOpenDept('${d.key}');return false">`
-        + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('')}</div>`
-      : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
+    + `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">${sp.more.length ? 'แผนกของฉัน' : 'แผนก'}</h2>`
+    + (vis.length ? `<div class="ph-depts">${_phDeptTiles(sp.own)}</div>` : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
+    + (sp.more.length ? `<button type="button" class="ph-more" id="phMoreBtn" aria-expanded="${open}" aria-controls="phMoreDepts" onclick="phMoreToggle()">`
+        + `<span>หน้าอื่นที่เปิดได้</span><span class="ph-more-n">${sp.more.length} แผนก</span></button>`
+        + `<div class="ph-depts" id="phMoreDepts"${open ? '' : ' hidden'}>${_phDeptTiles(sp.more)}</div>` : '')
     + '</section>';
 }
 function _phSubHead(name, sub, hue, icon) {
