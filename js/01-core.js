@@ -945,7 +945,30 @@ function renderUserChip() {
   } else {
     chip.style.display = 'none';
   }
+  renderWatermark();
 }
+
+// Code guard 2 (2026-10-28): a branch's own logins (branch, franchise) see their login, branch and date faintly across
+// the screen and on paper, so a photo or a screenshot that leaves the branch names its account. Never catches a click.
+function renderWatermark() {
+  let el = document.getElementById('cgWatermark');
+  if (!isPinnedSession() || !window.AUTH.username) { if (el) el.remove(); return; }
+  const d = new Date();
+  const text = [window.AUTH.username, window.AUTH.branch || '', `${d.getDate()}/${d.getMonth() + 1}/${d.getFullYear() + 543}`].filter(Boolean).join(' · ');
+  if (el && el.dataset.text === text) return;
+  const esc = text.replace(/&/g, '&amp;').replace(/</g, '&lt;');
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"><text x="160" y="96" text-anchor="middle" transform="rotate(-24 160 90)" font-family="KIRA UI,Noto Sans Thai,sans-serif" font-size="14" font-weight="600" fill="rgb(100,116,139)" fill-opacity=".13">${esc}</text></svg>`;
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'cgWatermark';
+    el.setAttribute('aria-hidden', 'true');
+    el.style.cssText = 'position:fixed;inset:0;pointer-events:none;z-index:2147483000;background-repeat:repeat;-webkit-print-color-adjust:exact;print-color-adjust:exact';
+    document.body.appendChild(el);
+  }
+  el.dataset.text = text;
+  el.style.backgroundImage = `url("data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}")`;
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && typeof renderWatermark === 'function') renderWatermark(); });
 
 // Hide nav items / sections / topbar actions the current role can't use.
 function applyPermissions() {
@@ -1219,10 +1242,10 @@ async function createUser() {
     document.getElementById('newUserName').value = '';
     document.getElementById('newUserPass').value = '';
     const d = await res.json().catch(()=>({}));
-    // Blank password → server used the shared default; say so, the admin has to pass it on.
-    _userStatus(d.default_password
-      ? `เพิ่ม ${username} แล้ว — รหัสเริ่มต้น ${d.default_password} (ระบบบังคับเปลี่ยนตอนเข้าครั้งแรก)`
-      : 'เพิ่มผู้ใช้แล้ว', true, 12000);
+    // Blank password → the server set a random temporary password for this account; shown once, the admin passes it on.
+    _userStatus(d.temp_password
+      ? `เพิ่ม ${username} แล้ว · รหัสผ่านชั่วคราว ${d.temp_password} (แสดงครั้งเดียว ระบบบังคับเปลี่ยนเมื่อเข้าใช้ครั้งแรก)`
+      : 'เพิ่มผู้ใช้แล้ว', true, 60000);
     loadUsers();
   } else {
     const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'เพิ่มไม่สำเร็จ', false);
@@ -1231,7 +1254,12 @@ async function createUser() {
 async function _putUser(username, body, okMsg) {
   const res = await fetch(`${API}/api/auth/users/${encodeURIComponent(username)}`, {
     method:'PUT', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
-  if (res.ok) { _userStatus(okMsg, true); loadUsers(); }
+  if (res.ok) {
+    const d = await res.json().catch(()=>({}));
+    if (d.temp_password) _userStatus(`${username} · รหัสผ่านชั่วคราว ${d.temp_password} (แสดงครั้งเดียว ระบบบังคับเปลี่ยนเมื่อเข้าใช้ครั้งถัดไป)`, true, 60000);
+    else _userStatus(okMsg, true);
+    loadUsers();
+  }
   else { const d = await res.json().catch(()=>({})); _userStatus(d.detail || 'บันทึกไม่สำเร็จ', false); }
 }
 function updateUserRole(username, role) { _putUser(username, { role }, `เปลี่ยนบทบาท ${username} แล้ว`); }
@@ -1239,10 +1267,10 @@ function updateUserBranch(username, branch) { _putUser(username, { branch }, bra
 function toggleUserActive(username, active) { _putUser(username, { active: !!active }, 'อัปเดตสถานะแล้ว'); }
 function resetUserPassword(username) {
   const pw = window.prompt(`ตั้งรหัสผ่านใหม่สำหรับ ${username}
-(เว้นว่างแล้วกด OK = กลับเป็นรหัสเริ่มต้น Oshinei@2026 และบังคับเปลี่ยนตอนเข้าครั้งถัดไป):`);
+(เว้นว่างแล้วกด OK = ระบบสร้างรหัสผ่านชั่วคราวให้ และบังคับเปลี่ยนเมื่อเข้าใช้ครั้งถัดไป):`);
   if (pw === null) return;                                  // cancelled
   if (pw) _putUser(username, { password: pw }, 'ตั้งรหัสผ่านใหม่แล้ว');
-  else _putUser(username, { reset_default: true }, `${username} กลับเป็นรหัสเริ่มต้น Oshinei@2026 แล้ว — ต้องเปลี่ยนตอนเข้าครั้งถัดไป`);
+  else _putUser(username, { reset_default: true }, '');
 }
 async function deleteUser(username) {
   if (!window.confirm(`ลบผู้ใช้ ${username}?`)) return;

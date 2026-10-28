@@ -25,6 +25,7 @@ import json
 import time
 import base64
 import hashlib
+import secrets
 import sqlite3
 from typing import Optional, Dict, List, Set
 
@@ -674,6 +675,24 @@ SEED_USERS = [f"{role}{n}" for role in ROLES for n in (1, 2)]
 MIN_PASSWORD_LEN = 10
 
 
+# Temporary passwords (code guard 2, 2026-10-28): an account an admin or a script hands out gets its
+# OWN random starting password, never the shared default - with predictable logins (wh_<ตัวย่อ>,
+# own_<ตัวย่อ>) one branch's handout must not open every other branch. The shared default stays the
+# seed of an EMPTY table (a fresh local DB, the tests) and never signs in on the live server
+# (default_refused). Lower-case letters and digits without look-alikes (0/o, 1/l/i), 3 groups of 4,
+# so a branch phone can type it.
+_TEMP_ALPHABET = "abcdefghjkmnpqrstuvwxyz23456789"
+
+
+def temp_password() -> str:
+    return "-".join("".join(secrets.choice(_TEMP_ALPHABET) for _ in range(4)) for _ in range(3))
+
+
+def default_refused(password: str) -> bool:
+    """On the live server (Fly sets FLY_APP_NAME) the shared default never signs anyone in."""
+    return bool(os.environ.get("FLY_APP_NAME")) and (password or "").strip().lower() == DEFAULT_PASSWORD.lower()
+
+
 def check_password_policy(password: str) -> None:
     """Raise ValueError if the new password is too weak or is the shared default."""
     pw = password or ""
@@ -735,22 +754,18 @@ def provision_user(con: sqlite3.Connection, username: str, role: str,
                    branch: Optional[str] = None,
                    password: Optional[str] = None,
                    reset_existing: bool = False) -> str:
-    """Provision ONE account on the shared DEFAULT_PASSWORD with must_change=1.
+    """Provision ONE account on a temporary password with must_change=1 (the user
+    is forced off it at first login: the frontend opens the change-password dialog
+    before anything else).
 
-    This is the seeding path, not the admin-create path: like seed_users() it
-    deliberately bypasses check_password_policy() when handing out the shared
-    default, because the default is only ever a one-shot credential — the user
-    is forced off it at first login (must_change=1 → the frontend opens the
-    change-password dialog before anything else).
+    Without `password` the account gets its own random temp_password() - never the
+    shared default. Read it back with last_temp_password() right after the call (the
+    callers show it once to whoever hands it out). An explicit `password` must pass
+    check_password_policy().
 
     Idempotent: an existing account is left alone and "exists" is returned,
-    unless reset_existing=True, in which case its password is put back to the
-    default and must_change is re-armed ("reset"). A brand-new account returns
-    "created".
-
-    Passing an explicit `password` opts back INTO the policy (≥ MIN_PASSWORD_LEN
-    and not the shared default) — that path is an ordinary temporary password,
-    still with must_change=1.
+    unless reset_existing=True, in which case it gets a new temporary password
+    and must_change is re-armed ("reset"). A brand-new account returns "created".
     """
     username = (username or "").strip()
     if not username:
@@ -762,7 +777,8 @@ def provision_user(con: sqlite3.Connection, username: str, role: str,
         raise ValueError("ไม่พบสาขานี้")
     if password:
         check_password_policy(password)       # explicit password → normal policy
-    pw = password or DEFAULT_PASSWORD
+    pw = password or temp_password()
+    _last_temp["pw"] = None
 
     existing = get_user(con, username)
     if existing and not reset_existing:
@@ -777,6 +793,7 @@ def provision_user(con: sqlite3.Connection, username: str, role: str,
             (h["hash"], h["salt"], username),
         )
         con.commit()
+        _last_temp["pw"] = pw
         return "reset"
     con.execute(
         "INSERT INTO app_user(username, pw_hash, pw_salt, role, must_change, branch) "
@@ -784,7 +801,16 @@ def provision_user(con: sqlite3.Connection, username: str, role: str,
         (username, h["hash"], h["salt"], role, branch),
     )
     con.commit()
+    _last_temp["pw"] = pw
     return "created"
+
+
+_last_temp: Dict[str, Optional[str]] = {"pw": None}
+
+
+def last_temp_password() -> Optional[str]:
+    """The password the latest provision_user() call set (None when it changed nothing)."""
+    return _last_temp["pw"]
 
 
 def seed_users(con: sqlite3.Connection) -> None:

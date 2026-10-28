@@ -1,5 +1,5 @@
-"""Provisioning a login on the shared default password, forced to change at first
-login (auth.provision_user + backend/provision_user.py)."""
+"""Provisioning a login on its own random temporary password, forced to change at first
+login (auth.provision_user + backend/provision_user.py). Code guard 2: never the shared default."""
 import os
 os.environ.setdefault("OSHINEI_NO_SWAP", "1")
 import sqlite3  # noqa: E402
@@ -21,25 +21,30 @@ def con():
     c.close()
 
 
-def test_provision_creates_user_on_default_password_that_must_change(con):
+def test_provision_creates_user_on_its_own_temp_password_that_must_change(con):
     assert auth.provision_user(con, "marketing1", "marketing") == "created"
+    pw = auth.last_temp_password()
     row = auth.get_user(con, "marketing1")
     assert row["role"] == "marketing"
     assert row["active"] == 1
     assert row["must_change"] == 1                       # forced change at first login
-    assert auth.verify_password(auth.DEFAULT_PASSWORD, row["pw_hash"], row["pw_salt"])
-    assert auth.authenticate(con, "marketing1", auth.DEFAULT_PASSWORD) is not None
+    assert pw and pw != auth.DEFAULT_PASSWORD and len(pw) >= auth.MIN_PASSWORD_LEN
+    assert not auth.verify_password(auth.DEFAULT_PASSWORD, row["pw_hash"], row["pw_salt"])
+    assert auth.authenticate(con, "marketing1", pw) is not None
+    auth.provision_user(con, "marketing2", "marketing")
+    assert auth.last_temp_password() != pw               # each account its own
 
 
 def test_provision_is_idempotent_and_reset_rearms(con):
     auth.provision_user(con, "marketing1", "marketing")
     # the user picks their own password → must_change cleared
-    assert auth.change_own_password(con, "marketing1", auth.DEFAULT_PASSWORD,
+    assert auth.change_own_password(con, "marketing1", auth.last_temp_password(),
                                     "aStrongPass123") is True
     assert auth.get_user(con, "marketing1")["must_change"] == 0
 
     # re-running must NOT clobber it
     assert auth.provision_user(con, "marketing1", "marketing") == "exists"
+    assert auth.last_temp_password() is None
     assert auth.get_user(con, "marketing1")["must_change"] == 0
     assert auth.authenticate(con, "marketing1", "aStrongPass123") is not None
 
@@ -47,7 +52,8 @@ def test_provision_is_idempotent_and_reset_rearms(con):
     assert auth.provision_user(con, "marketing1", "marketing", reset_existing=True) == "reset"
     row = auth.get_user(con, "marketing1")
     assert row["must_change"] == 1
-    assert auth.verify_password(auth.DEFAULT_PASSWORD, row["pw_hash"], row["pw_salt"])
+    assert auth.authenticate(con, "marketing1", auth.last_temp_password()) is not None
+    assert auth.authenticate(con, "marketing1", "aStrongPass123") is None
 
 
 def test_explicit_password_still_obeys_the_policy(con):
