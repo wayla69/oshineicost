@@ -62,6 +62,8 @@ MODULES: List[str] = [
     "ops.staff",           # พนักงาน/แคชเชียร์
     "ops.posextra",        # custtype, modifiers, price-zone, cancel-bills, close-time
     "report.export",       # ส่งออกรายงาน Excel/PDF
+    "report.management",   # รายงานผู้บริหาร (/api/reports/management, the desktop page and the phone's สรุปผู้บริหาร) — owner 2026-10-28:
+                           # management only by default; a role gets the whole chain's management summary on purpose, not via sales.overview
     "system.settings",     # ตั้งค่า (targets, branch, sku active, closed hours)
     "system.admin",        # จัดการผู้ใช้
     "data.upload",         # อัปโหลด/seed ข้อมูล
@@ -92,12 +94,11 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "franchise.inbox",   # PR-F4: Operations answers the franchise owners beside management (routers/franchise_msgs.py)
     },
     "analyst": {
-        # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra are an
-        # INTENTIONAL widening: an analyst routinely investigates discount leakage
-        # and POS-level detail. Not a cost leak (senior cost-aware role). Trim these
-        # two if the owner wants a strict sales+cost-only analyst.
+        # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra were an intentional widening until
+        # 2026-10-28; the owner then asked for each department to see its own pages, so the operations
+        # pages (ส่วนลด, บิลยกเลิก, POS เชิงลึก) are operation's again. Tick them back in the live matrix if needed.
         "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
-        "cost.simulator", "profit.pnl", "ops.discounts", "ops.posextra",
+        "cost.simulator", "profit.pnl",
         "report.export", "customer.feedback",
         "bom.center", "bom.release",   # owner 2026-10-06: the analyst maintains prices/recipes and RELEASES
     },
@@ -277,6 +278,7 @@ MODULE_RULES = [
     ("GET", "/api/pnl",                      {"profit.pnl"}),
     ("GET", "/api/gp",                       {"profit.pnl"}),
     ("GET", "/api/reports/pnl-bill",         {"profit.pnl"}),
+    ("GET", "/api/reports/management",       {"report.management"}),   # + /months and .xlsx (prefix): the owner's summary, management only by default
     ("GET", "/api/reports/ops",              {"ops.report"}),
     ("GET", "/api/ingredients",              {"cost.analysis", "ops.report",
                                               "supply.ordering"}),  # order plan + branch letter + purchases
