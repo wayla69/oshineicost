@@ -743,7 +743,7 @@ const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
   operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback','franchise.inbox'],
-  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','report.export','customer.feedback','bom.center','bom.release'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','report.export','customer.feedback','bom.center','bom.release'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
@@ -1123,6 +1123,8 @@ async function loadRolePermissions() {
   const canEdit = window.AUTH && window.AUTH.enabled && window.AUTH.modules && window.AUTH.modules.includes('system.admin');
   const btn = document.getElementById('permSaveBtn');
   if (btn) btn.classList.toggle('hidden', !canEdit);
+  const rst = document.getElementById('permResetBtn');
+  if (rst) rst.classList.toggle('hidden', !canEdit);
 
   // Try to load from API; fall back to local constants
   let roles, modules, permissions;
@@ -1195,6 +1197,20 @@ function _permToggle(cb) {
   if (!perms[role]) perms[role] = [];
   if (cb.checked) { if (!perms[role].includes(mod)) perms[role].push(mod); }
   else { perms[role] = perms[role].filter(m => m !== mod); }
+}
+
+async function resetRolePermissions() {
+  // owner 2026-10-28: the saved matrix wins over the code defaults, so a default that changes in code never reaches the live
+  // system until someone re-ticks it; this puts the live matrix back to the defaults in one step
+  if (!await uiConfirm('ใช้ค่าตั้งต้นของระบบแทนตารางสิทธิ์ที่บันทึกไว้?\nการแก้ไขสิทธิ์ที่เคยบันทึกไว้จะถูกแทนที่ทั้งหมด', { title: 'ใช้ค่าตั้งต้นของระบบ', ok: 'ใช้ค่าตั้งต้น', cancel: 'ยกเลิก' })) return;
+  const status = document.getElementById('permSaveStatus');
+  try {
+    const res = await fetch(`${API}/api/auth/role-permissions`, { method: 'DELETE' });
+    if (!res.ok) { const d = await res.json().catch(() => ({})); if (status) { status.textContent = d.detail || 'ไม่สำเร็จ'; status.className = 'text-xs text-rose-600'; } return; }
+    if (status) { status.textContent = 'ใช้ค่าตั้งต้นของระบบแล้ว ✓'; status.className = 'text-xs text-emerald-600'; }
+    setTimeout(() => { if (status) status.textContent = ''; }, 3000);
+    await loadRolePermissions();
+  } catch (e) { if (status) { status.textContent = 'เชื่อมต่อไม่ได้'; status.className = 'text-xs text-rose-600'; } }
 }
 
 async function saveRolePermissions() {
@@ -3882,7 +3898,7 @@ const SUPPLY_CHIPS = [
   { key: 'monthly', label: 'งานประจำเดือน', items: [
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', roles: ['analyst', 'management'] },
-    { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', roles: ['analyst', 'management'] },
+    { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', roles: ['analyst', 'management', 'innovation'] },   // owner 2026-10-28: the kitchen reads it
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', roles: ['analyst', 'management'] },
     { tab: 'bomcenter', pane: 'rel', bom: true, label: 'ตรวจและประกาศใช้', roles: ['analyst', 'management'] }] },
@@ -4021,6 +4037,9 @@ const DEPARTMENTS = [
     { tab: 'bomcenter', pane: 'rel', bom: true, label: 'รับทราบสูตร', icon: 'shield' },
     { tab: 'fmsg', label: 'ข้อความจากเจ้าของสาขา', icon: 'msg' }] },     // PR-F4: management and operation (franchise.inbox)
   { key: 'mkt', label: 'การตลาด', duty: 'ลูกค้า เมนู และเสียงลูกค้า', icon: 'mega', hue: 'mkt', roles: ['marketing'], pages: [
+    { tab: 'overall', label: 'ภาพรวมและตัวชี้วัด', icon: 'gauge' },   // owner 2026-10-28: the sales pages a department works with sit on its own card
+    { tab: 'dailysales', label: 'ยอดขายรายวัน', icon: 'cal' },
+    { tab: 'trend', label: 'แนวโน้ม', icon: 'trend' },
     { tab: 'buffetperf', label: 'ลูกค้าและบุฟเฟ่ต์', icon: 'users' },
     { tab: 'childbuffet', label: 'บุฟเฟ่ต์เด็ก', icon: 'child' },
     { tab: 'menu', label: 'วิเคราะห์เมนู', icon: 'book' },
@@ -4031,6 +4050,10 @@ const DEPARTMENTS = [
     { tab: 'custtype', label: 'ช่องทางและประเภทลูกค้า', icon: 'bar' },
     { tab: 'timeflow', label: 'ช่วงเวลา', icon: 'clock' }] },
   { key: 'ops', label: 'ปฏิบัติการ', duty: 'ควบคุมหน้าร้านและวินัยสาขา', icon: 'clip', hue: 'ops', roles: ['operation'], pages: [
+    { tab: 'home', label: 'สรุปประจำวัน', icon: 'brief' },   // owner 2026-10-28: ภาพรวม and แนวโน้ม for operation too
+    { tab: 'overall', label: 'ภาพรวมและตัวชี้วัด', icon: 'gauge' },
+    { tab: 'dailysales', label: 'ยอดขายรายวัน', icon: 'cal' },
+    { tab: 'trend', label: 'แนวโน้ม', icon: 'trend' },
     { tab: 'opsreport', label: 'รายงานปฏิบัติการ', icon: 'clip' },
     { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
     { tab: 'cashctl', label: 'เงินสดขาด/เกิน', icon: 'cash' },
@@ -4042,8 +4065,15 @@ const DEPARTMENTS = [
     { tab: 'orderhub', pane: 'comp', label: 'ตรวจสอบการสั่ง', icon: 'count' },
     { tab: 'orderhub', pane: 'issues', label: 'ใบตัดเบิกสาขา', icon: 'doc' },
     { tab: 'orderhub', pane: 'issuevar', label: 'ผลต่างตัดเบิกรายวัน', icon: 'diff' },
-    { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', icon: 'store' }] },
+    { tab: 'orderhub', pane: 'adoption', label: 'การใช้งานทุกสาขา', icon: 'store' },
+    { tab: 'fmsg', label: 'ข้อความจากเจ้าของสาขา', icon: 'msg' }] },     // PR-F4: operation answers the owners beside management
   { key: 'ana', label: 'ฝ่ายวิเคราะห์', duty: 'ราคา สูตร หน่วย และการประกาศใช้', icon: 'pie', hue: 'ana', roles: ['analyst'], duty_stock: 'ราคา ต้นทุนต่อจาน และหน่วย', pages: [
+    { tab: 'overall', label: 'ภาพรวมและตัวชี้วัด', icon: 'gauge' },   // owner 2026-10-28: sales, profit and discounts are the analyst's own work
+    { tab: 'dailysales', label: 'ยอดขายรายวัน', icon: 'cal' },
+    { tab: 'trend', label: 'แนวโน้ม', icon: 'trend' },
+    { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'coin' },
+    { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'bar' },
+    { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
     { tab: 'bomcenter', pane: 'pricefile', label: 'ไฟล์ราคา', icon: 'upload' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' },
     { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', icon: 'coin' },
@@ -4069,7 +4099,10 @@ const DEPARTMENTS = [
   { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], duty_stock: 'ทะเบียนวัตถุดิบ (อ่านอย่างเดียว)', pages: [
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
-    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' }] },
+    { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' },
+    { tab: 'bomcenter', pane: 'dishcost', label: 'ต้นทุนต่อจาน', icon: 'coin' },   // owner 2026-10-28: the kitchen reads the cost its recipes make
+    { tab: 'menu', label: 'วิเคราะห์เมนู', icon: 'book' },
+    { tab: 'menuefficiency', label: 'เป้าลดต้นทุน', icon: 'target' }] },
   { key: 'ss', label: 'ประสานงานขาย', duty: 'คิวใบสั่งซื้อ เคลม และรอบส่ง', icon: 'head', hue: 'ss', roles: ['salessupport'], pages: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', icon: 'inbox' },
     { tab: 'orderhub', pane: 'claims', label: 'เคลมสินค้า', icon: 'ret' },
@@ -4087,9 +4120,11 @@ const DEPARTMENTS = [
   { key: 'wh', label: 'คลัง', duty: 'ระบุยอดส่งจริงภายใน 14:00', icon: 'truck', hue: 'wh', roles: ['warehouse'], pages: [
     { tab: 'orderhub', pane: 'queue', label: 'คิวใบสั่งซื้อ', icon: 'inbox' }] },
   { key: 'acc', label: 'บัญชี', duty: 'ใบสรุปตัดเบิกและงบกำไรขาดทุน', icon: 'calc', hue: 'acc', roles: ['accounting'], pages: [
+    { tab: 'dailysales', label: 'ยอดขายรายวัน', icon: 'cal' },   // owner 2026-10-28
     { tab: 'bomcenter', pane: 'issue', label: 'ใบสรุปตัดเบิก', icon: 'doc' },
     { tab: 'pnlbranch', label: 'P&L รายสาขา', icon: 'coin' },
     { tab: 'gpbranch', label: 'GP รายสาขา', icon: 'bar' },
+    { tab: 'pnl', label: 'P&L เชิงลึก', icon: 'trend' },
     { tab: 'cashctl', label: 'เงินสดขาด/เกิน', icon: 'cash' },
     { tab: 'discounts', label: 'ส่วนลด', icon: 'pct' },
     { tab: 'bomcenter', pane: 'price', label: 'ราคารายเดือน', icon: 'tag' }] },

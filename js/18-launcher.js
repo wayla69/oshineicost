@@ -46,6 +46,15 @@ function deptVisible() {
   const kept = rows.filter(r => r.home || !own.size || r.pages.some(x => !own.has(pk(x.p))));
   return kept.sort((a, b) => (Number(b.home) - Number(a.home)) || (a.order - b.order));
 }
+// owner 2026-10-28 (หนึ่งแผนก หนึ่งหน้าจอ): หน้าแรก, the rail and the phone grid show the person's OWN department(s) only - every page
+// the department works with is on its card. Management sees every department. A page the role may open but no own card lists stays
+// reachable through the search and หน้ารายงานทั้งหมด (deptVisible still knows every department for the breadcrumb and the search).
+function deptHome() {
+  const vis = deptVisible();
+  if (_deptRole() === 'management') return vis;
+  const own = vis.filter(r => r.home);
+  return own.length ? own : vis;                                 // a role with no department of its own keeps the old list
+}
 function deptOpenPage(p) { if (p.pane) supplyGo({ tab: p.tab, pane: p.pane }); else switchTab(p.tab); }
 function deptGo(key, idx) {
   const d = DEPARTMENTS.find(x => x.key === key), p = d && d.pages[idx];
@@ -76,12 +85,12 @@ function renderDeptNav() {
   const host = document.getElementById('deptNav');
   if (!host) return;
   deptRailInit();
-  const vis = deptVisible();
+  const vis = deptHome();
   host.innerHTML = `<a href="#" class="nav-item rail-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และแผนกทั้งหมด">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></a>`
     + `<a href="#" class="nav-item rail-item dept-entry" id="nav-search" onclick="pgSearchOpen();return false" title="ค้นหาหน้า · Ctrl K หรือ /">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${_PG_SEARCH_ICON}"/></svg><span class="nav-label">ค้นหา</span></a>`
-    + `<div class="nav-section dept-entry">แผนก</div>`
+    + `<div class="nav-section dept-entry">${_deptRole() === 'management' ? 'แผนก' : 'แผนกของฉัน'}</div>`
     + vis.map(r => `<a href="#" class="nav-item rail-item dept-entry" id="nav-dept-${r.dept.key}" data-dept="${r.dept.key}" data-nb="d:${r.dept.key}" onclick="deptNavOpen('${r.dept.key}');return false" title="${esc(r.dept.label + ' · ' + r.dept.duty)}">`
       + `${_deptSvg(r.dept.icon, 17, 'nav-icon')}<span class="nav-label">${esc(r.dept.label)}</span></a>`).join('');
   updateDeptNav(typeof activeTab === 'string' ? activeTab : '');
@@ -222,10 +231,11 @@ function _lnchFootHtml() {
   return a("switchTab('manual')", 'คู่มือการใช้งาน') + (tabAllowed('settings') ? a("switchTab('settings')", 'ตั้งค่า') : '') + a("switchTab('allpages')", 'หน้ารายงานทั้งหมด');
 }
 async function loadLauncher() {
-  const vis = deptVisible();
+  const vis = deptHome();
   document.getElementById('lnchDate').textContent = lnchDateLabel();
   document.getElementById('lnchGreet').textContent = `สวัสดี ${lnchWho()}`;
   document.getElementById('lnchDepts').innerHTML = _lnchDeptsHtml(vis);
+  document.getElementById('lnchDeptTitle').textContent = _deptRole() === 'management' ? 'แผนก' : 'แผนกของฉัน';
   document.getElementById('lnchFoot').innerHTML = _lnchFootHtml();
   updateDeptNav('launcher');
   if (_deptFocus) lnchFocusDept(_deptFocus);

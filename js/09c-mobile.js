@@ -237,19 +237,26 @@ function _phHero(inner) {
     + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button>`
     + `<button type="button" class="ph-hav" onclick="phOpenMe()" aria-label="ฉัน">${esc(_phInitial())}</button></div>${inner}</header>`;
 }
+// the phone home grid: the person's own department(s) (js/18-launcher.js deptHome; management sees all)
+function _phDeptTiles(rows) {
+  return rows.map(r => { const d = r.dept;
+    return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)" onclick="phOpenDept('${d.key}');return false">`
+      + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('');
+}
 function _phCentreHome() {
-  const vis = deptVisible();
+  const vis = deptHome();
   const yest = hasModule('report.management')
     ? `<button type="button" class="ph-yest" id="phYest" onclick="phShowSummary()" aria-label="ยอดขายเมื่อวาน เปิดสรุปผู้บริหาร"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
   return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
-    + `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">แผนก</h2>`
-    + (vis.length ? `<div class="ph-depts">${vis.map(r => { const d = r.dept;
-      return `<a href="#" class="ph-dept" data-dept="${d.key}" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)" onclick="phOpenDept('${d.key}');return false">`
-        + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('')}</div>`
-      : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
-    + '</section>';
+    + (vis.length === 1 && _deptRole() !== 'management'
+      // one department of its own: its pages straight on the home screen (no lone department tile to tap first)
+      ? `<section class="ph-body" aria-labelledby="phDeptH" style="--dk:var(--dept-${vis[0].dept.hue}-ink)"><h2 class="ph-sec" id="phDeptH">${esc(vis[0].dept.label)}</h2>`
+        + `<div class="ph-ptiles">${vis[0].pages.map(x => `<a href="#" class="ph-ptile" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('${vis[0].dept.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`
+      : `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">${_deptRole() === 'management' ? 'แผนก' : 'แผนกของฉัน'}</h2>`
+        + (vis.length ? `<div class="ph-depts">${_phDeptTiles(vis)}</div>` : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
+        + '</section>');
 }
 function _phSubHead(name, sub, hue, icon) {
   return `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${hue}-ink);--dt:var(--dept-${hue}-tint);--df:var(--dept-${hue}-f);--df2:var(--dept-${hue}-f2)"><span class="ph-badge ph-badge-sm">${_deptSvg(icon, 24)}</span>`
