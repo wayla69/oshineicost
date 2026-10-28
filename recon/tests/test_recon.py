@@ -1976,6 +1976,57 @@ def test_export_xlsx(client):
     assert "attachment" in cd and "filename*=UTF-8''" in cd
 
 
+def test_export_working_paper_sheets(client):
+    """Auditor working paper: tie-out/sign-off + line-level detail, exception
+    listing, manual-match log and a source-document inventory with file hashes."""
+    db = main._DB_PATH
+    pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}
+    client.patch(f"/api/payment-map/{pm['KNNQR']['id']}", json={"category": "QR", "bank": "KTB"})
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    _add_bank_line(db, "KTB", "QR", 100000)        # ties to KNNQR exactly -> matched
+    _add_bank_line(db, "KTB", "TRANSFER", 777)     # no POS transfer -> stays unmatched
+    client.post(f"/api/sessions/{sid}/run-match")
+
+    r = client.get(f"/api/sessions/{sid}/export.xlsx")
+    assert r.status_code == 200
+    wb = openpyxl.load_workbook(io.BytesIO(r.content))
+    for name in ("Summary", "Tie-out & Sign-off", "Line detail", "Unmatched",
+                 "Manual matches", "Source documents"):
+        assert name in wb.sheetnames, f"missing sheet {name}"
+    assert wb.sheetnames[:2] == ["Summary", "Tie-out & Sign-off"]     # the front page of the working paper
+
+    so = list(wb["Tie-out & Sign-off"].iter_rows(values_only=True))
+    qr = next(x for x in so if x and x[0] and "QR" in str(x[0]))
+    assert qr[2] == 100000 and qr[3] == round(qr[2] - qr[1], 2)  # POS -> external -> variance
+    firsts = [str(x[0]) for x in so if x and x[0]]
+    assert any("Signature (Approved by)" in v for v in firsts) and any("Exported at" in v for v in firsts)
+    assert any(v.startswith("รวม / Total") for v in firsts)
+
+    rows = list(wb["Line detail"].iter_rows(min_row=2, values_only=True))
+    by_amount = {x[5]: x for x in rows}                      # col F = gross in
+    assert set(by_amount) == {100000.0, 777.0}
+    assert by_amount[100000.0][10] == "matched"              # col K = match status
+    assert by_amount[777.0][10] == "unmatched"
+    assert [x[5] for x in wb["Unmatched"].iter_rows(min_row=2, values_only=True)] == [777.0]
+
+    docs = list(wb["Source documents"].iter_rows(min_row=2, values_only=True))
+    assert sum(1 for d in docs if d and d[1] == "bank") == 2
+
+
+def test_auditor_pack_for_one_branch_carries_its_working_paper(client):
+    sid = client.post("/api/sessions", json={"branch_id": 4, "period_month": "2026-06"}).json()["session_id"]
+    client.post(f"/api/sessions/{sid}/run-match")
+    import zipfile
+    z = zipfile.ZipFile(io.BytesIO(client.get("/api/reports/auditor-pack.zip?period_month=2026-06&branch_id=4").content))
+    wp = [n for n in z.namelist() if n.startswith("07_")]
+    assert len(wp) == 1, z.namelist()
+    wb = openpyxl.load_workbook(io.BytesIO(z.read(wp[0])))
+    assert wb.sheetnames[:2] == ["Summary", "Tie-out & Sign-off"]
+    assert "07" in z.read("00_README.txt").decode("utf-8")
+    z_all = zipfile.ZipFile(io.BytesIO(client.get("/api/reports/auditor-pack.zip?period_month=2026-06").content))
+    assert not [n for n in z_all.namelist() if n.startswith("07_")]   # all branches: no per-branch working paper
+
+
 def test_lane_drilldown(client):
     db = main._DB_PATH
     pm = {r["payment_code_norm"]: r for r in client.get("/api/payment-map").json()}

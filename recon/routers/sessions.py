@@ -28,6 +28,7 @@ from ..matcher import lane_lines
 from ..matcher import payout_reconciliation
 from ..matcher import run_auto_match
 from ..reconcile_v2 import CHANNELS as _V2_CHANNELS
+from ..reconcile_v2 import reconcile_month
 from datetime import datetime as _dt
 from fastapi import Depends
 from fastapi import Form
@@ -556,8 +557,10 @@ def session_lane(session_id: int, category: str, bank: str, day: str | None = No
 
 
 def _build_export(conn, session) -> bytes:
-    """One workbook per session: Summary / Categories / Payout chain / Daily /
-    Discrepancies — the artifact an accountant signs off and files."""
+    """One workbook per session — the working paper an accountant signs off and files:
+    Summary / Tie-out & Sign-off / Categories / Payout chain / Daily / Discrepancies /
+    acknowledged variances / Cash 3-way / Coupon points, then the auditor's line-level
+    sheets: Line detail / Unmatched / Manual matches / Source documents (with SHA-256)."""
     import io
     import openpyxl
     from openpyxl.styles import Font
@@ -608,6 +611,41 @@ def _build_export(conn, session) -> bytes:
            ["Unmapped POS codes", ", ".join(u["code"] for u in
                                             [{"code": k} for k in sorted(unmapped)]) or "—"]],
           first=True)
+
+    # Tie-out & sign-off: channel-level POS → external → variance (the live
+    # reconcile_month, incl. acknowledged variances and the residual after per-day
+    # acks) + preparer/approver block — the front page an auditor reads first.
+    v2 = reconcile_month(conn, bid, pm)
+    _ST = {"ok": "ตรงกัน / Tied", "diff": "มีผลต่าง / Difference", "waiting_doc": "รอเอกสาร / Awaiting document",
+           "setup": "ต้องตั้งค่า / Setup needed"}
+    ws_so = sheet("Tie-out & Sign-off",
+                  ["ช่องทาง / Channel", "POS", "เงินเข้า / External", "ผลต่าง / Variance",
+                   "ผลต่างคงเหลือ / Residual", "สถานะ / Status", "รับทราบโดย / Accepted by",
+                   "เหตุผล / Reason"],
+                  [[c["label"], c["pos"], c["ext"], c["variance"], c.get("residual", c["variance"]),
+                    _ST.get(c["status"], c["status"]),
+                    (c.get("accepted") or {}).get("by") or "", (c.get("accepted") or {}).get("note") or ""]
+                   for c in v2["channels"]])
+    ws_so.append(["รวม / Total", round(sum(c["pos"] for c in v2["channels"]), 2),
+                  round(sum(c["ext"] for c in v2["channels"]), 2),
+                  round(sum(c["variance"] for c in v2["channels"]), 2), "", "", "", ""])
+    nr = v2["non_revenue"]
+    ws_so.append(["ไม่ใช่รายได้ (โอนภายใน/ตัดออก) / Non-revenue excluded credits",
+                  "", nr["amount"], "", "", f"{nr['count']} รายการ", "", ""])
+    ws_so.append(["ความคืบหน้า / Reconciled progress", "", "", "", "", f"{v2['progress_pct']}%", "", ""])
+    ws_so.append([])
+    ws_so.append(["สถานะงวด / Session status", session["status"]])
+    ws_so.append(["จัดทำโดย / Prepared by", session["created_by"] or "—",
+                  "วันที่ / Date", session["created_at"] or ""])
+    ws_so.append(["อนุมัติโดย / Approved by", session["approved_by"] or "—",
+                  "วันที่ / Date", session["approved_at"] or ""])
+    ws_so.append(["พิมพ์เมื่อ / Exported at", _dt.now().strftime("%Y-%m-%d %H:%M")])
+    ws_so.append([])
+    for th, en in (("ผู้จัดทำ", "Prepared by"), ("ผู้สอบทาน", "Reviewed by"),
+                   ("ผู้อนุมัติ", "Approved by")):
+        ws_so.append([f"ลงชื่อ{th} / Signature ({en})",
+                      "________________________", "วันที่ / Date", "____________"])
+    ws_so.column_dimensions["A"].width = 44
 
     sheet("Categories",
           ["Category", "Bank", "POS", "Statement", "Net (after fee/VAT)", "Variance", "Status"],
@@ -665,6 +703,123 @@ def _build_export(conn, session) -> bytes:
           [[r["issuer"], r["pos_point"], r["settle_gross"],
             ("in KTC deposit" if r["bank_in_credit"] else r["bank_payout"]),
             r["variance"], r["status"]] for r in ip])
+
+    # ── Working-paper detail sheets (auditor handoff) ─────────────────────────
+    # Line detail: every external document line behind the month with its match
+    # status — the population an auditor samples from. Statuses are the snapshot
+    # persisted by run-match (ส่งตรวจ/ปิดเดือน); 'manual' and 'excluded' are staff
+    # decisions, kept across re-runs.
+    def _f(v):
+        return round(float(v or 0), 2)
+
+    detail = []   # unified columns across the 4 line tables
+    for r in conn.execute("""
+        SELECT l.txn_date d, l.description ref, l.channel ch, l.debit, l.credit,
+               l.match_status ms, l.notes, u.provider, u.file_name
+        FROM recon_bank_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.txn_date)=?
+        ORDER BY l.txn_date, l.id""", (bid, pm)):
+        detail.append(["bank", r["provider"] or "", r["d"], r["ref"] or "", r["ch"] or "",
+                       _f(r["credit"]), _f(r["debit"]), "", "", "",
+                       r["ms"], r["notes"] or "", r["file_name"]])
+    for r in conn.execute("""
+        SELECT l.settlement_date d, l.batch_no ref, l.acquirer, l.card_type,
+               l.gross_amount, l.refund_amount,
+               COALESCE(l.fee_manual, l.mdr_fee) fee, COALESCE(l.vat_manual, l.vat_amount) vat,
+               l.match_status ms, l.notes, u.provider, u.file_name
+        FROM recon_cc_lines l JOIN recon_uploads u ON u.upload_id=l.upload_id
+        WHERE l.branch_id=? AND strftime('%Y-%m', l.settlement_date)=?
+        ORDER BY l.settlement_date, l.id""", (bid, pm)):
+        gross, refund, fee, vat = _f(r["gross_amount"]), _f(r["refund_amount"]), _f(r["fee"]), _f(r["vat"])
+        detail.append(["credit_card", r["provider"] or "", r["d"], r["ref"] or "",
+                       r["acquirer"] or r["card_type"] or "", gross, refund, fee, vat,
+                       round(gross - refund - fee - vat, 2),
+                       r["ms"], r["notes"] or "", r["file_name"]])
+    for src, table, vat_col in (("grab", "recon_grab_lines", "vat_amount"),
+                                ("lineman", "recon_lineman_lines", "vat_on_commission")):
+        for r in conn.execute(f"""
+            SELECT l.order_date d, l.order_id ref, l.order_status,
+                   l.food_amount, l.promo_deduct,
+                   COALESCE(l.fee_manual, l.commission_amt) fee,
+                   COALESCE(l.vat_manual, l.{vat_col}) vat,
+                   l.match_status ms, l.notes, u.file_name
+            FROM {table} l JOIN recon_uploads u ON u.upload_id=l.upload_id
+            WHERE l.branch_id=? AND strftime('%Y-%m', l.order_date)=?
+            ORDER BY l.order_date, l.id""", (bid, pm)):
+            food, promo, fee, vat = _f(r["food_amount"]), _f(r["promo_deduct"]), _f(r["fee"]), _f(r["vat"])
+            detail.append([src, "Grab" if src == "grab" else "LINE MAN", r["d"], r["ref"] or "",
+                           r["order_status"] or "", food, promo, fee, vat,
+                           round(food - promo - fee - vat, 2),
+                           r["ms"], r["notes"] or "", r["file_name"]])
+
+    detail_headers = ["แหล่ง / Source", "ผู้ให้บริการ / Provider", "วันที่ / Date",
+                      "อ้างอิง / Ref", "ช่องทาง / Channel", "เงินเข้า / Gross in",
+                      "เงินออก-คืน / Out-Refund", "ค่าธรรมเนียม / Fee", "VAT",
+                      "สุทธิ / Net", "สถานะจับคู่ / Match status",
+                      "หมายเหตุ / Note", "ไฟล์ / File"]
+    sheet("Line detail", detail_headers, detail)
+
+    # Unmatched & excluded: the exception listing auditors work through.
+    sheet("Unmatched", detail_headers,
+          [row for row in detail if row[10] in ("unmatched", "excluded")])
+
+    # Manual matches: every staff tick-to-match decision, one row per statement
+    # line, with the POS days it covers and who matched it.
+    ref_cols = {"recon_bank_lines":    ("txn_date", "description"),
+                "recon_cc_lines":      ("settlement_date", "batch_no"),
+                "recon_grab_lines":    ("order_date", "order_id"),
+                "recon_lineman_lines": ("order_date", "order_id")}
+    manual_rows = []
+    for m in conn.execute(
+            "SELECT * FROM recon_manual_match WHERE branch_id=? AND period_month=? "
+            "ORDER BY matched_at", (bid, pm)):
+        pos_days = "; ".join(f"{x.get('day')}: {float(x.get('amount') or 0):,.2f}"
+                             for x in json.loads(m["pos_days"] or "[]"))
+        lines = conn.execute(
+            "SELECT ext_table, ext_id, amount FROM recon_manual_match_line WHERE match_id=?",
+            (m["match_id"],)).fetchall() or [None]
+        for ln in lines:
+            d = ref = ""
+            if ln is not None and ln["ext_table"] in ref_cols:
+                dcol, rcol = ref_cols[ln["ext_table"]]
+                hit = conn.execute(f"SELECT {dcol} d, {rcol} ref FROM {ln['ext_table']} WHERE id=?",
+                                   (ln["ext_id"],)).fetchone()
+                if hit:
+                    d, ref = hit["d"], hit["ref"] or ""
+            manual_rows.append([m["match_id"], m["category"], m["bank"], pos_days,
+                                m["pos_amount"], d, ref,
+                                (ln["amount"] if ln is not None else m["ext_amount"]),
+                                m["variance"], m["note"] or "",
+                                m["matched_by"] or "", m["matched_at"]])
+    sheet("Manual matches",
+          ["Match", "ช่องทาง / Category", "ธนาคาร / Bank", "วัน POS / POS days",
+           "ยอด POS / POS amount", "วันที่เอกสาร / Doc date", "อ้างอิง / Ref",
+           "ยอดเอกสาร / Doc amount", "ผลต่าง / Variance", "หมายเหตุ / Note",
+           "จับคู่โดย / By", "เมื่อ / At"],
+          manual_rows)
+
+    # Source documents: which uploads the numbers come from. The SHA-256 hash
+    # proves a file handed to the auditor is bit-identical to what was ingested.
+    ws_docs = sheet("Source documents",
+                    ["ID", "ประเภท / Type", "ผู้ให้บริการ / Provider", "ไฟล์ / File",
+                     "จำนวนแถว / Rows", "สถานะ / Status", "อัปโหลดเมื่อ / Uploaded at",
+                     "SHA-256"],
+                    [[u["upload_id"], u["source_type"], u["provider"] or "", u["file_name"],
+                      u["row_count"], u["status"], u["uploaded_at"], u["file_hash"] or ""]
+                     for u in conn.execute(
+                        "SELECT * FROM recon_uploads WHERE branch_id=? AND period_month=? "
+                        "ORDER BY uploaded_at", (bid, pm))])
+    atts = conn.execute(
+        "SELECT * FROM recon_attachment WHERE branch_id=? AND strftime('%Y-%m', day)=? "
+        "ORDER BY day", (bid, pm)).fetchall()
+    if atts:
+        ws_docs.append([])
+        ws_docs.append(["หลักฐานแนบ / Evidence attachments"])
+        ws_docs.append(["วันที่ / Day", "ช่องทาง / Category", "ไฟล์ / File",
+                        "หมายเหตุ / Note", "โดย / By", "เมื่อ / At"])
+        for a in atts:
+            ws_docs.append([a["day"], a["category"] or "", a["file_name"],
+                            a["note"] or "", a["uploaded_by"] or "", a["uploaded_at"]])
 
     buf = io.BytesIO()
     wb.save(buf)
