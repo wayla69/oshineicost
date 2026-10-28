@@ -6,7 +6,7 @@ the helpers only they use, unchanged. URLs are unchanged.
 """
 from fastapi import APIRouter
 from fastapi import Depends
-from core import get_db, is_branch_session, require_write_token, write_gate_on
+from core import get_db, is_token_free_session, require_write_token, write_gate_on
 from fastapi import HTTPException
 from fastapi import Request
 from fastapi import Response
@@ -133,10 +133,10 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
 def auth_token_check(request: Request):
     """Does this browser hold a write token the server accepts? Writes nothing.
     403 (X-Denied: token) when not; {gated: false} when no token is configured
-    (local dev) or for a branch login, which never needs one (core.is_branch_session)
+    (local dev) or for a login whose role never needs one (core.is_token_free_session)
     so its page shows no ปลดล็อกการบันทึก chip. Under /api/auth/ so every logged-in
     role can check before its first save."""
-    return {"ok": True, "gated": write_gate_on() and not is_branch_session(request)}
+    return {"ok": True, "gated": write_gate_on() and not is_token_free_session(request)}
 
 
 @router.post("/api/auth/me/password", include_in_schema=False)
@@ -200,7 +200,7 @@ def auth_me(request: Request):
             "names": names,                                  # {login: name shown on screens}, for whoTh() in the pages
             "branch": row["branch"] if "branch" in row.keys() else None,
             "must_change": bool(row["must_change"]),
-            "write_gated": write_gate_on() and not is_branch_session(request),
+            "write_gated": write_gate_on() and not is_token_free_session(request),
             "modules": sorted(_auth.modules_for_role(row["role"])),
             "rules": _auth.client_rules(), "open_to_all": list(_auth.OPEN_TO_ALL)}   # PL3: see the login answer above
 

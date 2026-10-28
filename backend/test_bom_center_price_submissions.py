@@ -229,9 +229,7 @@ def _http_flow(app_db):
     assert pv.json()["dry_run"] is True and pv.json()["priced"] == 1 and pv.json()["month"] == "2098-03"
     assert _db_count(app_db, price_rows) == 0
     assert an.get(f"/api/bom-center/prices/submissions?status=pending").json()["submissions"][0]["status"] == "pending"
-    # the real import is gated, and a rejection needs a reason
-    d = an.post(f"/api/bom-center/prices/submissions/{sid}/import?dry_run=false")
-    assert d.status_code == 403 and d.headers.get("X-Denied") == "token"
+    # a rejection needs a reason
     d = an.post(f"/api/bom-center/prices/submissions/{sid}/reject", json={"note": " "}, headers=TOKEN)
     assert d.status_code == 400 and "เหตุผล" in d.json()["detail"]
     assert _db_count(app_db, price_rows) == 0

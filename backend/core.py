@@ -757,11 +757,30 @@ def is_branch_session(request: Request) -> bool:
         return False
 
 
+def is_token_free_session(request: Request) -> bool:
+    """True for a signed-in login whose role saves without the owner write-token
+    (auth.TOKEN_FREE_ROLES: the branch, warehouse, kitchen and analyst teams — owner,
+    2026-10-28). Each already works under its own login and role rules, so the token
+    only added a trip per browser. A branch login still needs its branch. Role is the
+    LIVE account's, so a login moved off such a role needs the token again at once."""
+    try:
+        import auth as _auth
+        if not _auth.auth_enabled():
+            return False
+        s = _auth.live_session(request)
+        role = s.get("r")
+        if role == "branch":
+            return bool(s.get("b"))
+        return role in _auth.TOKEN_FREE_ROLES
+    except Exception:
+        return False
+
+
 def require_write_token(
     request: Request,
     x_upload_token: str = Header(None),
 ):
-    if is_branch_session(request):
+    if is_token_free_session(request):
         return
     toks = _accepted_tokens()
     if toks and not _token_accepted(x_upload_token or ""):

@@ -355,21 +355,18 @@ def _file(rows):
 
 def test_http_roles_token_and_preview(web, auth_on):
     an, ac, mg, br = _login("analyst1"), _login("accounting1"), _login("management1"), None
-    # the analyst imports: a preview needs no token and writes nothing; the real import needs the owner token
+    # the analyst imports: a preview writes nothing; the real import needs no token (analyst login, owner 2026-10-28)
     r = an.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=true", files=_file([["DCW-1", "x", 15, ""]]))
     assert r.status_code == 200 and r.json()["imported"] == 1 and r.json()["dry_run"] is True
     assert r.json()["sold_without_cost"] == [] or r.json()["sold_without_cost"][0]["code"] != "DCW-1"
     assert sqlite3.connect(str(web)).execute("SELECT COUNT(*) FROM bc_sku_cost_list").fetchone()[0] == 0
     r = an.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=false", files=_file([["DCW-1", "x", 15, ""]]))
-    assert r.status_code == 403 and r.headers.get("X-Denied") == "token"
-    r = an.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=false", files=_file([["DCW-1", "x", 15, ""]]), headers=TOKEN)
     assert r.status_code == 200 and r.json()["imported"] == 1 and r.json()["format"] == "แม่แบบต้นทุนต่อจาน"
     # a bad month and a missing header are refused in Thai
     assert an.post("/api/bom-center/dish-cost/import?month=2026-08&dry_run=true", files=_file([])).json()["detail"].startswith("ต้นทุนต่อจานเริ่มได้")
     assert an.post("/api/bom-center/dish-cost/import?month=2026-10&dry_run=true", files={"file": ("a.xlsx", _xlsx([["x"], [1]]))}).status_code == 400
     # the analyst edits one row
-    assert an.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 16}).headers.get("X-Denied") == "token"
-    r = an.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 16, "note": "ปรับ"}, headers=TOKEN)
+    r = an.post("/api/bom-center/dish-cost/edit", json={"month": "2026-10", "sku_code": "DCW-1", "unit_cost": 16, "note": "ปรับ"})
     assert r.status_code == 200 and r.json()["unit_cost"] == 16
     # reading: the analyst, accounting and management
     for who in (an, ac, mg):
