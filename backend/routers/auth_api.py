@@ -304,6 +304,15 @@ def auth_role_permissions_get(request: Request):
         }
 
 
+@router.delete("/api/auth/role-permissions", include_in_schema=False)
+def auth_role_permissions_reset(request: Request):
+    """Back to the code defaults (auth.ROLE_MODULES) for every role; management only."""
+    _require_admin(request)
+    with get_db() as con:
+        _auth.reset_role_permissions(con)
+        return {"ok": True, "permissions": _auth.get_role_permissions(con)}
+
+
 @router.put("/api/auth/role-permissions", include_in_schema=False)
 def auth_role_permissions_put(request: Request, body: RolePermissionsBody):
     _require_admin(request)

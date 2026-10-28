@@ -94,11 +94,10 @@ ROLE_MODULES: Dict[str, Set[str]] = {
         "franchise.inbox",   # PR-F4: Operations answers the franchise owners beside management (routers/franchise_msgs.py)
     },
     "analyst": {
-        # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". ops.discounts + ops.posextra were an intentional widening until
-        # 2026-10-28; the owner then asked for each department to see its own pages, so the operations
-        # pages (ส่วนลด, บิลยกเลิก, POS เชิงลึก) are operation's again. Tick them back in the live matrix if needed.
+        # Brief = "วิเคราะห์ยอดขาย + ต้นทุน". Owner 2026-10-28: the analyst keeps ส่วนลด (discount leakage is
+        # analysis work); the POS detail pages (บิลยกเลิก, ความต้องการพิเศษ, ราคาและโซน, ปิดร้าน) are operation's.
         "sales.overview", "customer.buffet", "menu.analysis", "cost.analysis",
-        "cost.simulator", "profit.pnl",
+        "cost.simulator", "profit.pnl", "ops.discounts",
         "report.export", "customer.feedback",
         "bom.center", "bom.release",   # owner 2026-10-06: the analyst maintains prices/recipes and RELEASES
     },
@@ -189,6 +188,14 @@ def get_role_permissions(con: sqlite3.Connection) -> Dict[str, List[str]]:
     if _perm_cache is not None:
         return {r: sorted(_perm_cache.get(r, set())) for r in ROLES}
     return {r: sorted(ROLE_MODULES.get(r, set())) for r in ROLES}
+
+
+def reset_role_permissions(con: sqlite3.Connection) -> None:
+    """Drop the saved matrix so every role is back on ROLE_MODULES (owner 2026-10-28: the permissions page offers
+    this as one click, because a saved matrix keeps winning over a default that later changes in code)."""
+    con.execute("DELETE FROM app_settings WHERE key='role_permissions'")
+    con.commit()
+    refresh_perm_cache(con)
 
 
 def set_role_permissions(con: sqlite3.Connection, perms: Dict[str, List[str]]) -> None:

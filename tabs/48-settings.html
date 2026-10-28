@@ -169,6 +169,7 @@
           <div class="text-xs font-semibold" style="color:var(--text-secondary)">สิทธิ์ของแต่ละบทบาท (แต่ละบทบาทเห็น modules ตามนี้)</div>
           <div class="flex items-center gap-2">
             <span id="permSaveStatus" class="text-xs"></span>
+            <button onclick="resetRolePermissions()" id="permResetBtn" class="hidden text-xs px-3 py-1 rounded-lg font-medium" style="border:1px solid var(--border-control);color:var(--text-primary)" title="แทนที่ตารางสิทธิ์ที่บันทึกไว้ด้วยค่าตั้งต้นของระบบ">ใช้ค่าตั้งต้นของระบบ</button>
             <button onclick="saveRolePermissions()" id="permSaveBtn" class="hidden text-xs px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg font-medium">บันทึกสิทธิ์</button>
           </div>
         </div>

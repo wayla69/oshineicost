@@ -235,8 +235,22 @@ def test_management_report_is_its_own_module():
         for role in ("analyst", "marketing", "operation", "accounting", "innovation", "salessupport"):
             assert auth.path_allowed("GET", path, auth.modules_for_role(role)) is False, (role, path)
     assert "report.management" in auth.MODULES and auth.ROLE_MODULES["management"] >= {"report.management"}
-    # the operations pages went back to operation
-    assert not auth.ROLE_MODULES["analyst"] & {"ops.discounts", "ops.posextra"}
+    # the POS detail pages went back to operation; the analyst keeps ส่วนลด (owner 2026-10-28)
+    assert "ops.posextra" not in auth.ROLE_MODULES["analyst"] and "ops.discounts" in auth.ROLE_MODULES["analyst"]
+
+
+def test_role_permissions_reset_returns_to_code_defaults(client, app_db, auth_on):
+    """The permissions page's "ใช้ค่าตั้งต้นของระบบ": DELETE drops the saved matrix (management only)."""
+    mg = _fresh(app_db); _login(mg, "management1")
+    custom = {r: sorted(auth.ROLE_MODULES[r]) for r in auth.ROLES}
+    custom["marketing"] = sorted(set(custom["marketing"]) | {"ops.discounts"})
+    assert mg.put("/api/auth/role-permissions", json={"permissions": custom}).status_code == 200
+    assert "ops.discounts" in auth.modules_for_role("marketing")
+    mk = _fresh(app_db); _login(mk, "marketing1")
+    assert mk.delete("/api/auth/role-permissions").status_code == 403
+    r = mg.delete("/api/auth/role-permissions")
+    assert r.status_code == 200 and "ops.discounts" not in r.json()["permissions"]["marketing"]
+    assert auth.modules_for_role("marketing") == auth.ROLE_MODULES["marketing"]
 
 
 # ── red-set: admin self-lockout guards ──────────────────────────────────────
