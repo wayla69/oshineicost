@@ -405,29 +405,31 @@ def test_docs_requires_login_when_auth_on(client, app_db, auth_on):
 
 
 # ── Sales Support role + create/reset without typing a password ─────────────
-def test_admin_can_create_user_with_no_password_on_the_default(client, app_db, auth_on):
+def test_admin_can_create_user_with_no_password_on_a_temp_password(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")
     r = mg.post("/api/auth/users", json={"username": "ss_new", "role": "salessupport"})
     assert r.status_code == 200, r.text
-    assert r.json()["default_password"] == DEFAULT_PW              # admin is told what to pass on
+    tmp = r.json()["temp_password"]                                # admin is told what to pass on (its own, not the default)
+    assert tmp and tmp != DEFAULT_PW
     u = _fresh(app_db)
-    assert _login(u, "ss_new").json()["must_change"] is True       # forced off it at first login
-    # the forced change works from the default, and the default is refused as the NEW one
+    assert _login(u, "ss_new", tmp).json()["must_change"] is True  # forced off it at first login
+    # the forced change works from the temporary password, and the shared default is refused as the NEW one
     assert u.post("/api/auth/me/password",
-                  json={"current_password": DEFAULT_PW, "new_password": DEFAULT_PW}).status_code == 400
+                  json={"current_password": tmp, "new_password": DEFAULT_PW}).status_code == 400
     assert u.post("/api/auth/me/password",
-                  json={"current_password": DEFAULT_PW, "new_password": "MyOwnPass#99"}).status_code == 200
-    # admin 'reset to default' re-arms it
-    assert mg.put("/api/auth/users/ss_new", json={"reset_default": True}).status_code == 200
+                  json={"current_password": tmp, "new_password": "MyOwnPass#99"}).status_code == 200
+    # admin reset hands out a new temporary password and re-arms the change
+    r = mg.put("/api/auth/users/ss_new", json={"reset_default": True})
+    assert r.status_code == 200 and r.json()["temp_password"]
     u2 = _fresh(app_db)
-    assert _login(u2, "ss_new").json()["must_change"] is True
+    assert _login(u2, "ss_new", r.json()["temp_password"]).json()["must_change"] is True
     mg.delete("/api/auth/users/ss_new")
 
 
 def test_sales_support_sees_the_supply_cluster_and_not_chain_cost(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")
-    mg.post("/api/auth/users", json={"username": "ss_scope", "role": "salessupport"})
-    u = _fresh(app_db); _login(u, "ss_scope")
+    tmp = mg.post("/api/auth/users", json={"username": "ss_scope", "role": "salessupport"}).json()["temp_password"]
+    u = _fresh(app_db); _login(u, "ss_scope", tmp)
     assert "supply.ordering" in u.get("/api/auth/me").json()["modules"]
     assert u.get("/api/ingredients/purchases").status_code == 200
     assert u.get("/api/ingredients/purchases.template.xlsx", params={"weeks": 1}).status_code == 200

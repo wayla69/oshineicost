@@ -57,11 +57,11 @@ def main(argv=None) -> int:
     ap.add_argument("--branch", default=None,
                     help="confine this login to one branch (default: the whole chain)")
     ap.add_argument("--password", default=None,
-                    help="temporary password to set instead of the shared default "
+                    help="temporary password to set instead of a random one "
                          f"(must be ≥ {_auth.MIN_PASSWORD_LEN} chars)")
     ap.add_argument("--reset", action="store_true",
-                    help="if the account already exists, put its password back to the "
-                         "default and re-arm the forced change")
+                    help="if the account already exists, give it a new temporary password and "
+                         "re-arm the forced change")
     ap.add_argument("--db", default=os.environ.get("OSHINEI_DB", str(HERE / "oshinei.db")),
                     help="path to oshinei.db (default: $OSHINEI_DB or backend/oshinei.db)")
     args = ap.parse_args(argv)
@@ -85,10 +85,10 @@ def main(argv=None) -> int:
     finally:
         con.close()
 
-    shown = args.password or _auth.DEFAULT_PASSWORD
+    shown = args.password or _auth.last_temp_password()
     if outcome == "exists":
         print(f"[provision] {args.username} already exists — unchanged "
-              f"(use --reset to hand out the default password again)")
+              f"(use --reset to give it a new temporary password)")
     else:
         verb = "created" if outcome == "created" else "password reset for"
         print(f"[provision] {verb} {args.username} (role={args.role}, "

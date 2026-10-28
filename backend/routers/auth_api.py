@@ -108,11 +108,14 @@ def auth_login(body: _LoginBody, request: Request, response: Response):
         raise HTTPException(status_code=429,
             detail="พยายามเข้าสู่ระบบบ่อยเกินไป — รอสักครู่แล้วลองใหม่.")
     with get_db() as con:
-        row = _auth.authenticate(con, body.username, body.password)
+        refused = _auth.default_refused(body.password)    # the shared default never signs in on the live server
+        row = None if refused else _auth.authenticate(con, body.username, body.password)
         if not row:
             _auth.record_login_failure(ip, body.username)
             _log_auth_event(con, "login_fail", body.username, ip)
-            raise HTTPException(status_code=401, detail="ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง.")
+            raise HTTPException(status_code=401, detail=(
+                "รหัสผ่านเริ่มต้นเดิมยกเลิกแล้ว กรุณาขอรหัสผ่านชั่วคราวของบัญชีนี้จากผู้ดูแลระบบ" if refused
+                else "ชื่อผู้ใช้หรือรหัสผ่านไม่ถูกต้อง."))
         _auth.clear_login_failures(ip, body.username)
         _log_auth_event(con, "login", row["username"], ip)
     branch = row["branch"] if "branch" in row.keys() else None
@@ -220,14 +223,15 @@ def auth_users_create(body: _UserCreate, request: Request):
             if body.password:
                 _auth.create_user(con, body.username, body.password, body.role, branch=body.branch)
             else:
-                # No password typed → the seeding path: shared default + must_change,
+                # No password typed → a random temporary password of its own + must_change,
                 # so the person sets their own on first login.
                 _auth.provision_user(con, body.username, body.role, branch=body.branch)
+                temp = _auth.last_temp_password()
             if body.display_name:
                 _auth.update_user(con, body.username, display_name=body.display_name)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True, "default_password": None if body.password else _auth.DEFAULT_PASSWORD}
+    return {"ok": True, "temp_password": None if body.password else temp}
 
 
 @router.put("/api/auth/users/{username}", include_in_schema=False)
@@ -252,15 +256,17 @@ def auth_users_update(username: str, body: _UserUpdate, request: Request):
                 if _auth.count_active_admins(con) <= 1:
                     raise HTTPException(status_code=400,
                         detail="ต้องมีผู้ดูแล (Management) ที่ใช้งานได้อย่างน้อย 1 บัญชี.")
-            if body.reset_default:
+            temp = None
+            if body.reset_default:                # a new random temporary password, shown once to the admin
                 _auth.provision_user(con, username, target["role"], reset_existing=True)
+                temp = _auth.last_temp_password()
             _auth.update_user(con, username, role=body.role,
                               password=body.password, active=body.active,
                               branch=(body.branch if body.branch is not None else _auth.UNSET),
                               display_name=(body.display_name if body.display_name is not None else _auth.UNSET))
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-    return {"ok": True}
+    return {"ok": True, "temp_password": temp}
 
 
 @router.delete("/api/auth/users/{username}", include_in_schema=False)

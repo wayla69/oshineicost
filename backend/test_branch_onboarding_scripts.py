@@ -27,7 +27,34 @@ def _load(name):
 BL = _load("branch_list")
 HO = _load("branch_handout")
 AC = _load("branch_accounts")
-PW = auth.DEFAULT_PASSWORD
+PW = "tmpx-pass-test"          # the handout's per-account temporary password (code guard 2: never the shared default)
+
+
+class _AnyPw(dict):
+    """temp_passwords.csv as the handout reads it, holding every login (each on PW)."""
+    def __contains__(self, k):
+        return True
+
+    def __getitem__(self, k):
+        return PW
+
+
+@pytest.fixture(autouse=True)
+def _passwords_file(monkeypatch):
+    monkeypatch.setattr(HO, "read_passwords", lambda path: _AnyPw())
+
+
+def test_the_handout_reads_each_logins_own_password(tmp_path, monkeypatch):
+    monkeypatch.undo()
+    f = tmp_path / "temp_passwords.csv"
+    f.write_text("username,role,branch,password\nwh_t1,branch,ก,aaaa-bbbb-cccc\nwh_t2,branch,ข,\n", encoding="utf-8-sig")
+    assert HO.read_passwords(str(f)) == {"wh_t1": "aaaa-bbbb-cccc"}
+    with pytest.raises(SystemExit):
+        HO.read_passwords(None)
+    p = _csv(tmp_path, "สาขา,ตัวย่อ\nก,t1\nข,t2\n")
+    HO.main(["--list", str(p), "--out", str(tmp_path / "o"), "--passwords", str(f)])
+    assert [x.name for x in (tmp_path / "o").glob("wh_*.txt")] == ["wh_t1.txt"]           # wh_t2 has no password: no handout
+    assert "aaaa-bbbb-cccc" in (tmp_path / "o" / "wh_t1.txt").read_text(encoding="utf-8")
 
 
 def _csv(tmp_path, text, name="list.csv"):
@@ -410,8 +437,10 @@ def test_creating_logins_against_the_app(client, app_db):
         again = AC.run(_ClientApi(client), rows, apply=True)               # a second run changes nothing
         assert [p["result"] for p in again] == [BL.R_EXISTS, BL.R_EXISTS]
         got = c.execute("SELECT role, branch, must_change FROM app_user WHERE username='pi_script_a'").fetchone()
-        assert got == ("branch", names[0], 1)                              # a branch login that must change the default password
-        assert auth.verify_password(PW, *c.execute("SELECT pw_hash, pw_salt FROM app_user WHERE username='pi_script_a'").fetchone())
+        assert got == ("branch", names[0], 1)                              # a branch login that must change its temporary password
+        pw = plan[0]["password"]                                           # the server's answer, kept for temp_passwords.csv
+        assert pw and pw != auth.DEFAULT_PASSWORD
+        assert auth.verify_password(pw, *c.execute("SELECT pw_hash, pw_salt FROM app_user WHERE username='pi_script_a'").fetchone())
     finally:
         c.execute("DELETE FROM app_user WHERE username LIKE 'pi_script_%'")
         c.execute("DELETE FROM branches WHERE branch_id IN (9101, 9102)")

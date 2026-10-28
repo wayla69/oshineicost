@@ -1,14 +1,16 @@
 # -*- coding: utf-8 -*-
 """Branch handout: one ready-to-send message and one printable card per branch.
 
-The branch logins (วัตถุดิบและใบสั่งซื้อ) exist with the system's default password and must change
+The branch logins (วัตถุดิบและใบสั่งซื้อ) each have their own temporary password and must change
 it at first sign-in. This script writes what each branch needs to get started - address, username,
 starting password, the first steps - so the owner can send it through the channel the branch already
 uses (LINE, a printed card).
 
-It sends NOTHING by itself and it never touches the live system. The starting password is read from
-backend/auth.py at run time (never copied into the repo); the output folder is OUTSIDE the repo for that
-reason. A branch login saves without the owner write-token (2026-10-08), so no unlock step or code is
+It sends NOTHING by itself and it never touches the live system. The starting passwords come from
+--passwords: temp_passwords.csv, written by branch_accounts.py --yes or printed by
+backend/rotate_default_passwords.py --yes (code guard 2, 2026-10-28: the shared default no longer signs in
+on the live server). A login missing from that file gets no handout. The output folder is OUTSIDE the repo
+for that reason. A branch login saves without the owner write-token (2026-10-08), so no unlock step or code is
 part of any handout.
 
 Which branches (the list is the same file branch_accounts.py reads):
@@ -22,6 +24,7 @@ Which branches (the list is the same file branch_accounts.py reads):
     py -3.12 scripts/branch_handout.py --role franchise --list D:/onboarding/owner_accounts_result.csv
                                                                                  # the franchise owners' messages and cards (own_<ตัวย่อ>, page ร้านของฉัน)
 
+    --passwords FILE  temp_passwords.csv (username,role,branch,password) - required
     --out DIR     default ~/Oshinei_branch_handout
     --db FILE     a COPY of the database: resolves branch ids for rows with neither a username nor an abbreviation (wh_<id>)
 
@@ -31,7 +34,6 @@ branch id (--db), or take it from accounts_result.csv, which branch_accounts.py 
 """
 import argparse
 import html
-import re
 import sqlite3
 import sys
 from datetime import date
@@ -46,12 +48,17 @@ BRANCHES = [(abbr, name, BL.PREFIX + abbr) for name, abbr in BL.PILOT_ABBRS.item
 PER_PAGE = 4                       # cards on one A4 page (2 x 2)
 
 
-def default_password() -> str:
-    src = (ROOT / "backend" / "auth.py").read_text(encoding="utf-8")
-    m = re.search(r'^DEFAULT_PASSWORD\s*=\s*"([^"]+)"', src, re.M)
-    if not m:
-        sys.exit("DEFAULT_PASSWORD not found in backend/auth.py")
-    return m.group(1)
+def read_passwords(path) -> dict:
+    """username -> temporary password, from temp_passwords.csv."""
+    import csv
+    if not path:
+        sys.exit("ต้องระบุ --passwords (temp_passwords.csv) แต่ละบัญชีมีรหัสผ่านชั่วคราวของตนเอง")
+    p = Path(path)
+    if not p.exists():
+        sys.exit(f"ไม่พบไฟล์รหัสผ่าน {p}")
+    with open(p, encoding="utf-8-sig", newline="") as f:
+        return {r["username"].strip(): r["password"].strip() for r in csv.DictReader(f)
+                if (r.get("username") or "").strip() and (r.get("password") or "").strip()}
 
 
 def message(name: str, user: str, pw: str) -> str:
@@ -255,6 +262,7 @@ def main(argv=None) -> None:
     ap.add_argument("--role", choices=("branch", "franchise"), default="branch",
                     help="branch = ข้อความและบัตรของทีมสาขา (ค่าเริ่มต้น) · franchise = ข้อความและบัตรของเจ้าของสาขา (own_<ตัวย่อ>, หน้า ร้านของฉัน)")
     ap.add_argument("--template", action="store_true", help="เขียนไฟล์ตัวอย่าง branch_list_template.xlsx (สาขานำร่อง 5 แถว) แล้วจบ")
+    ap.add_argument("--passwords", help="temp_passwords.csv (username,role,branch,password) จาก branch_accounts.py หรือ rotate_default_passwords.py")
     a = ap.parse_args(argv)
     out = Path(a.out)
     out.mkdir(parents=True, exist_ok=True)
@@ -264,20 +272,23 @@ def main(argv=None) -> None:
         return
     if a.list and a.all:
         sys.exit("เลือกอย่างใดอย่างหนึ่ง: --list หรือ --all")
-    pw = default_password()
     todo = build_entries(a)
+    pws = read_passwords(a.passwords)
+    for e in [e for e in todo if e["username"] not in pws]:
+        print(f"  ข้าม: {e['branch']} ({e['username']} ไม่มีรหัสผ่านชั่วคราวในไฟล์ {a.passwords})")
+    todo = [e for e in todo if e["username"] in pws]
     if not todo:
         sys.exit("ไม่มีสาขาให้สร้างข้อความ")
     owner = a.role == "franchise"
     make_msg, make_card = (owner_message, owner_card) if owner else (message, card)
     for e in todo:
-        (out / f"{e['username']}.txt").write_text(make_msg(e["branch"], e["username"], pw), encoding="utf-8")
-    (out / "cards.html").write_text(PAGE.format(sheets=sheets_html([make_card(e["branch"], e["username"], pw) for e in todo])), encoding="utf-8")
+        (out / f"{e['username']}.txt").write_text(make_msg(e["branch"], e["username"], pws[e["username"]]), encoding="utf-8")
+    (out / "cards.html").write_text(PAGE.format(sheets=sheets_html([make_card(e["branch"], e["username"], pws[e["username"]]) for e in todo])), encoding="utf-8")
     pages = -(-len(todo) // PER_PAGE)
     lines = [f"สร้างเมื่อ {date.today().isoformat()} · {len(todo)} สาขา",
              "- <ชื่อผู้ใช้>.txt = ข้อความพร้อมส่ง (LINE/อีเมล) ส่งให้เฉพาะสาขานั้น",
              f"- cards.html = บัตรพิมพ์ A4 แนวตั้ง หน้าละ {PER_PAGE} ใบ ({pages} หน้า) เปิดในเบราว์เซอร์แล้วสั่งพิมพ์ ตัดตามเส้นประ",
-             "- โฟลเดอร์นี้มีรหัสผ่านเริ่มต้น ลบหลังแจกเสร็จ ห้ามอัปโหลดขึ้น GitHub",
+             "- โฟลเดอร์นี้มีรหัสผ่านชั่วคราวของแต่ละบัญชี ส่งให้เฉพาะสาขานั้น ลบหลังแจกเสร็จ ห้ามอัปโหลดขึ้น GitHub",
              ("- บัญชีเจ้าของสาขาดูผลของสาขาตนเองได้อย่างเดียว ไม่มีการบันทึกข้อมูล จึงไม่ต้องปลดล็อกเครื่อง" if owner else
               "- สาขาไม่ต้องปลดล็อกเครื่อง: บัญชีสาขาบันทึกได้ทันที (ตั้งแต่ 8 ต.ค. 2569)"),
              "", "ไฟล์ · สาขา · ส่งถึง"]

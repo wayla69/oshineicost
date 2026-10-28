@@ -18,8 +18,9 @@ What it does, per row:
   2. skips a row whose login already exists, or whose branch already has a login (a second login for
      the same branch is never created; the existing one is reported) - unless --replace-logins / --replace-pilot;
   3. otherwise POST /api/auth/users {role: branch, branch: <name>} WITHOUT a password, so the server
-     gives the shared default password and forces a change at first sign-in. The password is not
-     read, sent or printed by this script (branch_handout.py puts it on the cards).
+     gives the login its own random temporary password and forces a change at first sign-in. The
+     server answers that password once; the script writes it to temp_passwords.csv next to the list
+     (never printed; branch_handout.py --passwords puts it on the cards).
 409 from the server counts as "already exists". Writes accounts_result.csv next to the list (only with --yes).
 
 The franchise owners (PR-L): the same list with `--role franchise` creates ONE read-only login per branch, own_<ตัวย่อ>
@@ -39,7 +40,7 @@ Short logins (owner 2026-10-27): the logins made on 2026-10-22 carry long names 
 and become wh_<3-letter code> (wh_cnx, wh_npm ...). --replace-logins generalises --replace-pilot: for each row, every
 active branch login of that branch that is not the wanted wh_<ตัวย่อ> is old - the long wh_* names and the branch_*
 pilot logins alike. The same two steps:
-  run 1  --replace-logins --yes : creates wh_<ตัวย่อ> (no password sent: server default + forced change); old ones stay on
+  run 1  --replace-logins --yes : creates wh_<ตัวย่อ> (no password sent: own temporary password + forced change); old ones stay on
   (send the new handout)
   run 2  --replace-logins --yes : the new login now exists, so each old login is switched off (active false, never deleted)
 Without --yes, --replace-logins prints the plan per branch (สร้าง / ปิด / คงไว้) and changes nothing.
@@ -211,6 +212,7 @@ def run(api, rows: list, apply: bool, replace_pilot: bool = False, role: str = "
             st, js, text = api.request("POST", "/api/auth/users", {"username": p["username"], "role": role, "branch": p["branch"]})
             if st == 200:
                 p["result"] = BL.R_CREATED
+                p["password"] = (js or {}).get("temp_password") or "" if isinstance(js, dict) else ""
             elif st == 409:
                 p["result"], p["note"] = BL.R_EXISTS, "มีบัญชีนี้อยู่แล้ว"
             else:
@@ -231,7 +233,7 @@ def run(api, rows: list, apply: bool, replace_pilot: bool = False, role: str = "
 
 def keep_created(plan: list, dest: Path) -> None:
     """A re-run finds the logins it made earlier and reports them 'already exists'. The earlier result file
-    remembers which ones this script created (and so still carry the default password): keep that mark,
+    remembers which ones this script created (and so still carry their temporary password): keep that mark,
     otherwise the handout would skip them."""
     if not dest.exists():
         return
@@ -242,6 +244,22 @@ def keep_created(plan: list, dest: Path) -> None:
     for p in plan:
         if p["result"] == BL.R_EXISTS and (p["branch"], p["username"]) in before:
             p["result"], p["note"] = BL.R_CREATED, "สร้างไว้ในการรันก่อนหน้า"
+
+
+def write_passwords(path: Path, plan: list, role: str) -> None:
+    """temp_passwords.csv: username,role,branch,password - the same columns backend/rotate_default_passwords.py prints.
+    Rows already in the file (an earlier run) are kept; a login made again gets its new password."""
+    import csv
+    rows = {}
+    if path.exists():
+        with open(path, encoding="utf-8-sig", newline="") as f:
+            rows = {r["username"]: r for r in csv.DictReader(f) if r.get("username")}
+    for p in plan:
+        rows[p["username"]] = {"username": p["username"], "role": role, "branch": p["branch"], "password": p["password"]}
+    with open(path, "w", encoding="utf-8-sig", newline="") as f:
+        w = csv.DictWriter(f, fieldnames=["username", "role", "branch", "password"])
+        w.writeheader()
+        w.writerows(rows.values())
 
 
 def print_table(plan: list) -> None:
@@ -313,7 +331,13 @@ def main(argv=None) -> int:
     if a.yes:
         out = BL.write_result(dest, plan)
         print(f"เขียนผลลัพธ์ที่ {out}")
-        print("ขั้นต่อไป: py -3.12 scripts\\branch_handout.py " + ("--role franchise " if a.role == "franchise" else "") + f'--list "{out}"')
+        made = [p for p in plan if p.get("password")]
+        pwf = dest.with_name("temp_passwords.csv")
+        if made:
+            write_passwords(pwf, made, a.role)
+            print(f"รหัสผ่านชั่วคราว {len(made)} บัญชีอยู่ที่ {pwf} (ไฟล์เดียวที่มีรหัส ห้ามอัปโหลด ลบหลังแจกเสร็จ)")
+        print("ขั้นต่อไป: py -3.12 scripts\\branch_handout.py " + ("--role franchise " if a.role == "franchise" else "")
+              + f'--list "{out}" --passwords "{pwf}"')
         if any(p["retire"] and p["action"] == "create" for p in plan):
             print("บัญชีเดิมยังใช้งานได้ หลังส่งข้อความแจกสาขาแล้ว รันคำสั่งเดิมซ้ำอีกครั้งเพื่อปิดบัญชีเดิม")
     else:

@@ -365,12 +365,18 @@ async def enforce_auth(request: Request, call_next):
     request.state.auth_user = _auth.identity_from_row(row)
     if docs_req or code_req:                       # any active user may read docs (the code is marked per login)
         return await call_next(request)
-    # a session walking far more distinct API paths than a person does is recorded (not blocked:
-    # a fast manager is not a crawler, and the admins see it)
+    # a session walking far more distinct API paths than a person does is recorded. A branch's own login
+    # (whose pages are few) is also held for 30 minutes and signed out; head office is only recorded (a
+    # fast manager is not a crawler, and the admins see it).
     n = _cg_sweep.hit(row["username"], path)
-    limit = _cg.SWEEP_LIMIT_BRANCH if row["role"] in _auth.PINNED_ROLES else _cg.SWEEP_LIMIT
+    pinned = row["role"] in _auth.PINNED_ROLES
+    limit = _cg.SWEEP_LIMIT_BRANCH if pinned else _cg.SWEEP_LIMIT
     if n == limit + 1:
-        _cg_record(request, "sweep", row["username"], f"{n} paths / {int(_cg.SWEEP_WINDOW // 60)} min")
+        _cg_record(request, "sweep", row["username"],
+                   f"{n} paths / {int(_cg.SWEEP_WINDOW // 60)} min" + (" · held 30 min" if pinned else ""))
+    if pinned and n > limit:
+        _cg_blocked[row["username"]] = _time_mod.time() + _CG_BLOCK_SECS
+        return _deny()
     mods = _auth.modules_for_role(row["role"])     # live role, not the cookie's
     if not _auth.path_allowed(request.method, path, mods):
         # X-Denied: role — the page must not mistake this for a missing write token
