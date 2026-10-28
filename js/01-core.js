@@ -648,7 +648,7 @@ const TAB_MODULE = {
   cashctl:'ops.cash',
   custtype:'ops.posextra', modifiers:'ops.posextra', pricezone:'ops.posextra',
   cancelbill:'ops.posextra', closetime:'ops.posextra',
-  report:'report.export', mgtreport:'report.export', settings:'system.settings',
+  report:'report.export', mgtreport:'report.management', settings:'system.settings',   // รายงานผู้บริหาร has its own module (owner 2026-10-28)
 };
 // ── First-login start card: the three tabs each role should open first ──────
 // Shown once, on the first login that has never opened a tab (/api/usage/me →
@@ -729,7 +729,7 @@ const MODULE_LABEL_TH = {
   'menu.analysis':'วิเคราะห์เมนู', 'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลองต้นทุน',
   'bom.edit':'แก้ไขสูตร (ระบบเดิม)', 'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ',
   'ops.discounts':'ส่วนลด', 'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน',
-  'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน',
+  'ops.posextra':'POS เชิงลึก', 'report.export':'ส่งออกรายงาน', 'report.management':'รายงานผู้บริหาร',
   'system.settings':'ตั้งค่า', 'system.admin':'จัดการผู้ใช้', 'data.upload':'อัปโหลดข้อมูล',
   'supply.ordering':'ประสานงานขาย: ใบสั่งซื้อ เคลม ใบตัดเบิก', 'customer.feedback':'เสียงลูกค้า',
   'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'สูตร: ประกาศใช้', 'bom.audit':'สูตร: รับทราบ/ยกเลิกใช้',
@@ -743,7 +743,7 @@ const ROLE_MODULES_TH = {
   management: Object.keys(MODULE_LABEL_TH),
   marketing:  ['sales.overview','customer.buffet','menu.analysis','report.export','customer.feedback'],
   operation:  ['sales.overview','ops.report','ops.discounts','ops.cash','ops.staff','ops.posextra','report.export','customer.feedback','franchise.inbox'],
-  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','ops.discounts','ops.posextra','report.export','customer.feedback','bom.center','bom.release'],
+  analyst:    ['sales.overview','customer.buffet','menu.analysis','cost.analysis','cost.simulator','profit.pnl','report.export','customer.feedback','bom.center','bom.release'],
   accounting: ['sales.overview','profit.pnl','cost.analysis','ops.cash','ops.discounts','report.export'],
   innovation: ['sales.overview','menu.analysis','cost.analysis','cost.simulator','bom.edit','system.settings','customer.feedback','bom.recipes'],
   salessupport: ['sales.overview','supply.ordering','report.export'],
@@ -1155,7 +1155,7 @@ function _renderPermMatrix(canEdit) {
     'cost.analysis':'ต้นทุน', 'cost.simulator':'ตัวจำลอง', 'bom.edit':'แก้สูตร (ระบบเดิม)',
     'profit.pnl':'กำไร/P&L', 'ops.report':'รายงานปฏิบัติการ', 'ops.discounts':'ส่วนลด',
     'ops.cash':'เงินขาด/เกิน', 'ops.staff':'พนักงาน', 'ops.posextra':'รายละเอียด POS',
-    'report.export':'ส่งออกรายงาน', 'system.settings':'ตั้งค่า', 'system.admin':'ผู้ดูแลระบบ',
+    'report.export':'ส่งออกรายงาน', 'report.management':'รายงานผู้บริหาร', 'system.settings':'ตั้งค่า', 'system.admin':'ผู้ดูแลระบบ',
     'data.upload':'อัปโหลดข้อมูล', 'customer.feedback':'เสียงลูกค้า', 'supply.ordering':'วัตถุดิบ/ใบสั่งซื้อ', 'bom.center':'ข้อมูลตั้งต้นและสูตร', 'bom.release':'ประกาศใช้สูตร', 'bom.audit':'รับทราบสูตร',
     'branch.stock':'สาขา: ตัดเบิก นับของ สั่งของ', 'bom.prices':'ราคารายเดือน', 'bom.recipes':'สูตร', 'supply.warehouse':'คลัง: ยืนยันยอดส่ง', 'franchise.view':'ร้านของฉัน (เจ้าของสาขา)', 'franchise.inbox':'ข้อความเจ้าของสาขา',
   };

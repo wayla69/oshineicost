@@ -226,6 +226,19 @@ def test_path_allowed_longest_prefix_unit():
     assert auth.path_allowed("PUT", "/api/branches/1/type", mk) is False
 
 
+def test_management_report_is_its_own_module():
+    """รายงานผู้บริหาร (owner 2026-10-28): the management summary, its month series and its Excel are report.management,
+    held by management alone by default - sales.overview or report.export no longer open it."""
+    mg = auth.modules_for_role("management")
+    for path in ("/api/reports/management", "/api/reports/management/months", "/api/reports/management.xlsx"):
+        assert auth.path_allowed("GET", path, mg) is True
+        for role in ("analyst", "marketing", "operation", "accounting", "innovation", "salessupport"):
+            assert auth.path_allowed("GET", path, auth.modules_for_role(role)) is False, (role, path)
+    assert "report.management" in auth.MODULES and auth.ROLE_MODULES["management"] >= {"report.management"}
+    # the operations pages went back to operation
+    assert not auth.ROLE_MODULES["analyst"] & {"ops.discounts", "ops.posextra"}
+
+
 # ── red-set: admin self-lockout guards ──────────────────────────────────────
 def test_admin_cannot_demote_or_disable_self(client, app_db, auth_on):
     mg = _fresh(app_db); _login(mg, "management1")

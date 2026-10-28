@@ -33,6 +33,21 @@ def auth_on(monkeypatch):
     yield
 
 
+@pytest.fixture
+def mgt_report_for_all(app_db):
+    """รายงานผู้บริหาร is management's alone by default (report.management, owner 2026-10-28). The stripping tests below are about
+    what a role WITHOUT a cost module sees when it is given the report, so the saved matrix grants it to every role for the test."""
+    import core
+    with core.get_db() as con:
+        before = auth.get_role_permissions(con)
+        auth.set_role_permissions(con, {r: sorted(set(m) | {"report.management"}) for r, m in before.items()})
+    yield
+    with core.get_db() as con:
+        con.execute("DELETE FROM app_settings WHERE key='role_permissions'")
+        con.commit()
+        auth.refresh_perm_cache(con)
+
+
 def _as(app_db, user):
     import main
     c = TestClient(main.app)
@@ -95,7 +110,7 @@ def test_data_needs_cards_name_a_real_rule_path(client):
 COST_KEYS_GP = {"gp_pct", "gp_per_head", "food_cost", "bridge", "bridge_yoy", "gp_pct_prev", "gp_pct_delta_pp", "cost_basis"}
 
 
-def test_management_summary_without_cost_for_marketing(client, app_db, auth_on):
+def test_management_summary_without_cost_for_marketing(client, app_db, auth_on, mgt_report_for_all):
     q = {"period": "monthly", "lang": "th", "mtd": "1"}
     mk = _as(app_db, "marketing1").get("/api/reports/management", params=q)
     mg = _as(app_db, "management1").get("/api/reports/management", params=q)
@@ -121,7 +136,7 @@ def test_management_summary_without_cost_for_marketing(client, app_db, auth_on):
         assert "hidden" not in j["gp"], role
 
 
-def test_months_series_without_gp_for_roles_without_cost(client, app_db, auth_on):
+def test_months_series_without_gp_for_roles_without_cost(client, app_db, auth_on, mgt_report_for_all):
     for user in ("marketing1", "operation1", "salessupport1"):
         j = _as(app_db, user).get("/api/reports/management/months").json()
         assert j["months"], user
@@ -162,5 +177,6 @@ def test_insights_without_cost_sentences_for_roles_without_cost(client, app_db, 
 
 def test_denied_cost_endpoints_stay_closed(client, app_db, auth_on):
     c = _as(app_db, "marketing1")
-    for p in ("/api/buffet/menu-cost-efficiency", "/api/profit/summary", "/api/gp/by-branch-month", "/api/analysis/gross_profit"):
+    for p in ("/api/buffet/menu-cost-efficiency", "/api/profit/summary", "/api/gp/by-branch-month", "/api/analysis/gross_profit",
+              "/api/reports/management", "/api/reports/management/months", "/api/reports/management.xlsx"):   # the owner's report too
         assert c.get(p).status_code == 403, p

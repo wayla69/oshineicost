@@ -71,7 +71,7 @@ async function phBoot() {
   if (_supplyPendingLink) { const l = _supplyPendingLink; _supplyPendingLink = ''; await phOpenPage(() => supplyDeepLink(l)); return; }
   // PR-F4: a franchise-message notification: head office opens its inbox (the owner's link opens ร้านของฉัน below)
   if (_fmsgPending && _fmsgPending.go === 'fmsg' && tabAllowed('fmsg')) { await phOpenPage(() => switchTab('fmsg')); return; }
-  if (_msPendingLink && hasModule('sales.overview')) { await phShowSummary(); return; }
+  if (_msPendingLink && hasModule('report.management')) { await phShowSummary(); return; }
   if (_phKind() === 'franchise') { await phOpenFranchise(); return; }
   phShowHome();
 }
@@ -239,7 +239,7 @@ function _phHero(inner) {
 }
 function _phCentreHome() {
   const vis = deptVisible();
-  const yest = hasModule('sales.overview')
+  const yest = hasModule('report.management')
     ? `<button type="button" class="ph-yest" id="phYest" onclick="phShowSummary()" aria-label="ยอดขายเมื่อวาน เปิดสรุปผู้บริหาร"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
   return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
@@ -366,7 +366,7 @@ function phRenderDept(key) {
   if (!row) { phShowHome(); return; }
   const d = row.dept;
   // the owner's deep summary is the first tile of ผู้บริหาร (any login that may read the owner's sales)
-  const summary = key === 'mgmt' && hasModule('sales.overview')
+  const summary = key === 'mgmt' && hasModule('report.management')
     ? `<a href="#" class="ph-ptile" onclick="phShowSummary();return false">${_deptSvg('gauge', 28)}<span>สรุปผู้บริหาร</span></a>` : '';
   host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)">`
     + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
@@ -394,7 +394,7 @@ function phOpenSearch() {
 function phSearchRender() {
   const host = document.getElementById('phSearchRes'); if (!host) return;
   const mgmt = DEPARTMENTS.find(d => d.key === 'mgmt');
-  const extra = hasModule('sales.overview') ? [{ summary: true, label: 'สรุปผู้บริหาร', icon: 'gauge', dept: mgmt }] : [];
+  const extra = hasModule('report.management') ? [{ summary: true, label: 'สรุปผู้บริหาร', icon: 'gauge', dept: mgmt }] : [];
   _phSearchList = pgSearchResults(/** @type {HTMLInputElement} */ (document.getElementById('phSearchInput')).value || '', extra, { all: true });
   host.innerHTML = _phSearchList.length
     ? `<div class="ph-card ph-card-list" role="list">${_phSearchList.map((e, i) =>
