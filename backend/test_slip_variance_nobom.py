@@ -462,7 +462,7 @@ def test_stock_mode_uses_the_duty_lines_of_analyst_and_kitchen():
     js = Path(__file__).resolve().parent.parent / "js"
     core = (js / "01-core.js").read_text(encoding="utf-8")
     assert re.search(r"key: 'ana'.*?roles: \['analyst'\], duty_stock: 'ราคา ต้นทุนต่อจาน และหน่วย'", core)
-    assert re.search(r"key: 'kit'.*?roles: \['innovation'\], duty_stock: 'ทะเบียนวัตถุดิบ \(อ่านอย่างเดียว\)'", core)
+    assert re.search(r"key: 'kit'.*?roles: \['innovation'\], duty_stock: 'ทะเบียนวัตถุดิบ ต้นทุนต่อจาน และเมนู \(ดูอย่างเดียว\)'", core)   # 2026-10-28: the kitchen card has 4 pages
     for f in ("09c-mobile.js", "18-launcher.js"):                 # every place that prints a duty line asks the one helper
         src = (js / f).read_text(encoding="utf-8")
         assert "esc(d.duty)" not in src and "deptDuty(d)" in src, f
