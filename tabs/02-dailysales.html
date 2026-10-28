@@ -85,6 +85,21 @@
         font-size: 12px; font-weight: 700; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
       .sp-gap-chip { display: inline-block; padding: 0 8px; border-radius: 999px; border: 1px solid var(--amber-ink); color: var(--amber-ink); background: var(--bg-card);
         font-size: 12px; font-weight: 700; line-height: 18px; white-space: nowrap; }
+      /* PR-SK · บุฟเฟ่ต์ / จานขาย / ทั้งหมด chips, the ingredient roll-up line, รวม N รหัส */
+      .sp-kinds { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 8px; }
+      .sp-kind { height: 28px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg-input); color: var(--text-secondary);
+        font-size: 13px; font-weight: 600; cursor: pointer; }
+      .sp-kind-on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+      .sp-kind-n { font-weight: 400; color: var(--text-muted); }
+      .sp-kind-on .sp-kind-n { color: inherit; }
+      .sp-groups { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; margin: 0 0 8px; font-size: 13px; }
+      .sp-groups-l { color: var(--text-muted); font-size: 12px; font-weight: 600; }
+      .sp-grp { padding: 2px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg-card); color: var(--text-primary); font: inherit; line-height: 1.4; }
+      button.sp-grp { cursor: pointer; }
+      button.sp-grp:hover { border-color: var(--text-secondary); }
+      .sp-grp-s { color: var(--text-muted); font-size: 12px; }
+      .sp-merge-chip { display: inline-block; margin-left: 6px; padding: 0 8px; border-radius: 999px; border: 1px solid var(--border); color: var(--text-secondary); background: var(--bg-card);
+        font-size: 12px; font-weight: 600; line-height: 18px; white-space: nowrap; vertical-align: 1px; }
       .sp-flt { position: relative; box-sizing: border-box; height: 28px; min-height: 0; padding: 0 12px; border: 1px solid var(--border); border-radius: 999px;
         background: var(--bg-input); color: var(--text-secondary); font-size: 12px; font-weight: 600; cursor: pointer; white-space: nowrap; }
       .sp-flt[aria-pressed="true"] { border-color: var(--accent); background: var(--accent); color: var(--on-accent, #fff); }
@@ -208,7 +223,7 @@
       </div>
     </div>
     <div class="sp-sub"><span id="spikeSubTxt">สูงกว่าปกติ ≥1.5×</span></div>
-    <div id="spikeStrip" class="sp-strip" hidden></div><template id="hlp-dailysales-spike-cost" data-title="ต้นทุนเพิ่มสุทธิ"><p><b>ต้นทุนเพิ่ม</b> · จานที่เกินจากปกติ (<b>+จาน</b> = จานของช่วงนี้ − ปกติต่อ 100 ลูกค้า × ลูกค้าของช่วงนี้ ÷ 100) × ต้นทุนต่อจานของเดือนนั้น · ช่วงที่คร่อมสองเดือนถ่วงตามจำนวนจานที่ขายในแต่ละเดือน · สาขาที่ต่ำกว่าปกติให้ค่าติดลบ · ต้นทุนเพิ่มของทุกสาขารวมกันเป็น <b>ต้นทุนเพิ่มสุทธิ</b> ของเมนู</p><p><b>ต้นทุนต่อจาน</b> · ตัวเดียวกับที่ใช้คิดต้นทุนอาหารและกำไรขั้นต้น · ตั้งแต่เดือน ก.ย. 2569 ใช้รายการต้นทุนอาหารรายเดือนที่ฝ่ายวิเคราะห์นำเข้า เมนูที่ไม่มีในรายการใช้ต้นทุนตามสูตร · แพ็กเกจบุฟเฟ่ต์ (เช่น BUFFET799) ไม่คิดต้นทุน เพราะต้นทุนอยู่ที่จานที่ลูกค้าสั่ง</p><p><b>% ของต้นทุนอาหาร</b> · ต้นทุนเพิ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขาที่เลือกในช่วงเดียวกัน × 100 · <b>จุด</b> · ต้นทุนเพิ่ม ÷ ยอดขายสุทธิ (ไม่รวม VAT และค่าบริการ) × 100 คือต้นทุนอาหาร % ที่สูงขึ้นจากเมนูนั้น</p><p><b>ต้นทุนเพิ่มสุทธิ</b> · ต้นทุนที่เพิ่มของเมนูเดิมที่สูงกว่าปกติ หักต้นทุนที่ลดลงของเมนูเดิมที่ต่ำกว่าปกติ (รวมเมนูที่ไม่ได้ขายในช่วงนี้) ไม่รวมเมนูใหม่ · ชี้ที่ตัวเลขเพื่อดู % ของต้นทุนอาหาร และจุดของต้นทุนอาหาร % · เมนูที่ <b>ยังไม่มีต้นทุน</b> ไม่นับรวม และอยู่ท้ายรายการ</p></template>
+    <div id="spikeStrip" class="sp-strip" hidden></div><template id="hlp-dailysales-spike-cost" data-title="ต้นทุนเพิ่มสุทธิ"><p><b>ต้นทุนเพิ่ม</b> · จานที่เกินจากปกติ (<b>+จาน</b> = จานของช่วงนี้ − ปกติต่อ 100 ลูกค้า × ลูกค้าของช่วงนี้ ÷ 100) × ต้นทุนต่อจานของเดือนนั้น · ช่วงที่คร่อมสองเดือนถ่วงตามจำนวนจานที่ขายในแต่ละเดือน · สาขาที่ต่ำกว่าปกติให้ค่าติดลบ · ต้นทุนเพิ่มของทุกสาขารวมกันเป็น <b>ต้นทุนเพิ่มสุทธิ</b> ของเมนู</p><p><b>บุฟเฟ่ต์ / จานขาย</b> · เมนูบุฟเฟ่ต์ (B) ลูกค้ากินในแพ็กเกจ จานที่เพิ่มจึงเป็นต้นทุนล้วน · เมนูจานขาย (à la carte, ส่งถึงบ้าน, ซื้อกลับ) ลูกค้าจ่ายเงินต่อจาน แถวจึงแสดง <b>กำไรขั้นต้นเพิ่ม</b> = จานที่เพิ่ม × ราคาเฉลี่ยไม่รวม VAT − ต้นทุนเพิ่ม · ค่าตั้งต้นแสดงบุฟเฟ่ต์</p><p><b>ตามวัตถุดิบ</b> · รวมต้นทุนเพิ่มของรายการตามวัตถุดิบมูลค่าสูง (แซลมอน ทูน่า ฮามาจิ กุ้งหวาน หอยเชลล์ ปลาไหล หอยนางรม เนื้อ) · เมนูรวมหลายวัตถุดิบนับในทุกกลุ่ม · กดเพื่อเปิดหน้าวัตถุดิบมูลค่าสูงของวัตถุดิบนั้น</p><p><b>รวม N รหัส</b> · เมนูเดียวกันที่มีหลายรหัสในระบบขาย (สะกดต่างกัน) รวมเป็นแถวเดียว · เครื่องหมายฐานบางในมุมมองทุกสาขา = ปกติทั้งเครือต่ำกว่า 5 จาน</p><p><b>ต้นทุนต่อจาน</b> · ตัวเดียวกับที่ใช้คิดต้นทุนอาหารและกำไรขั้นต้น · ตั้งแต่เดือน ก.ย. 2569 ใช้รายการต้นทุนอาหารรายเดือนที่ฝ่ายวิเคราะห์นำเข้า เมนูที่ไม่มีในรายการใช้ต้นทุนตามสูตร · แพ็กเกจบุฟเฟ่ต์ (เช่น BUFFET799) ไม่คิดต้นทุน เพราะต้นทุนอยู่ที่จานที่ลูกค้าสั่ง</p><p><b>% ของต้นทุนอาหาร</b> · ต้นทุนเพิ่ม ÷ ต้นทุนอาหารทั้งหมดของสาขาที่เลือกในช่วงเดียวกัน × 100 · <b>จุด</b> · ต้นทุนเพิ่ม ÷ ยอดขายสุทธิ (ไม่รวม VAT และค่าบริการ) × 100 คือต้นทุนอาหาร % ที่สูงขึ้นจากเมนูนั้น</p><p><b>ต้นทุนเพิ่มสุทธิ</b> · ต้นทุนที่เพิ่มของเมนูเดิมที่สูงกว่าปกติ หักต้นทุนที่ลดลงของเมนูเดิมที่ต่ำกว่าปกติ (รวมเมนูที่ไม่ได้ขายในช่วงนี้) ไม่รวมเมนูใหม่ · ชี้ที่ตัวเลขเพื่อดู % ของต้นทุนอาหาร และจุดของต้นทุนอาหาร % · เมนูที่ <b>ยังไม่มีต้นทุน</b> ไม่นับรวม และอยู่ท้ายรายการ</p></template>
     <div id="dsSpike"></div>
   </div>
 </div>

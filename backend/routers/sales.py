@@ -1351,6 +1351,7 @@ class _SpikeCost:
         bjoin = "JOIN branches b ON b.branch_id=d.branch_id" if bfilt else ""
         q = {**params, "ps": ps.isoformat(), "pe": pe.isoformat()}
         self.plates: dict = {}                   # (bid, sid) -> {month: plates}
+        self.rev: dict = {}                      # (bid, sid) -> ex-VAT revenue of the period (a paid dish's price side, PR-SK)
         sub = 0.0
         sm: set = set()
         for bid, sid, m, qq, rv in cur.execute(f"""
@@ -1358,6 +1359,7 @@ class _SpikeCost:
             FROM v_sales_sku_daily d {bjoin} WHERE d.day BETWEEN :ps AND :pe {bfilt}
             GROUP BY d.branch_id, d.sku_id, substr(d.day, 1, 7)""", q):
             self.plates.setdefault((bid, sid), {})[m] = qq or 0.0
+            self.rev[(bid, sid)] = self.rev.get((bid, sid), 0.0) + (rv or 0.0)
             sub += rv or 0.0
             sm.add((sid, m))
         self.unit: dict = {}                     # (sid, month) -> ฿ per plate (0 = uncosted, or a package)
@@ -1419,6 +1421,12 @@ def _spike_kind(desc) -> str:
 
 def _spike_name(desc, code) -> str:
     return (desc or code or "").replace("(B) ", "").replace("(A) ", "")
+
+
+def _spike_norm(menu) -> str:
+    """PR-SK · the dish key behind a name: two SKU spellings of one dish ("1,000 กรัม" / "1000 กรัม", a double space, a
+    trailing space) fold into one row. Punctuation inside the name and every run of whitespace are dropped."""
+    return "".join(ch for ch in (menu or "").lower() if ch not in ",.·-_ \t ")
 
 
 class _SpikeCust:
@@ -1746,15 +1754,18 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
     totals = the up / down / net sums over EVERY dish (the net = increases minus decreases)."""
     acc: dict = {}
     for kind, menu, bid, branch, sid, pq, exp in ents:
-        a = acc.get((kind, menu))
+        key = (kind, _spike_norm(menu))          # PR-SK: one row per dish, whatever the SKU's spelling
+        a = acc.get(key)
         if a is None:
-            a = acc[(kind, menu)] = {"kind": kind, "menu": menu, "pq": 0.0, "exp": 0.0, "net": 0.0, "costed": False,
-                                    "br": {}, "keys": [], "spike": set()}
+            a = acc[key] = {"kind": kind, "menu": menu, "names": {}, "pq": 0.0, "exp": 0.0, "net": 0.0, "rev": 0.0, "costed": False,
+                            "br": {}, "keys": [], "spike": set()}
+        a["names"][menu] = a["names"].get(menu, 0.0) + pq
         uc = sc.unit_of(bid, sid) if sc is not None else 0.0
         ex = pq - exp
         a["pq"] += pq
         a["exp"] += exp
         a["net"] += ex * uc
+        a["rev"] += sc.rev.get((bid, sid), 0.0) if sc is not None else 0.0
         a["costed"] = a["costed"] or uc > 0
         b = a["br"].setdefault(branch, [0.0, 0.0, 0.0])      # [excess plates, net ฿, plates]
         b[0] += ex
@@ -1778,13 +1789,19 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
         if not (a["net"] > 0 if byc else ex > 0):
             continue
         x = a["pq"] / a["exp"] if a["exp"] > 0 else None
-        row = {"menu": a["menu"], "kind": a["kind"], "branches": sum(1 for b in a["br"].values() if b[2] > 0),
+        # PR-SK: the name = the spelling that sold the most plates; merged = the other spellings folded into the row
+        name = max(a["names"].items(), key=lambda kv: (kv[1], kv[0]))[0]
+        row = {"menu": name, "kind": a["kind"], "branches": sum(1 for b in a["br"].values() if b[2] > 0),
                "today": round(a["pq"]), "expected": round(a["exp"]), "excess": round(ex),
                "x": round(x, 2) if x is not None else None, "pct": round((x - 1) * 100) if x is not None else None,
                # the พุ่ง chip: the dish's OWN plates >= threshold x its normal (>= 5 plates), not one branch's; spike_branches = those
                "spike": (x >= threshold and a["pq"] >= 5) if x is not None else bool(a["spike"]),
                "spike_branches": len(a["spike"]), "_net": a["net"] if cost else ex, "_ex": ex}
+        if len(a["names"]) > 1:
+            row["merged"] = sorted(n for n in a["names"] if n != name)
         if not one_branch:
+            # PR-SK: a normal under 5 plates over the whole chain is no normal (the one-branch rows carry the ranked row's flag)
+            row["thin_base"] = a["exp"] < _SPIKE_THIN_EXPECTED
             i = 1 if byc else 0
             push = sorted(((n, b) for n, b in a["br"].items() if b[i] > 0), key=lambda kv: (-kv[1][i], kv[0]))
             row["pushers"] = [{"branch": n, "excess": round(b[0]), **({"extra_cost": round(b[1], 2)} if cost else {})}
@@ -1800,6 +1817,13 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
         if cost:
             row.update({"net_cost": round(a["net"], 2), "cost_share": sc.share(a["net"]), "net_pp": sc.pp(a["net"]),
                         "uncosted": not a["costed"]})
+            # PR-SK (owner 2026-10-29) · a PAID dish (à la carte, delivery, takeaway) sells its extra plates: the price side.
+            # price = the period's ex-VAT revenue per plate of the dish; extra_revenue = net extra plates x price;
+            # extra_gp = extra_revenue - the net extra cost. A buffet dish has no price (its revenue is the package's).
+            if a["kind"] == "alc" and a["costed"] and a["pq"] > 0 and a["rev"] > 0:
+                price = a["rev"] / a["pq"]
+                xr = ex * price
+                row.update({"price": round(price, 2), "extra_revenue": round(xr, 2), "extra_gp": round(xr - a["net"], 2)})
         rows.append(row)
     if cost:
         rows.sort(key=lambda r: (r["uncosted"], -r["_net"], -r["_ex"], r["menu"]))
@@ -1824,6 +1848,34 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
         net = tot["up_cost"] + tot["down_cost"]
         out.update({"net_cost": round(net, 2), "net_share": sc.share(net), "net_pp": sc.pp(net)})
     return rows, out
+
+
+_SPIKE_THIN_EXPECTED = 5         # PR-SK: a chain-wide normal under 5 plates marks the dish row thin_base
+
+
+def _spike_groups(rows, cost: bool) -> list:
+    """PR-SK (owner 2026-10-29) · the list rolled up by high-value ingredient (backend/ingredient_groups.GROUPS, the same
+    match as the High Value Product Monitor): per group the net extra cost (cost view; the uncosted rows add nothing) or the
+    net extra plates of the listed dishes that belong to it, the dishes counted and the group's share of the list's sum
+    (a mixed dish counts in each of its groups, so the shares can pass 100 together). Groups with nothing are left out;
+    sorted by the figure. The card's one line above the table, each entry a jump to the monitor of that ingredient."""
+    import ingredient_groups as _ig
+    val = (lambda r: 0.0 if r.get("uncosted") else (r.get("net_cost") or 0.0)) if cost else (lambda r: float(r.get("excess") or 0))
+    base = sum(val(r) for r in rows)
+    acc: dict = {}
+    for r in rows:
+        v = val(r)
+        if v <= 0:
+            continue
+        for slug in _ig.match(r["menu"]):
+            g = acc.setdefault(slug, [0.0, 0])
+            g[0] += v
+            g[1] += 1
+    key = "net_cost" if cost else "excess"
+    out = [{"slug": s, "label": _ig.LABELS[s], key: round(v, 2) if cost else round(v), "dishes": n,
+            "share_pct": round(v / base * 100, 1) if base > 0 else None} for s, (v, n) in acc.items()]
+    out.sort(key=lambda g: (-g[key], g["label"]))
+    return out
 
 
 def _spike_new_dishes(nms, cost, one_branch) -> list:
@@ -2196,6 +2248,9 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             "view": "branch" if one_branch else "chain", "dish_totals": dtot,
             "dish_floor": ({"baht": _DISH_FLOOR_BAHT, "share_pct": _DISH_FLOOR_SHARE} if sc is not None else {"plates": _DISH_FLOOR_PLATES}),
             "dish_count": len(dishes), "dish_material_count": sum(1 for r in dishes if r["material"]), "dishes": dishes[:limit],
+            # PR-SK · the list by high-value ingredient (_spike_groups) and the paid / buffet split of the dish rows
+            "dish_groups": _spike_groups(dishes, sc is not None),
+            "dish_kind_count": {"buffet": sum(1 for r in dishes if r["kind"] == "buffet"), "alc": sum(1 for r in dishes if r["kind"] != "buffet")},
             "new_dish_floor": {"per_day": _NEW_FLOOR_PER_DAY, **({"baht": _NEW_FLOOR_BAHT} if sc is not None else {})},
             "new_dish_count": len(new_dishes), "new_dish_material_count": sum(1 for r in new_dishes if r["material"]),
             "new_dishes": new_dishes[:limit]}

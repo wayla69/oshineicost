@@ -217,3 +217,64 @@ def test_the_fixture_answer_carries_the_dish_keys(client):
     assert j["view"] == "chain"
     nets = [x["net_cost"] for x in j["dishes"] if not x.get("uncosted")]
     assert nets == sorted(nets, reverse=True) and all(n > 0 for n in nets)
+
+
+# ── PR-SK (owner 2026-10-29) · spellings fold, a chain-wide thin normal, the price side of a paid dish, the ingredient roll-up ──
+class _Sc:
+    """A stand-in for _SpikeCost: unit cost per SKU, the period's revenue per (branch, SKU), a ฿10,000 food cost."""
+    def __init__(self, unit, rev=None):
+        self.unit, self.rev, self.food_cost, self.revenue, self.pkg = unit, rev or {}, 10000.0, 100000.0, set()
+
+    def unit_of(self, bid, sid):
+        return self.unit.get(sid, 0.0)
+
+    def share(self, baht):
+        return round(baht / self.food_cost * 100, 2)
+
+    def pp(self, baht):
+        return round(baht / self.revenue * 100, 2)
+
+
+def test_two_spellings_of_one_dish_fold_into_the_row_named_by_the_best_seller():
+    ents = [("alc", "(TW) แซลมอน ซาชิมิ 1,000 กรัม", 1, "สาขาเอ", 1, 13, 10), ("alc", "(TW) แซลมอน ซาชิมิ 1000 กรัม", 2, "สาขาบี", 2, 3, 1)]
+    rows, _ = sales._spike_dishes(ents, _Sc({1: 500.0, 2: 500.0}), {}, False)
+    assert [r["menu"] for r in rows] == ["(TW) แซลมอน ซาชิมิ 1,000 กรัม"]
+    r = rows[0]
+    assert (r["today"], r["expected"], r["excess"], r["net_cost"]) == (16, 11, 5, 2500.0)
+    assert r["merged"] == ["(TW) แซลมอน ซาชิมิ 1000 กรัม"] and r["branches"] == 2
+    assert sales._spike_norm("ซูชิ หมึก  ·  ") == sales._spike_norm("ซูชิหมึก")
+    assert sales._spike_norm("(B) แซลมอน") != sales._spike_norm("(A) แซลมอน")      # the kind is in the key too
+
+
+def test_a_chain_normal_under_five_plates_is_thin_and_a_paid_dish_carries_its_margin():
+    ents = [("alc", "(DL) แซลมอน 1 กก.", 1, "สาขาเอ", 1, 4, 0), ("buffet", "ซาชิมิ", 1, "สาขาเอ", 2, 120, 100)]
+    sc = _Sc({1: 565.0, 2: 50.0}, rev={(1, 1): 4 * 900.0})
+    rows, _ = sales._spike_dishes(ents, sc, {}, False)
+    dl, bf = (next(r for r in rows if r["menu"] == m) for m in ("(DL) แซลมอน 1 กก.", "ซาชิมิ"))
+    assert dl["thin_base"] is True and bf["thin_base"] is False
+    assert (dl["price"], dl["extra_revenue"], dl["extra_gp"]) == (900.0, 3600.0, 3600.0 - 4 * 565.0)
+    assert "price" not in bf and "extra_gp" not in bf                         # a buffet dish has no price of its own
+    # a role without cost: the same rows, no price side
+    rows2, _ = sales._spike_dishes(ents, None, {}, False)
+    assert all("extra_gp" not in r and "net_cost" not in r for r in rows2)
+
+
+def test_the_list_rolls_up_by_high_value_ingredient():
+    rows = [{"menu": "ซาชิมิแซลมอน", "net_cost": 5000.0, "excess": 100, "uncosted": False},
+            {"menu": "ซาชิมิหอยเชลล์ ฮอกไกโด", "net_cost": 2900.0, "excess": 50, "uncosted": False},
+            {"menu": "แซลมอนดองซีอิ๊ว", "net_cost": 1000.0, "excess": 20, "uncosted": False},
+            {"menu": "ข้าวผัด", "net_cost": 100.0, "excess": 5, "uncosted": False},
+            {"menu": "แซลมอนไม่มีต้นทุน", "net_cost": 0.0, "excess": 9, "uncosted": True}]
+    g = sales._spike_groups(rows, True)
+    assert [(x["slug"], x["net_cost"], x["dishes"]) for x in g] == [("salmon", 6000.0, 2), ("scallop", 2900.0, 1)]
+    assert g[0]["label"] == "แซลมอน" and g[0]["share_pct"] == round(6000 / 9000 * 100, 1)
+    p = sales._spike_groups(rows, False)                                       # a role without cost: net extra plates
+    assert [(x["slug"], x["excess"]) for x in p] == [("salmon", 129), ("scallop", 50)]
+    assert sales._spike_groups([], True) == []
+
+
+def test_the_endpoint_answer_carries_the_groups_and_the_kind_split():
+    r = _run()
+    assert r["dish_groups"] == [{"slug": "salmon", "label": "แซลมอน", "net_cost": 5600.0, "dishes": 1, "share_pct": round(5600 / 7014 * 100, 1)}]
+    assert r["dish_kind_count"] == {"buffet": 0, "alc": 3}
+    assert all(x["thin_base"] is False for x in r["dishes"])
