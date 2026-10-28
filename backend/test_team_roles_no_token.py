@@ -72,3 +72,12 @@ def test_auth_off_is_inert(client, monkeypatch):
     monkeypatch.delenv("OSHINEI_AUTH", raising=False)
     fake = type("R", (), {"cookies": {}})()
     assert core.is_token_free_session(fake) is False
+
+
+@pytest.mark.parametrize("role", ["innovation", "analyst"])
+def test_branch_downtime_is_a_settings_write(client, app_db, auth_on, role):
+    """Its only guard used to be the token; now the settings module decides."""
+    mods = auth.modules_for_role(role)
+    assert auth.path_allowed("POST", "/api/branch-downtime", mods) is ("system.settings" in mods)
+    assert auth.path_allowed("DELETE", "/api/branch-downtime/1", mods) is ("system.settings" in mods)
+    assert auth.path_allowed("GET", "/api/branch-downtime", mods) is True          # reading stays open

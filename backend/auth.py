@@ -432,6 +432,9 @@ MODULE_RULES = [
     *[("*", "/api/push/" + _p, _PUSH_MODULES | {"franchise.view"}) for _p in PUSH_DEVICE_PATHS],
     ("W",   "/api/branches",                 {"system.settings"}),
     ("W",   "/api/closed_hours",             {"system.settings"}),
+    # days a branch was legitimately closed (data-health answer): a settings write. Before 2026-10-28 the write token was
+    # its only guard; the token-free roles (auth.TOKEN_FREE_ROLES) made the missing rule matter
+    ("W",   "/api/branch-downtime",          {"system.settings"}),
     ("W",   "/api/upload",                   {"data.upload"}),
     ("W",   "/api/_admin/seed-db",           {"data.upload"}),
     # The off-site backup of the owner-data tables (password hashes included) is a machine
