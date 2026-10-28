@@ -86,7 +86,7 @@ function renderDeptNav() {
   if (!host) return;
   deptRailInit();
   const vis = deptHome();
-  host.innerHTML = `<a href="#" class="nav-item rail-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และแผนกทั้งหมด">`
+  host.innerHTML = `<a href="#" class="nav-item rail-item dept-entry" id="nav-launcher" data-dept="home" onclick="deptNavHome();return false" title="หน้าแรก · งานของฉันวันนี้และ${_deptRole() === 'management' ? 'แผนกทั้งหมด' : 'แผนกของฉัน'}">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg><span class="nav-label">หน้าแรก</span></a>`
     + `<a href="#" class="nav-item rail-item dept-entry" id="nav-search" onclick="pgSearchOpen();return false" title="ค้นหาหน้า · Ctrl K หรือ /">`
       + `<svg class="nav-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="${_PG_SEARCH_ICON}"/></svg><span class="nav-label">ค้นหา</span></a>`

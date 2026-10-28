@@ -655,7 +655,7 @@ const TAB_MODULE = {
 // first_time), on top of the home page; "เข้าใจแล้ว" dismisses it for good.
 const ROLE_START = {
   management: [['home', 'ภาพรวมวันนี้ สัญญาณที่ต้องดู และคิวงานของวัน'], ['mgtreport', 'รายงานผู้บริหาร รายวัน / สัปดาห์ / เดือน พร้อม export'], ['gpbranch', 'กำไรขั้นต้นรายสาขา เทียบกันได้ทันที']],
-  accounting: [['bomcenter', 'ดาวน์โหลดใบสรุปตัดเบิกรายสาขาหลังตรวจนับปลายงวด เพื่อบันทึกเข้าระบบบัญชี', 'issue'], ['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['mgtreport', 'ตัวเลขสรุปสำหรับปิดงวด พร้อม Excel']],
+  accounting: [['bomcenter', 'ดาวน์โหลดใบสรุปตัดเบิกรายสาขาหลังตรวจนับปลายงวด เพื่อบันทึกเข้าระบบบัญชี', 'issue'], ['discounts', 'ส่วนลด การรั่วไหล และ ฿ ที่เกินเพดานนโยบาย'], ['pnlbranch', 'กำไรขาดทุนรายสาขาของเดือน สำหรับปิดงวด']],
   operation:  [['opsreport', 'ปฏิบัติการรายวัน: ชำระเงิน void โต๊ะ'], ['orderhub', 'ตรวจว่าสาขาสั่งตามยอดแนะนำ: แนะนำ · สาขายืนยัน · ส่งจริง · รับจริง', 'comp'], ['discounts', 'ส่วนลดของสาขาเทียบเพดาน']],
   marketing:  [['feedback', 'เสียงลูกค้าจากทุกช่องทาง + งานที่ต้องตอบ'], ['menu', 'เมนูขายดี / ขายไม่ออก'], ['buffetperf', 'ผลงานบุฟเฟ่ต์และยอดต่อหัว']],
   analyst:    [['overall', 'KPI ภาพรวมและ heatmap รายสาขา'], ['supplyhome', 'งานวันนี้และสถานะปิดงวดเดือน'], ['cost', 'ต้นทุนและ food cost']],
@@ -1035,9 +1035,9 @@ function applyPermissions() {
   if (cjBtn) cjBtn.style.display = hasModule('system.admin') ? '' : 'none';
   // 5) If the current/landing tab isn't allowed, jump to the first allowed one
   if (!tabAllowed(activeTab)) activeTab = firstAllowedTab();
-  // 6) The phone summary is the owner's sales view. A role without sales.overview
-  //    (the branch login) gets its own pages on the phone instead — they are built 375-px first.
-  if (window.AUTH && window.AUTH.enabled && !hasModule('sales.overview')) document.body.classList.add('force-desktop', 'no-mobile-app');
+  // 6) The phone summary is the owner's sales view (report.management since 2026-10-28). A role without it gets its own pages
+  //    on the phone instead — they are built 375-px first.
+  if (window.AUTH && window.AUTH.enabled && !hasModule('report.management')) document.body.classList.add('force-desktop', 'no-mobile-app');
   // QA 2026-10-13 M4 · a role whose daily work is a supply page (Sales Support, the kitchen, operation, accounting) opens on it on a phone too,
   // not on the owner's sales summary - unless the person chose the summary themselves (showMobileSummary). The summary stays one tap away
   // (the phone button) and carries a link back to หน้างาน (#msSupply). What the role may SEE is unchanged: only which page opens first.
@@ -4096,7 +4096,7 @@ const DEPARTMENTS = [
     { tab: 'benchmark', label: 'เทียบสาขา', icon: 'bar' },
     { tab: 'pnl', label: 'P&L เชิงลึก', icon: 'trend' },
     { tab: 'pnlbill', label: 'P&L ต่อบิล', icon: 'cancel' }] },
-  { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], duty_stock: 'ทะเบียนวัตถุดิบ (อ่านอย่างเดียว)', pages: [
+  { key: 'kit', label: 'ครัว', duty: 'สร้างสูตรและส่งตรวจ', icon: 'chef', hue: 'kit', roles: ['innovation'], duty_stock: 'ทะเบียนวัตถุดิบ ต้นทุนต่อจาน และเมนู (ดูอย่างเดียว)', pages: [
     { tab: 'bomcenter', pane: 'rec', bom: true, label: 'สูตรตามระดับราคา', icon: 'book' },
     { tab: 'bomcenter', pane: 'prep', bom: true, label: 'สูตรกึ่งสำเร็จ', icon: 'bowl' },
     { tab: 'bomcenter', pane: 'ing', label: 'ทะเบียนวัตถุดิบ', icon: 'db' },

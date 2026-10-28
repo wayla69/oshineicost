@@ -245,8 +245,8 @@ function _phDeptTiles(rows) {
 }
 function _phCentreHome() {
   const vis = deptHome();
-  const yest = hasModule('report.management')
-    ? `<button type="button" class="ph-yest" id="phYest" onclick="phShowSummary()" aria-label="ยอดขายเมื่อวาน เปิดสรุปผู้บริหาร"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
+  const yest = hasModule('sales.overview')
+    ? `<button type="button" class="ph-yest" id="phYest" onclick="${hasModule('report.management') ? 'phShowSummary()' : "phOpenPage(() => switchTab('home'))"}" aria-label="ยอดขายเมื่อวาน ${hasModule('report.management') ? 'เปิดสรุปผู้บริหาร' : 'เปิดสรุปประจำวัน'}"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
   return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
@@ -1495,7 +1495,8 @@ if ('serviceWorker' in navigator && /^https?:$/.test(location.protocol)) {
         const fm = fmsgParseLink(d.url || '');
         if (fm) { _fmsgPending = fm; fmsgOpenPending(); }     // PR-F4: a franchise message: the inbox (head office) or ร้านของฉัน (the owner)
         else if (String(d.url || '').includes('go=supply')) { if (phOn()) phOpenPage(() => supplyDeepLink(d.url)); else if (_desktopBooted) supplyDeepLink(d.url); else _supplyPendingLink = d.url; }   // a supply reminder (batch 3): that page, not the owner's summary
-        else { _msPendingLink = d.url || ''; showMobileSummary(); }
+        else if (hasModule('report.management')) { _msPendingLink = d.url || ''; showMobileSummary(); }
+        else if (phOn()) phShowHome(); else switchTab(tabAllowed('home') ? 'home' : firstAllowedTab());   // the owner's alerts go to everyone with sales.overview; the summary is management's
       } catch (err) {}
     }
   });

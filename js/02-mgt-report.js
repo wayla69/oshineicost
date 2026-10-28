@@ -125,6 +125,7 @@ function onMgtMonthChange(v) {
 // Daily/Weekly-style presentation). The legacy full pack stays reachable via the
 // ฉบับเต็ม button (monthly mode only) → switchTab('report').
 function openMonthlyReport() {
+  if (!tabAllowed('mgtreport')) return;                // the management report is report.management (owner 2026-10-28)
   mgtPeriod = 'monthly';
   mgtMonth = null;                  // latest complete month
   _tabLastKey.mgtreport = null;
