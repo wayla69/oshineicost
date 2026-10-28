@@ -278,7 +278,7 @@ def test_a_badge_is_a_red_count_with_an_accessible_name_on_every_surface():
     # page tiles (launcher), department tabs (D2), rail icons, phone department tiles, page tiles, the bottom-nav tasks
     assert 'data-nb="${_navPageSpec(x.p)}"' in _fn(LAUNCHER, "_lnchDeptsHtml") and 'data-nb="${_navPageSpec(x.p)}"' in _fn(LAUNCHER, "renderDeptHead")
     assert 'data-nb="d:${r.dept.key}"' in _fn(LAUNCHER, "renderDeptNav") and "ph-cnt" in apply_
-    assert 'class="ph-cnt" data-dept=' in _fn(MOB, "_phCentreHome")
+    assert 'class="ph-cnt" data-dept=' in _fn(MOB, "_phDeptTiles")   # the phone home draws its tiles through _phDeptTiles (own + folded departments)
     tokens = _src("docs/ui-kit/tokens.css")
     assert re.search(r"--nb-bg:\s*#b42318;\s*--nb-ink:\s*#ffffff", tokens)                              # the owner's red, white on it (6.5:1)
     assert "background: var(--nb-bg); color: var(--nb-ink)" in HTML and ".ph-cnt[hidden] { display: none; }" in HTML
