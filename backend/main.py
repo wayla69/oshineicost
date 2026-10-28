@@ -1170,12 +1170,36 @@ async def sec_signal(request: Request):
 def usage_security(request: Request, mark: Optional[str] = Query(None), limit: int = Query(200, ge=1, le=1000)):
     """Code-guard events, newest first, and (?mark=) which login a copied code mark belongs to (admins)."""
     _usage_admin(request)
-    out = {"events": _cg.recent(_usage_db_path(), limit)}
+    events = _cg.recent(_usage_db_path(), limit)
+    for e in events:
+        e["kind_th"] = _cg.KIND_TH.get(e["kind"], e["kind"])
+    now = _time_mod.time()
+    held = [{"username": u, "minutes_left": int((t - now) // 60) + 1}
+            for u, t in sorted(_cg_blocked.items()) if t > now]
+    out = {"events": events, "held": held}
     if mark:
         with get_db() as con:
             users = [r[0] for r in con.execute("SELECT username FROM app_user")]
         out["mark"] = {"mark": mark, "username": _cg.who_has(mark, users, _auth._secret())}
     return out
+
+
+from pydantic import BaseModel as _BaseModel  # noqa: E402
+
+
+class _ReleaseBody(_BaseModel):
+    username: str
+
+
+@app.post("/api/usage/security/release")
+def usage_security_release(body: _ReleaseBody, request: Request):
+    """An admin lets a held login back in before its 30 minutes are up (Settings → การใช้งานจริง)."""
+    _usage_admin(request)
+    if _cg_blocked.pop(body.username, None) is None:
+        raise HTTPException(status_code=404, detail="บัญชีนี้ไม่ได้ถูกพักการใช้งาน")
+    who = (getattr(request.state, "auth_user", None) or {}).get("u", "")
+    _cg.record(_usage_db_path(), "release", body.username, _auth.client_ip(request), detail=f"by {who}")
+    return {"ok": True}
 
 
 _TABS_DIR = INDEX.parent / "tabs"

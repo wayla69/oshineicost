@@ -20,13 +20,13 @@ Status legend: ☐ not started · ◐ in progress · ☑ done
   recon_audit_log (see AUD-6).
 - ☑ `OSHINEI_AUTH=1` + `OSHINEI_AUTH_SECRET` ALREADY set as Fly secrets (verified
   2026-06-13 — auth is enforced in production; all the above is live).
-- ☐ Operational: give each person their own account (the 12 seeded users share
-  the default `Oshinei@2026` with must_change=1, so each is forced to set an
-  individual password on first login — just have everyone log in once).
-  A login that was never seeded (or was deleted) is provisioned the same way
-  with `python backend/provision_user.py <username> --role <role>` — the admin
-  API refuses the shared default on purpose, so this CLI is the only way to hand
-  it out. `--reset` re-arms it for someone who lost their password.
+- ☑ Operational: each person has their own account. Since PR #498 (2026-10-28) every
+  handed-out account gets its own random temporary password with must_change=1, the
+  shared seed password never signs in on the live server, and the 54 accounts still on
+  it were rotated (backend/rotate_default_passwords.py).
+  A new login is added in Settings → ผู้ใช้งาน (blank password = a temporary one, shown
+  once) or with `python backend/provision_user.py <username> --role <role>`; `--reset`
+  gives a new temporary password to someone who lost theirs.
 
 ### AUD-2 ☑ Backup + restore evidence
 - ☑ Script delivered: `backend/db_backup.py` (verified copy + manifest;

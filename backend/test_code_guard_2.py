@@ -145,3 +145,29 @@ def test_no_shipped_page_or_code_names_the_default_password():
 def test_the_login_page_carries_the_use_notice():
     html = (ROOT / "login.html").read_text(encoding="utf-8")
     assert "ห้ามใช้โปรแกรมอัตโนมัติหรือ AI" in html and "การใช้งานทุกครั้งถูกบันทึก" in html
+
+
+def test_admins_see_events_and_held_logins_and_can_release_one(iso_db, auth_on):
+    import main
+    c = _con(iso_db)
+    auth.provision_user(c, "cg2_adm2", "management", password="Strong-Pass-2026")
+    auth.provision_user(c, "cg2_mk", "marketing", password="Strong-Pass-2026")
+    c.execute("UPDATE app_user SET must_change=0 WHERE username IN ('cg2_adm2','cg2_mk')"); c.commit(); c.close()
+    main._cg_blocked["cg2_held"] = main._time_mod.time() + 600
+    try:
+        mk = TestClient(main.app, headers=HDR)
+        assert _login(mk, "cg2_mk", "Strong-Pass-2026").status_code == 200
+        assert mk.get("/api/usage/security").status_code == 403                 # not an admin
+        assert mk.post("/api/usage/security/release", json={"username": "cg2_held"}).status_code == 403
+        tc = TestClient(main.app, headers=HDR)
+        assert _login(tc, "cg2_adm2", "Strong-Pass-2026").status_code == 200
+        d = tc.get("/api/usage/security").json()
+        assert {"username": "cg2_held", "minutes_left": 10} in d["held"]
+        assert all("kind_th" in e for e in d["events"])
+        assert tc.post("/api/usage/security/release", json={"username": "cg2_held"}).json()["ok"] is True
+        assert "cg2_held" not in main._cg_blocked
+        assert tc.post("/api/usage/security/release", json={"username": "cg2_held"}).status_code == 404
+        ev = tc.get("/api/usage/security").json()["events"]
+        assert ev and ev[0]["kind"] == "release" and ev[0]["username"] == "cg2_held"
+    finally:
+        main._cg_blocked.pop("cg2_held", None)

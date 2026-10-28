@@ -4996,8 +4996,9 @@ async function loadUsageStats() {
   try { d = await api(`${API}/api/usage/summary?days=${days}`); } catch(e) {}
   if (!d) { el.textContent = 'โหลดข้อมูลไม่สำเร็จ'; return; }
   try { people = await api(`${API}/api/usage/users?days=${days}`); } catch(e) {}
-  let digest = null;
+  let digest = null, sec = null;
   if (people) { try { digest = await api(`${API}/api/usage/adoption-digest?days=${days}`); } catch(e) {} }
+  if (people) { try { sec = await api(`${API}/api/usage/security?limit=200`); } catch(e) {} }
   const esc = s => String(s === undefined || s === null ? '' : s).replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const tabs = d.tabs || [];
   const seen = new Set(tabs.map(t => t.name));
@@ -5015,7 +5016,7 @@ async function loadUsageStats() {
     : `Kill list — ซ่อนหลังปุ่ม ⋯ ในแถบมุมมองย่อยแล้ว (${SOFT_KILL.size})${KILL_REVIEW_DATE ? ' · ทบทวน ' + esc(KILL_REVIEW_DATE) : ''}`;
   // ── who uses it: the adoption view (the owner's question — who has and hasn't started) ──
   const STATUS = { active: ['ใช้งานอยู่', '#15803d', '#dcfce7'], idle: ['ไม่ได้ใช้ในช่วงนี้', '#b45309', '#fef3c7'],
-                   never: ['ยังไม่เคยเข้าใช้ (รหัสเริ่มต้น)', '#b91c1c', '#fee2e2'], anonymous: ['ไม่มี login', '#6b7280', '#e5e7eb'] };
+                   never: ['ยังไม่เคยเข้าใช้ (ยังไม่ตั้งรหัสผ่าน)', '#b91c1c', '#fee2e2'], anonymous: ['ไม่มี login', '#6b7280', '#e5e7eb'] };
   const fmtTs = t => t ? esc(String(t).slice(0, 16).replace('T', ' ')) : '—';
   const personRow = u => { const st = STATUS[u.status] || STATUS.anonymous; return `<tr class="border-b" style="border-color:var(--border)">
       <td class="py-1.5 pr-3 font-semibold">${esc(u.username)}${u.active ? '' : ' <span class="text-[10px]" style="color:var(--text-muted)">(ปิดใช้)</span>'}</td>
@@ -5029,13 +5030,13 @@ async function loadUsageStats() {
   const ps = people && people.summary ? people.summary : null;
   const peopleHtml = people ? `
     <div class="mb-6">
-      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''} ${uiQ('usage:people', 'การเข้าใช้รายคน', '<p>"ยังไม่เคยเข้าใช้" = ยังไม่มี login สำเร็จและยังใช้รหัสเริ่มต้นอยู่ — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</p>')}</div>
+      <div class="text-xs font-semibold mb-1" style="color:var(--text-secondary)">การเข้าใช้รายคน (${esc(days)} วันล่าสุด) — ${ps ? `<b style="color:var(--good-ink)">${ps.active}</b> ใช้งานอยู่ · <b style="color:var(--amber-ink)">${ps.idle}</b> ไม่ได้ใช้ในช่วงนี้ · <b style="color:var(--bad-ink)">${ps.never}</b> ยังไม่เคยเข้า · จาก ${ps.accounts} บัญชี` : ''} ${uiQ('usage:people', 'การเข้าใช้รายคน', '<p>"ยังไม่เคยเข้าใช้" = ยังไม่มีการเข้าสู่ระบบสำเร็จและยังไม่ได้ตั้งรหัสผ่านของตนเอง — คนที่ควรชวนเข้าใช้ก่อน · นับการเปิดแท็บของแต่ละคนตั้งแต่ 2026-09-05 (การเรียก API ของระบบ sync/สำรองข้อมูลไม่นับ)</p>')}</div>
       ${digest ? `<div class="text-[11px] mb-2 flex items-center gap-2 flex-wrap"><span style="color:var(--text-secondary)">สรุปรายสัปดาห์ (ทุกวันจันทร์ · หายไปเกิน 14 วัน / ยังไม่เคยเข้า): ${digest.latest ? `ล่าสุด <b>${esc(fmtWeekTh(digest.latest.week))}</b> — ${digest.latest.sent ? 'ส่ง Telegram แล้ว' : (digest.telegram_configured ? 'ส่ง Telegram ไม่สำเร็จ' : 'ยังไม่ได้ตั้ง Telegram — แสดงในแอปเท่านั้น')}` : 'ยังไม่มี — จะสร้างเองวันจันทร์แรกที่มีคนเปิดแอป'}</span>
         <button onclick="sendAdoptionDigest()" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">สร้าง/ส่งสรุปตอนนี้</button><span id="adoptionDigestStatus" class="text-[11px]"></span></div>` : ''}
       <div style="overflow-x:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">ผู้ใช้</th><th class="py-1 pr-3">บทบาท / สาขา</th><th class="py-1 pr-3">สถานะ</th><th class="py-1 pr-3">เข้าสู่ระบบล่าสุด</th><th class="py-1 pr-3 text-right">เข้าสู่ระบบ</th><th class="py-1 pr-3 text-right">วันที่ใช้</th><th class="py-1 pr-3 text-right">เปิดแท็บ</th><th class="py-1">แท็บที่ใช้บ่อย</th></tr></thead>
       <tbody>${(people.users || []).map(personRow).join('') || '<tr><td class="py-2" colspan="8" style="color:var(--text-muted)">ยังไม่มีบัญชี</td></tr>'}</tbody></table></div>
     </div>` : '';
-  el.innerHTML = peopleHtml + `
+  el.innerHTML = _securityHtml(sec, esc) + peopleHtml + `
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       <div>
         <div class="text-xs font-semibold mb-2" style="color:var(--text-secondary)">แท็บที่ถูกเปิด (${esc(days)} วันล่าสุด)</div>
@@ -5050,6 +5051,48 @@ async function loadUsageStats() {
         <table class="text-xs w-full"><tbody>${apiRows.map(a => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 font-mono text-[10px]">${esc(a.name)}</td><td class="py-1 text-right font-semibold">${(+a.hits).toLocaleString()}</td></tr>`).join('') || '<tr><td class="py-2" style="color:var(--text-muted)">ยังไม่มีข้อมูล</td></tr>'}</tbody></table>
       </div>
     </div>`;
+}
+
+// ── security events (code guard): who was refused, held or flagged, and whose copy a code mark is ──
+function _securityHtml(sec, esc) {
+  if (!sec) return '';
+  const ev = sec.events || [], held = sec.held || [];
+  const weekAgo = new Date(Date.now() - 7 * 864e5 + 7 * 36e5).toISOString().slice(0, 10);
+  const recent = ev.filter(e => String(e.at || '').slice(0, 10) >= weekAgo);
+  const KINDS = [['bot_ua', 'โปรแกรมหรือ AI ถูกปฏิเสธ'], ['automation', 'เบราว์เซอร์อัตโนมัติ'], ['sweep', 'ดึงข้อมูลผิดปกติ']];
+  const chip = ([k, label]) => { const n = recent.filter(e => e.kind === k).length;
+    return `<span class="text-[11px] px-2 py-0.5 rounded-full font-semibold" style="${n ? 'color:var(--bad-ink);background:var(--bad-bg, #fee2e2)' : 'color:var(--text-muted);background:var(--bg-input)'}">${label} ${n}</span>`; };
+  const heldRows = held.map(h => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1.5 pr-3 font-semibold">${esc(h.username)}</td><td class="py-1.5 pr-3">อีก ${esc(h.minutes_left)} นาที</td><td class="py-1.5 text-right"><button onclick="releaseHeldUser('${esc(h.username)}')" class="text-[11px] px-2 py-0.5 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">ยกเลิกการพัก</button></td></tr>`).join('');
+  const evRow = e => `<tr class="border-b" style="border-color:var(--border)"><td class="py-1 pr-3 whitespace-nowrap" style="color:var(--text-muted)">${esc(String(e.at || '').slice(0, 16))}</td><td class="py-1 pr-3">${esc(e.kind_th || e.kind)}</td><td class="py-1 pr-3 font-semibold">${esc(e.username || '—')}</td><td class="py-1 pr-3 font-mono text-[10px]" title="${esc(e.ua || '')}">${esc(e.ip || '')}</td><td class="py-1 text-[11px]" style="color:var(--text-secondary)">${esc([e.path, e.detail].filter(Boolean).join(' · '))}</td></tr>`;
+  return `
+    <div class="mb-6">
+      <div class="text-xs font-semibold mb-1 flex items-center gap-2 flex-wrap" style="color:var(--text-secondary)">ความปลอดภัย (7 วันล่าสุด) ${KINDS.map(chip).join(' ')} ${uiQ('usage:security', 'ความปลอดภัย', '<p>ระบบปฏิเสธโปรแกรมอัตโนมัติและ AI ที่พยายามเปิดแอป · บัญชีสาขาหรือเจ้าของสาขาที่ใช้เบราว์เซอร์อัตโนมัติหรือดึงข้อมูลผิดปกติถูกพักการใช้งาน 30 นาที · บัญชีสำนักงานใหญ่ถูกบันทึกเท่านั้น</p><p>รหัสตรวจสอบโค้ด: โค้ดที่ส่งให้แต่ละบัญชีมีรหัส <code>__cg</code> ของบัญชีนั้น หากพบโค้ดของระบบนอกบริษัท ให้นำรหัสมาค้นว่ามาจากบัญชีใด</p>')}</div>
+      ${held.length ? `<table class="text-xs w-full mb-3"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">บัญชีที่ถูกพัก</th><th class="py-1 pr-3">เหลือเวลา</th><th></th></tr></thead><tbody>${heldRows}</tbody></table>` : ''}
+      <div class="flex items-center gap-2 flex-wrap mb-2 text-[11px]"><input id="cgMarkInput" type="text" placeholder="รหัสตรวจสอบโค้ด (12 ตัว)" class="border rounded-lg px-2 py-1 font-mono" style="border-color:var(--border);width:180px"><button onclick="lookupCodeMark()" class="px-2 py-1 rounded-lg" style="border:1px solid var(--border);color:var(--text-secondary)">ค้นหาบัญชี</button><span id="cgMarkResult"></span></div>
+      <div style="overflow-x:auto;max-height:320px;overflow-y:auto"><table class="text-xs w-full"><thead><tr class="text-left border-b" style="color:var(--text-muted);border-color:var(--border)"><th class="py-1 pr-3">เวลา</th><th class="py-1 pr-3">เหตุการณ์</th><th class="py-1 pr-3">บัญชี</th><th class="py-1 pr-3">IP</th><th class="py-1">รายละเอียด</th></tr></thead>
+      <tbody>${ev.map(evRow).join('') || '<tr><td class="py-2" colspan="5" style="color:var(--text-muted)">ยังไม่มีเหตุการณ์</td></tr>'}</tbody></table></div>
+    </div>`;
+}
+
+async function releaseHeldUser(username) {
+  if (!await uiConfirm(`ยกเลิกการพักบัญชี ${username}?`)) return;
+  let r = null;
+  try { r = await api(`${API}/api/usage/security/release`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ username }) }); } catch (e) {}
+  if (!r || !r.ok) { notifyError((r && r.detail) || 'ยกเลิกการพักไม่สำเร็จ'); return; }
+  loadUsageStats();
+}
+
+async function lookupCodeMark() {
+  const v = (document.getElementById('cgMarkInput')?.value || '').trim().replace(/[^0-9a-f]/gi, '').toLowerCase();
+  const out = document.getElementById('cgMarkResult');
+  if (!out) return;
+  if (v.length !== 12) { out.textContent = 'รหัสต้องมี 12 ตัว (0-9, a-f)'; out.style.color = 'var(--bad-ink)'; return; }
+  try {
+    const r = await api(`${API}/api/usage/security?limit=1&mark=${v}`);
+    const u = r.mark && r.mark.username;
+    out.textContent = u ? `เป็นโค้ดที่ส่งให้บัญชี ${u}` : 'ไม่ตรงกับบัญชีใดในระบบ';
+    out.style.color = u ? 'var(--bad-ink)' : 'var(--text-muted)';
+  } catch (e) { out.textContent = 'ค้นหาไม่สำเร็จ'; out.style.color = 'var(--bad-ink)'; }
 }
 
 async function sendAdoptionDigest() {
