@@ -100,6 +100,7 @@ function _phSetView(v) {
   const cl = document.body.classList;
   cl.toggle('ph-home', _PH_HOME_VIEWS.includes(v));
   if (v === 'summary') cl.remove('force-desktop'); else if (v === 'page') cl.add('force-desktop');
+  cl.toggle('ph-summary', v === 'summary');      // PR-PD no. 15: the summary keeps ONE bottom bar (its own, with หน้าแรก first)
   if (v !== 'summary') { try { msCloseSheet(); } catch (e) { /* the sheet is not open */ } }
   phPeriodClose(); phBranchClose();
   if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
@@ -146,7 +147,9 @@ async function phShowSummary() {
 // count the old งานของฉัน entry had). ค้นหา moved to the magnifier of the header. A page the role may not open is left out of its bar.
 // `home` = the page หน้าแรก opens for the role (else the launcher); a second tap on หน้าแรก while that page is open goes to the launcher.
 const _PH_BARS = {
-  management: [{ label: 'ยอดขาย', tab: 'dailysales', icon: 'cal' }, { label: 'กำไร', tab: 'gpbranch', icon: 'coin' }, { label: 'สาขา', tab: 'overall', icon: 'store' }],
+  // PR-PD (owner 2026-10-29, no. 15): a management login's ยอดขาย / กำไร / สาขา open the summary's own phone tabs (`ms`), not the
+  // desktop pages shrunk to fit; a login without the summary keeps the pages
+  management: [{ label: 'ยอดขาย', tab: 'dailysales', ms: 'sales', icon: 'cal' }, { label: 'กำไร', tab: 'gpbranch', ms: 'profit', icon: 'coin' }, { label: 'สาขา', tab: 'overall', ms: 'branches', icon: 'store' }],
   salessupport: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }, { label: 'ใบตัดเบิกสาขา', tab: 'orderhub', pane: 'issues', icon: 'doc', nb: true },
     { label: 'เคลม', tab: 'orderhub', pane: 'claims', icon: 'ret', nb: true }],
   warehouse: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }],
@@ -176,8 +179,10 @@ function _phNavItems() {
     return [home, b('issue', 'ตัดเบิก', 'box', 'issue'), b('order', 'สั่งของ', 'cart', 'order'), b('recv', 'รับของ', 'recv', 'recv'), me];
   }
   const ht = _phHomeTab();
-  const pages = (_PH_BARS[_phRole()] || _PH_BARS.management).filter(_phPageOk).map(p => {
+  const ms = typeof hasModule === 'function' && hasModule('report.management');
+  const pages = (_PH_BARS[_phRole()] || _PH_BARS.management).filter(p => (ms && p.ms) || _phPageOk(p)).map(p => {
     const key = p.tab + (p.pane ? ':' + p.pane : '');
+    if (ms && p.ms) return { id: 'ms-' + p.ms, label: p.label, path: DEPT_ICONS[p.icon], js: `phSummaryGo('${p.ms}')`, tab: null, pane: null, nb: '' };
     const go = p.pane ? `supplyGo({tab:'${p.tab}',pane:'${p.pane}'})` : `switchTab('${p.tab}')`;
     return { id: 'pg-' + key, label: p.label, path: DEPT_ICONS[p.icon], js: `phBarGo(()=>${go})`, tab: p.tab, pane: p.pane || null, nb: p.nb ? 'p:' + key : '' };
   });
@@ -190,6 +195,8 @@ function phHomeTap() {
   phShowHome();
 }
 function phBarGo(fn) { _deptCur = null; _deptFocus = null; phOpenPage(fn); }
+// PR-PD no. 15 · a bottom-bar entry that is one of the summary's tabs: open the summary on that tab
+async function phSummaryGo(v) { _deptCur = null; _deptFocus = null; _msView = v; await phShowSummary(); if (_msRpt) msSwitchView(v); }
 function _phNavOn(it) {
   if (_phView === 'search' || _phView === 'me') return it.id === _phView;
   if (_phView !== 'page') return it.id === 'home';
@@ -246,7 +253,8 @@ function _phDeptTiles(rows) {
 function _phCentreHome() {
   const vis = deptHome();
   const yest = hasModule('sales.overview')
-    ? `<button type="button" class="ph-yest" id="phYest" onclick="${hasModule('report.management') ? 'phShowSummary()' : "phOpenPage(() => switchTab('home'))"}" aria-label="ยอดขายเมื่อวาน ${hasModule('report.management') ? 'เปิดสรุปผู้บริหาร' : 'เปิดสรุปประจำวัน'}"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span></button>` : '';
+    ? `<button type="button" class="ph-yest" id="phYest" onclick="${hasModule('report.management') ? 'phShowSummary()' : "phOpenPage(() => switchTab('home'))"}" aria-label="ยอดขายเมื่อวาน ${hasModule('report.management') ? 'เปิดสรุปผู้บริหาร' : 'เปิดสรุปประจำวัน'}"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span>`
+      + `<span class="ph-yest-c" id="phYestCause" hidden></span><span class="ph-yest-t" id="phYestTrust" hidden></span><span class="ph-yest-p" id="phYestPend" hidden></span></button>` : '';
   return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
@@ -287,11 +295,59 @@ async function phLoadYesterday() {
     const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow, wowPct = wow ? Math.round((rev - wow) / wow * 1000) / 10 : null;
     document.getElementById('phYestL').textContent = brief.skipped_day ? 'ยอดขายวันล่าสุดที่ข้อมูลครบ' : 'ยอดขายเมื่อวาน';
     v.textContent = '฿' + fmtN(rev);
-    document.getElementById('phYestS').textContent = wowPct == null ? '' : `เทียบวันเดียวกันสัปดาห์ก่อน ${wowPct > 0 ? '+' : ''}${wowPct}%`;
+    // PR-PD (owner 2026-10-29, no. 16): the change is a pill with its arrow and word, never a colour alone
+    document.getElementById('phYestS').innerHTML = wowPct == null ? '' : `${_phPill(wowPct)} <span>เทียบวันเดียวกันสัปดาห์ก่อน</span>`;
+    phLoadYesterdayLines();
   } catch (e) {
     delete _msBriefCache[''];
     const b = document.getElementById('phYest'); if (b) b.hidden = true;
   }
+}
+
+// PR-PD (owner 2026-10-29, phone decisions) · the three lines under the hero figure, from the same branch scorecard the Daily Brief reads:
+//   no. 1  which branch to call and about what: "17 สาขาต่ำกว่าปกติ · ปลวกแดง −40% ลูกค้า −35%" (the cause beside the branch)
+//   no. 4  whether the day's data is complete: "ข้อมูลครบ 27/28 สาขา" - a branch whose bills never arrived is not a branch to call
+//   no. 3  what waits on the owner: the unread branch messages (nav badges, `fmsg`)
+function _phPill(pct, goodUp = true) {
+  if (pct == null) return '';
+  const up = pct > 0, flat = pct === 0, good = flat ? null : (up === goodUp);
+  return `<span class="ph-pill ${flat ? '' : good ? 'ph-pill-good' : 'ph-pill-bad'}">${flat ? '±' : up ? '▲' : '▼'} ${Math.abs(pct).toFixed(Math.abs(pct) >= 10 ? 0 : 1)}%</span>`;
+}
+// the cause behind a branch below its normal (scorecard: cust_vs_avg_pct, rph_vs_avg_pct, discount_pct): the parts that moved, largest first
+function _phCauseTxt(b) {
+  const parts = [];
+  if (b.cust_vs_avg_pct != null && b.cust_vs_avg_pct <= -8) parts.push({ k: Math.abs(b.cust_vs_avg_pct), t: `ลูกค้า −${Math.abs(b.cust_vs_avg_pct).toFixed(0)}%` });
+  if (b.rph_vs_avg_pct != null && b.rph_vs_avg_pct <= -5) parts.push({ k: Math.abs(b.rph_vs_avg_pct), t: `ยอด/หัว −${Math.abs(b.rph_vs_avg_pct).toFixed(0)}%` });
+  const dp = b.discount_pct, da = b.discount_pct_avg7;
+  if (dp != null && dp >= 2.5 && (da == null || dp >= da + 1)) parts.push({ k: dp * 4, t: `ส่วนลด ${dp.toFixed(1)}%` });
+  const t = parts.sort((a, c) => c.k - a.k).slice(0, 2).map(x => x.t).join(', ');
+  return t ? `(${t})` : '';
+}
+function _phDownRows(sc) {
+  return ((sc || {}).branches || []).filter(b => b.reported !== false && (b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8)))
+    .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
+}
+async function phLoadYesterdayLines() {
+  const c = document.getElementById('phYestCause'), t = document.getElementById('phYestTrust'), pd = document.getElementById('phYestPend');
+  if (!c || !t) return;
+  try {
+    if (!_msScorecard) _msScorecard = api(`${API}/api/home/branch-scorecard`);
+    const sc = await _msScorecard;
+    if (!document.getElementById('phYestCause')) return;
+    const rows = (sc && sc.branches) || [], down = _phDownRows(sc);
+    const top = down.slice(0, 2).map(b => { const why = _phCauseTxt(b); return `${esc(b.branch)} ${b.vs_avg_pct != null ? '−' + Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${why ? ` <small>${why}</small>` : ''}`; });
+    c.innerHTML = down.length ? `<b class="ph-ink-bad">${fmtN(down.length)} สาขาต่ำกว่าปกติ</b> · ${top.join(' · ')}` : '<b class="ph-ink-good">ทุกสาขาอยู่ในเกณฑ์ปกติ</b>';
+    c.hidden = !rows.length;
+    const miss = sc.missing || rows.filter(b => b.reported === false).map(b => b.branch);
+    const rep = sc.reported != null ? sc.reported : rows.length - miss.length;
+    t.innerHTML = miss.length ? `<span class="ph-ink-watch">ข้อมูลยังไม่มา ${fmtN(miss.length)} สาขา</span> · ครบ ${fmtN(rep)}/${fmtN(rows.length)} <small>${esc(miss.slice(0, 3).join(' · '))}${miss.length > 3 ? ` +${miss.length - 3}` : ''}</small>`
+      : `ข้อมูลครบ ${fmtN(rep)}/${fmtN(rows.length)} สาขา`;
+    t.hidden = !rows.length;
+  } catch (e) { _msScorecard = null; }
+  try {
+    const n = (typeof _NB === 'object' && _NB.msgs && _NB.msgs.fmsg) || 0;
+    if (pd) { pd.innerHTML = n ? `รอคุณตอบ · <b>ข้อความจากสาขา ${fmtN(n)}</b>` : ''; pd.hidden = !n; }
+  } catch (e) { /* no launcher badges yet */ }
 }
 
 // ── งานของฉันวันนี้: the open items of หน้างาน that belong to this role (the same filter as หน้างาน and the desktop launcher) ──
@@ -1821,7 +1877,7 @@ function msPartial(trend, gran) {
   }
   return (y === t.getUTCFullYear() && m === t.getUTCMonth() + 1 && d === t.getUTCDate()) ? { i: last, note: '' } : { i: -1, note: '' };
 }
-const msGlanceLine = html => html ? `<p style="font-size:12px;line-height:1.45;color:var(--text-secondary,#475569);margin:2px 0 8px">${html}</p>` : '';
+const msGlanceLine = html => html ? `<p style="font-size:13px;line-height:1.45;color:var(--text-secondary,#475569);margin:2px 0 8px">${html}</p>` : '';
 
 // A small column chart in SVG (no Chart.js on the phone): oldest→newest, theme B1 (VZ2) like the dashboard's bars — gradient
 // columns with rounded tops, above the average teal→indigo, below it lilac, the latest complete period gold with a dark edge,
@@ -2072,10 +2128,10 @@ async function msLoadVoice() {
   document.getElementById('msVoiceCount').textContent = items.length ? `(${items.length}${items.length >= 5 ? '+' : ''})` : '';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
-      <div style="font-size:12px;color:var(--text-muted,#64748b)">${esc(r.source)} · <b style="color:var(--text-primary,#1e293b)">${esc(r.branch_name || '')}</b>${r.rating != null ? ` · ${r.rating}★` : ''} · ${r.age_days === 0 ? 'วันนี้' : (r.age_days || 0) + ' วัน'}${r.sla_breached ? ' <span style="color:var(--bad-ink);font-weight:600">เกิน SLA</span>' : ''}${r.contact ? ` · ${esc(r.contact)}` : ''}</div>
+      <div style="font-size:13px;color:var(--text-muted,#64748b)">${esc(r.source)} · <b style="color:var(--text-primary,#1e293b)">${esc(r.branch_name || '')}</b>${r.rating != null ? ` · ${r.rating}★` : ''} · ${r.age_days === 0 ? 'วันนี้' : (r.age_days || 0) + ' วัน'}${r.sla_breached ? ' <span style="color:var(--bad-ink);font-weight:600">เกิน SLA</span>' : ''}${r.contact ? ` · ${esc(r.contact)}` : ''}</div>
       <div style="font-size:13px;margin:3px 0">${r.text ? esc(r.text.slice(0, 160)) : '<i style="color:var(--text-muted,#64748b)">(ให้ดาวอย่างเดียว)</i>'}</div>
-      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:12px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:12px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard('feedback')" style="font-size:12px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
-    </div>`).join('') : `<div style="font-size:12px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ</div>`;
+      <div style="display:flex;gap:6px;flex-wrap:wrap"><button onclick="msVoiceHandled(${r.id})" style="font-size:13px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid #0f766e;background:#0f766e;color:#fff">✓ ตอบแล้ว</button>${r.url ? `<a href="${esc(r.url)}" target="_blank" rel="noopener" style="font-size:13px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);color:var(--text-primary,#1e293b);text-decoration:none">เปิดต้นทาง ↗</a>` : ''}<button onclick="showFullDashboard('feedback')" style="font-size:13px;padding:10px 14px;min-height:44px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:transparent;color:var(--text-primary,#1e293b)">ตอบในแอป</button></div>
+    </div>`).join('') : `<div style="font-size:13px;color:var(--text-muted,#64748b);padding:6px 0">ไม่มีรายการรอตอบ</div>`;
 }
 async function msVoiceHandled(id) {
   const note = await uiPrompt('ตอบลูกค้าอย่างไร (สรุปสั้น ๆ) — เว้นว่างได้');
@@ -2093,7 +2149,7 @@ const _msTgtCol = p => p == null ? '#94a3b8' : p >= 100 ? '#10b981' : p >= 90 ? 
 const _msSevCol = s => s === 'high' ? '#ef4444' : s === 'med' ? '#f59e0b' : '#94a3b8';
 const _msCpCol = cp => fcTargetCol(cp);   // ONE food-cost target (owner 2026-10-25): ≤ target green, above it red
 const _msMuted = 'color:var(--text-muted,#64748b)';
-const _msNone = t => `<div class="ms-row" style="font-size:12px;${_msMuted}">${t}</div>`;
+const _msNone = t => `<div class="ms-row" style="font-size:13px;${_msMuted}">${t}</div>`;
 // PR-PP2: the month in progress is compared to date - days 1..n against days 1..n of last month and of the same
 // month a year back (the report's headline.mom_basis === 'to_date'); the weekday-fair figure stays on the pace card
 const _msDowNote = 'เดือนนี้ยังไม่ครบ จึงเทียบกับวันที่ 1 ถึงวันเดียวกันของเดือนก่อนและของปีก่อน';
@@ -2104,29 +2160,86 @@ function msKpiTile(l, v, c, sub, span) {
 // headline KPIs: revenue (+8-period columns), covers, spend/head, GP, discounts — MoM and YoY chips
 function msKpisHtml(j) {
   const H = j.headline || {}, G = j.gp || {}, yoy = _msYoyOk(j);
-  const chips = (m, y, vs) => msPchip(m) + (vs ? ` <span style="${_msMuted};font-size:12px">เทียบเดือนก่อน</span>` : '') + (yoy && y != null ? ` <span style="font-size:12px;${_msMuted}">· เทียบปีก่อน</span> ${msPchip(y)}` : '');
+  const chips = (m, y, vs) => msPchip(m) + (vs ? ` <span style="${_msMuted};font-size:13px">เทียบเดือนก่อน</span>` : '') + (yoy && y != null ? ` <span style="font-size:13px;${_msMuted}">· เทียบปีก่อน</span> ${msPchip(y)}` : '');
   const tr = j.trend || [];
   const cols = tr.length >= 3 ? `<div style="margin-top:10px">${msColumns(tr.map(x => x.revenue ?? null), { partial: j.partial ? tr.length - 1 : -1, labels: tr.map(x => x.label), fmt, grain: 'month', height: 92, aria: 'รายได้รายเดือน' })}</div>` : '';
-  return `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">รายได้${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk('#4a70b0')}">${fmt(H.revenue || 0)}</p><p class="sub">${chips(H.rev_wow_pct, H.rev_yoy_pct, true)}</p>${cols}</div>`
-    + msKpiTile('ลูกค้า', fmtN(H.customers || 0), '#0891b2', chips(H.cust_wow_pct, H.cust_yoy_pct))
-    + msKpiTile('รายได้/หัว', H.rev_per_head != null ? fmt(H.rev_per_head) : '—', '#7a66b8', chips(H.rph_wow_pct, H.rph_yoy_pct))
-    + (canSeeCost() ? msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', '#10b981', G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`) : '')   // PL3: no gross profit for a role without a cost or profit module (the server drops it too)
-    + msKpiTile('ส่วนลด', fmt(H.discount || 0), '#ef4444', H.discount_pct != null ? `<b>${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:12px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%` : ''}</span>` : '', !canSeeCost())
-    + (H.mom_basis === 'to_date' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:12px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
+  // PR-PD (owner 2026-10-29, no. 16) · colour means one thing: a figure is neutral, the pill beside it carries the direction;
+  // red only where money is lost or a target is missed (the discount above its ceiling, the food cost above its target)
+  const N = 'var(--text-primary)';
+  const discOver = H.discount_policy_pct != null && H.discount_pct != null && H.discount_pct > H.discount_policy_pct;
+  return `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">รายได้${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${N}">${fmt(H.revenue || 0)}</p><p class="sub">${chips(H.rev_wow_pct, H.rev_yoy_pct, true)}</p>${cols}</div>`
+    + msKpiTile('ลูกค้า', fmtN(H.customers || 0), N, chips(H.cust_wow_pct, H.cust_yoy_pct))
+    + msKpiTile('รายได้/หัว', H.rev_per_head != null ? fmt(H.rev_per_head) : '—', N, chips(H.rph_wow_pct, H.rph_yoy_pct))
+    + (canSeeCost() ? msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', N, G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`) : '')   // PL3: no gross profit for a role without a cost or profit module (the server drops it too)
+    + (canSeeCost() ? msFoodCostTile(j) : '')
+    + msKpiTile('ส่วนลด', fmt(H.discount || 0), discOver ? 'var(--bad-ink)' : N, H.discount_pct != null ? `<b style="color:${discOver ? 'var(--bad-ink)' : N}">${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:13px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%${discOver ? ' · เกินเพดาน' : ''}` : ''}</span>` : '', !canSeeCost())
+    + msWeakDayLine(j)
+    + (H.mom_basis === 'to_date' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:13px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
+}
+// PR-PD no. 6 · ต้นทุนอาหาร against the ONE target (owner 2026-10-25: ≤ 58 %), and the dish that pushed it most this month in baht
+// (menu.risers[0] x covers, the to-do line's figure). The กระจุก / ทั้งเครือ tag of that dish comes from the spike card's answer
+// (/api/sales/menu-spike, PR-SK2 concentration) once it loads - it decides whether to call one branch or fix the chain standard.
+function msFoodCostTile(j) {
+  const P = j.pace || {}, M = j.menu || {}, fc = P.food_cost_pct;
+  if (fc == null) return '';
+  const fct = fcTargetSet(j.food_cost_target), over = fc > fct;
+  const cov = M.covers || 0, r0 = (M.risers || []).filter(m => (m.delta || 0) > 0)[0];
+  const drv = r0 && cov ? `ตัวดัน: ${esc(_msShortMenu(r0.menu))} <b style="color:var(--bad-ink)">+฿${fmt(r0.delta * cov)}</b> <span id="msFcTag" class="ms-fc-tag"></span>` : '';
+  if (r0) setTimeout(() => msLoadFocusTag(j, r0.menu), 0);
+  return `<div class="ms-kpi ms-fc-tile" style="grid-column:1/-1"><p class="lbl">ต้นทุนอาหาร <span style="${_msMuted}">· เป้า ≤${fcTargetTxt(fct)}%</span></p>`
+    + `<p class="val" style="color:${over ? 'var(--bad-ink)' : 'var(--good-ink)'}">${fc.toFixed(1)}% <span class="ms-fc-badge">${over ? 'เกินเป้า' : 'ในเป้า'}</span>${P.food_cost_pct_prev != null ? ` <span style="font-size:13px;font-weight:400;${_msMuted}">เดือนก่อน ${P.food_cost_pct_prev.toFixed(1)}%</span>` : ''}</p>`
+    + (drv ? `<p class="sub" style="font-size:13px">${drv}</p>` : '') + '</div>';
+}
+const _msShortMenu = n => String(n || '').replace(/^\((?:A|B|BF|AL|DL|TW)\)\s*/, '').replace(/\s*\(1 [^)]*\)\s*$/, '');
+const _msNorm = n => String(n || '').toLowerCase().replace(/^\((?:a|b|bf|al|dl|tw)\)\s*/, '').replace(/[,.·\-_\s\u00a0()]/g, '');
+let _msSpikeCache = {};
+async function msLoadFocusTag(j, menu) {
+  const key = (j.selected_month || '') + '|' + (msBranch() || '');
+  try {
+    if (!_msSpikeCache[key]) {
+      const q = new URLSearchParams({ period: 'mtd', threshold: '1.5', limit: '300' });
+      if (msBranch()) q.set('branch', msBranch());
+      if (j.range && j.range[1]) q.set('date', j.range[1]);
+      _msSpikeCache[key] = api(`${API}/api/sales/menu-spike?${q}`);
+    }
+    const d = await _msSpikeCache[key];
+    const el = document.getElementById('msFcTag'); if (!el || !d || !d.dishes) return;
+    const want = _msNorm(menu), hit = d.dishes.find(x => _msNorm(x.menu) === want) || d.dishes.find(x => _msNorm(x.menu).includes(want) || want.includes(_msNorm(x.menu)));
+    const c = hit && hit.concentration; if (!c) return;
+    const share = `${Math.round(c.share_pct)}%`;
+    el.className = `ms-fc-tag ms-fc-tag-${c.spread}`;
+    el.textContent = c.spread === 'wide' ? `ทั้งเครือ ${fmtN(c.up_branches)} สาขา` : c.spread === 'one' ? `สาขาเดียว ${c.branch}` : `กระจุก ${c.branch} ${share}`;
+    el.title = c.spread === 'wide' ? `เพิ่มกระจาย ${c.up_branches} สาขา — แก้ที่มาตรฐานการตักทั้งเครือ` : `ส่วนที่เพิ่มอยู่ที่ ${c.branch} ${share} — คุยกับสาขานี้`;
+  } catch (e) { delete _msSpikeCache[key]; }
+}
+// PR-PD no. 5 · the weekday that fell against the comparison period (peak.weak_day): a weekday promotion or a roster change,
+// not 28 branch calls
+const _MS_DOW_TH = { Mon: 'วันจันทร์', Tue: 'วันอังคาร', Wed: 'วันพุธ', Thu: 'วันพฤหัสบดี', Fri: 'วันศุกร์', Sat: 'วันเสาร์', Sun: 'วันอาทิตย์' };
+function msWeakDayLine(j) {
+  const w = (j.peak || {}).weak_day; if (!w) return '';
+  return `<p class="ms-weakday" style="grid-column:1/-1">${_MS_DOW_TH[w.dow] || w.dow}ตก <b style="color:var(--bad-ink)">▼ ${Math.abs(w.delta_pct).toFixed(0)}%</b> เทียบเดือนก่อน <span style="${_msMuted}">· ต่อวัน ${fmt(w.avg_revenue)} จาก ${fmt(w.prev_avg_revenue)}</span></p>`;
 }
 // target card: % of target as the headline, the bar, then the figures behind it
 function msTargetHtml(j) {
   const P = j.pace || {}, pvt = P.proj_vs_target_pct, mc = P.month_complete, TS = P.target_scope;   // DV1: % of target like for like
   if (!P.target) return _msNone('ยังไม่มีเป้าเดือนนี้ — สาขาใหม่ยังไม่มีเดือนเดียวกันปีก่อน');
   const c = _msTgtCol(pvt);
-  return `<div style="display:flex;align-items:baseline;gap:10px;padding:10px 0 4px"><span style="font-size:30px;font-weight:800;line-height:1;color:${textInk(c)}">${pvt != null ? pvt.toFixed(0) + '%' : '—'}</span><span style="font-size:12px;${_msMuted}">${mc ? 'ของเป้าทั้งเดือน' : 'ของเป้า (ประมาณการสิ้นเดือน)'}</span></div>
-    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${msBar(Math.min(100, Math.round(pvt || 0)), c)}<span style="font-size:12px;${_msMuted}">100%</span></div>
+  // PR-PD (owner 2026-10-29, no. 2) · the instruction behind the gap, before the figures: "เหลือ 9 วัน · ต้องขายวันละ ฿3.1M (ที่ผ่านมา ฿2.7M)";
+  // red only when the needed pace is above the pace so far (the one red of this card), green when the target is within the current pace
+  const RR = P.run_rate, rr = RR && RR.days_left > 0 && RR.need_per_day != null
+    ? (() => { const hard = RR.need_per_day > (RR.normal_per_day || 0) * 1.02, done = RR.need_per_day <= 0;
+        return `<div class="ms-runrate ${done ? 'is-good' : hard ? 'is-bad' : 'is-good'}"><span class="ms-runrate-l">เหลือ ${fmtN(RR.days_left)} วัน</span>`
+          + (done ? `<b>ถึงเป้าแล้ว</b>` : `<b>ต้องขายวันละ ${fmt(RR.need_per_day)}</b>`)
+          + `<span class="ms-runrate-s">ที่ผ่านมา ${fmt(RR.normal_per_day || 0)}/วัน${RR.branches && TS && TS.no_target_branches ? ` · ${fmtN(RR.branches)} สาขาที่มีเป้า` : ''}</span></div>`; })()
+    : '';
+  return `<div style="display:flex;align-items:baseline;gap:10px;padding:10px 0 4px"><span style="font-size:30px;font-weight:800;line-height:1;color:${textInk(c)}">${pvt != null ? pvt.toFixed(0) + '%' : '—'}</span><span style="font-size:13px;${_msMuted}">${mc ? 'ของเป้าทั้งเดือน' : 'ของเป้า (ประมาณการสิ้นเดือน)'}</span></div>${rr}
+    <div style="display:flex;align-items:center;gap:6px;margin-bottom:6px">${msBar(Math.min(100, Math.round(pvt || 0)), c)}<span style="font-size:13px;${_msMuted}">100%</span></div>
     <div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอดทั้งเดือน' : `ยอดสะสม (${P.days_elapsed || 0}/${P.days_total || 0} วัน)`}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.mtd_revenue || 0)}</b></div>
-    ${mc ? '' : `<div class="ms-row"><span style="flex:1;font-size:13px">ประมาณการสิ้นเดือน${P.proj_method === 'dow' ? ' <span style="font-size:12px;' + _msMuted + '">(ถ่วงวันในสัปดาห์)</span>' : ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.projected || 0)}</b></div>`}
-    ${TS && TS.no_target_branches ? `<div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอด' : 'ประมาณการ'} ${TS.branches} สาขาที่มีเป้า <span style="font-size:12px;${_msMuted}">(ไม่รวม ${TS.no_target_branches} สาขาที่ยังไม่มีเป้า)</span></span><b style="font-variant-numeric:tabular-nums">${fmt(TS.projected || 0)}</b></div>` : ''}
+    ${mc ? '' : `<div class="ms-row"><span style="flex:1;font-size:13px">ประมาณการสิ้นเดือน${P.proj_method === 'dow' ? ' <span style="font-size:13px;' + _msMuted + '">(ถ่วงวันในสัปดาห์)</span>' : ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.projected || 0)}</b></div>`}
+    ${TS && TS.no_target_branches ? `<div class="ms-row"><span style="flex:1;font-size:13px">${mc ? 'ยอด' : 'ประมาณการ'} ${TS.branches} สาขาที่มีเป้า <span style="font-size:13px;${_msMuted}">(ไม่รวม ${TS.no_target_branches} สาขาที่ยังไม่มีเป้า)</span></span><b style="font-variant-numeric:tabular-nums">${fmt(TS.projected || 0)}</b></div>` : ''}
     <div class="ms-row"><span style="flex:1;font-size:13px">เป้า ${P.month || ''}</span><b style="font-variant-numeric:tabular-nums">${fmt(P.target)}</b></div>
-    ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:12px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
-    <p style="font-size:12px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;
+    ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:13px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
+    <p style="font-size:13px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;
 }
 // DV6 (phone table review 2026-10-25, top-10 #9): every to-do line shows the baht it is about on the right (actions[].baht, signed:
 // red = sales lost / money given away / cost added, green = the opposite; dvBaht, js/01-core.js) with what the figure is (baht_label) under it
@@ -2134,7 +2247,7 @@ function msActionsHtml(j) {
   return (j.actions || []).map(a => {
     const b = a.baht, has = b != null && b !== 0;
     const right = has ? `<span style="flex-shrink:0;max-width:42%;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap;color:${b < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(b)}</b>`
-      + (a.baht_label ? `<br><span style="font-size:12px;${_msMuted}">${esc(a.baht_label)}</span>` : '') + `</span>` : '';
+      + (a.baht_label ? `<br><span style="font-size:13px;${_msMuted}">${esc(a.baht_label)}</span>` : '') + `</span>` : '';
     return `<div class="ms-row ms-act" style="align-items:flex-start;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${_msSevCol(a.sev)};flex-shrink:0;margin-top:6px"></span><span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.text)}</span>${right}</div>`;
   }).join('') || _msNone('ไม่พบประเด็นเร่งด่วน');
 }
@@ -2147,19 +2260,19 @@ function msPeakHtml(PK) {
   if (!hrs.length) return _msNone('ไม่มีข้อมูล');
   const top = hrs.slice().sort((a, b) => b.revenue - a.revenue).slice(0, 3).map(h => _hh(h.hour)).join(', ');
   const cols = msColumns(hrs.map(h => h.revenue), { labels: hrs.map(h => String(h.hour).padStart(2, '0')), fmt, height: 90, aria: 'รายได้รายชั่วโมง' });
-  const dp = (PK.dayparts || []).map(d => `<div class="ms-row" style="padding:5px 0"><span style="width:104px;font-size:12px">${_MS_DP[d.name] || esc(d.name)}</span>${msBar(Math.round(d.pct || 0), '#0891b2')}<span style="width:38px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums">${d.pct != null ? d.pct.toFixed(0) + '%' : '—'}</span></div>`).join('');
+  const dp = (PK.dayparts || []).map(d => `<div class="ms-row" style="padding:5px 0"><span style="width:104px;font-size:13px">${_MS_DP[d.name] || esc(d.name)}</span>${msBar(Math.round(d.pct || 0), '#0891b2')}<span style="width:38px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums">${d.pct != null ? d.pct.toFixed(0) + '%' : '—'}</span></div>`).join('');
   const bd = PK.by_day || [], maxD = Math.max(1, ...bd.map(d => d.avg_revenue || 0));
-  const days = bd.length ? `<p style="font-size:12px;${_msMuted};margin:8px 0 2px">รายได้เฉลี่ยต่อวัน ตามวันในสัปดาห์${PK.best_day ? ` · ดีสุด <b>${_MS_DOW_EN[PK.best_day] || PK.best_day}</b>` : ''}</p>`
-    + bd.map(d => `<div class="ms-row" style="padding:4px 0"><span style="width:34px;font-size:12px;font-weight:${d.dow === PK.best_day ? 700 : 400}">${_MS_DOW_EN[d.dow] || d.dow}</span>${msBar(Math.round(100 * (d.avg_revenue || 0) / maxD), d.dow === PK.best_day ? '#4a70b0' : '#c9d5e8')}<span style="width:60px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums">${fmt(d.avg_revenue || 0)}</span></div>`).join('') : '';
-  return `<div style="padding-top:8px">${msGlanceLine(`พีค <b>${top}</b>${PK.peak_hour ? ` · ชั่วโมงทำเงินสูงสุด ${_hh(PK.peak_hour.hour)} (${fmt(PK.peak_hour.revenue)})` : ''}`)}</div>${cols}<p style="font-size:12px;${_msMuted};margin:2px 0 6px">แกนล่าง = ชั่วโมงของวัน</p>${dp}${days}`;
+  const days = bd.length ? `<p style="font-size:13px;${_msMuted};margin:8px 0 2px">รายได้เฉลี่ยต่อวัน ตามวันในสัปดาห์${PK.best_day ? ` · ดีสุด <b>${_MS_DOW_EN[PK.best_day] || PK.best_day}</b>` : ''}</p>`
+    + bd.map(d => `<div class="ms-row" style="padding:4px 0"><span style="width:34px;font-size:13px;font-weight:${d.dow === PK.best_day ? 700 : 400}">${_MS_DOW_EN[d.dow] || d.dow}</span>${msBar(Math.round(100 * (d.avg_revenue || 0) / maxD), d.dow === PK.best_day ? '#4a70b0' : '#c9d5e8')}<span style="width:60px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums">${fmt(d.avg_revenue || 0)}</span></div>`).join('') : '';
+  return `<div style="padding-top:8px">${msGlanceLine(`พีค <b>${top}</b>${PK.peak_hour ? ` · ชั่วโมงทำเงินสูงสุด ${_hh(PK.peak_hour.hour)} (${fmt(PK.peak_hour.revenue)})` : ''}`)}</div>${cols}<p style="font-size:13px;${_msMuted};margin:2px 0 6px">แกนล่าง = ชั่วโมงของวัน</p>${dp}${days}`;
 }
 // tender mix (pos_payment_day) with the share change vs the comparison period
 function msPaymentHtml(PY) {
   if (!PY || !PY.available || !(PY.channels || []).length) return _msNone('ไม่มีข้อมูลช่องทางชำระเงินช่วงนี้');
   const ch = PY.channels.slice(0, 7), pv = (PY.prev || {}).channels || {};
-  return `<p style="font-size:12px;${_msMuted};margin:8px 0 2px">รวม ${fmt(PY.total)} · ${PY.channels.length} ช่องทาง · ตัวเลขท้าย = สัดส่วนเปลี่ยนจากเดือนก่อน</p>` + ch.map(c => {
+  return `<p style="font-size:13px;${_msMuted};margin:8px 0 2px">รวม ${fmt(PY.total)} · ${PY.channels.length} ช่องทาง · ตัวเลขท้าย = สัดส่วนเปลี่ยนจากเดือนก่อน</p>` + ch.map(c => {
     const p = pv[c.code], d = (p && p.pct != null) ? Math.round((c.pct - p.pct) * 10) / 10 : null;
-    return `<div class="ms-row" style="padding:5px 0"><span style="width:88px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.code)}</span>${msBar(Math.round(c.pct), '#0d9488')}<span style="width:44px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums">${c.pct.toFixed(1)}%</span><span style="width:48px;text-align:right;font-size:12px;${_msMuted}">${d != null && d !== 0 ? (d > 0 ? '+' : '') + d + 'pp' : ''}</span></div>`;
+    return `<div class="ms-row" style="padding:5px 0"><span style="width:88px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(c.code)}</span>${msBar(Math.round(c.pct), '#0d9488')}<span style="width:44px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums">${c.pct.toFixed(1)}%</span><span style="width:48px;text-align:right;font-size:13px;${_msMuted}">${d != null && d !== 0 ? (d > 0 ? '+' : '') + d + 'pp' : ''}</span></div>`;
   }).join('');
 }
 // GP bridge: the three effects as signed bars
@@ -2169,15 +2282,15 @@ function msBridgeHtml(B, title) {
                 ['ยอดต่อหัว', B.spend_head, `฿${B.spend_head_prev.toFixed(0)} → ฿${B.spend_head_cur.toFixed(0)}`],
                 ['ต้นทุนต่อหัว', B.cost_head, `฿${B.cost_head_prev.toFixed(0)} → ฿${B.cost_head_cur.toFixed(0)}`]];
   const mx = Math.max(1, ...rows.map(r => Math.abs(r[1])));
-  return `<div style="padding:8px 0 2px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:12px;font-weight:700">${title}</span><span style="font-size:20px;font-weight:800;color:${textInk(B.delta >= 0 ? '#10b981' : '#ef4444')}">${_msSM(B.delta)}</span><span style="font-size:12px;${_msMuted}">GP ${fmt(B.gp_prev)} → ${fmt(B.gp_cur)}${B.gp_pct_prev != null ? ` · ${B.gp_pct_prev.toFixed(1)}% → ${B.gp_pct_cur.toFixed(1)}%` : ''}</span></div>`
-    + rows.map(([l, v, s]) => `<div class="ms-row" style="padding:5px 0"><span style="width:100px;min-width:0"><span style="font-size:12px;display:block">${l}</span><span style="font-size:12px;${_msMuted}">${s}</span></span>${msBar(Math.round(100 * Math.abs(v) / mx), v >= 0 ? '#10b981' : '#ef4444')}<span style="width:64px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:${textInk(v >= 0 ? '#10b981' : '#ef4444')}">${_msSM(v)}</span></div>`).join('');
+  return `<div style="padding:8px 0 2px;display:flex;align-items:baseline;gap:8px;flex-wrap:wrap"><span style="font-size:13px;font-weight:700">${title}</span><span style="font-size:20px;font-weight:800;color:${textInk(B.delta >= 0 ? '#10b981' : '#ef4444')}">${_msSM(B.delta)}</span><span style="font-size:13px;${_msMuted}">GP ${fmt(B.gp_prev)} → ${fmt(B.gp_cur)}${B.gp_pct_prev != null ? ` · ${B.gp_pct_prev.toFixed(1)}% → ${B.gp_pct_cur.toFixed(1)}%` : ''}</span></div>`
+    + rows.map(([l, v, s]) => `<div class="ms-row" style="padding:5px 0"><span style="width:100px;min-width:0"><span style="font-size:13px;display:block">${l}</span><span style="font-size:13px;${_msMuted}">${s}</span></span>${msBar(Math.round(100 * Math.abs(v) / mx), v >= 0 ? '#10b981' : '#ef4444')}<span style="width:64px;text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:${textInk(v >= 0 ? '#10b981' : '#ef4444')}">${_msSM(v)}</span></div>`).join('');
 }
 // buffet price tiers: guests share, food cost/head, food cost %
 function msTiersHtml(j) {
   const T = j.tier || {}, TR = T.rows || [];
   if (!TR.length) return _msNone('ไม่มีข้อมูลกลุ่มราคาช่วงนี้');
-  return TR.map(t => `<div class="ms-row" style="padding:5px 0"><span style="width:88px;min-width:0"><span style="font-size:12px;font-weight:600;display:block">${esc(t.label)}</span><span style="font-size:12px;${_msMuted}">${fmtN(t.pax)} หัว${t.d_pax_pct != null ? ` (${t.d_pax_pct > 0 ? '+' : ''}${t.d_pax_pct}%)` : ''}</span></span>${msBar(Math.round(t.share || 0), '#b45309')}<span style="width:34px;text-align:right;font-size:12px">${(t.share || 0).toFixed(0)}%</span><span style="width:70px;text-align:right;font-size:12px;font-variant-numeric:tabular-nums;line-height:1.25"><b>฿${(t.cogs_head || 0).toFixed(0)}</b>/หัว<br><span style="color:${textInk(_msCpCol(t.food_pct))}">${t.food_pct != null ? t.food_pct.toFixed(0) + '%' : '—'}</span></span></div>`).join('')
-    + `<p style="font-size:12px;${_msMuted};margin:6px 0 4px">แถบ = สัดส่วนลูกค้า · ฿/หัว = ต้นทุนอาหาร · % = food cost ของกลุ่มราคา${T.mix_effect != null ? ` · ผลจากการย้ายกลุ่มราคาต่อยอด/หัว ${T.mix_effect > 0 ? '+' : ''}฿${T.mix_effect}` : ''}</p>`;
+  return TR.map(t => `<div class="ms-row" style="padding:5px 0"><span style="width:88px;min-width:0"><span style="font-size:13px;font-weight:600;display:block">${esc(t.label)}</span><span style="font-size:13px;${_msMuted}">${fmtN(t.pax)} หัว${t.d_pax_pct != null ? ` (${t.d_pax_pct > 0 ? '+' : ''}${t.d_pax_pct}%)` : ''}</span></span>${msBar(Math.round(t.share || 0), '#b45309')}<span style="width:34px;text-align:right;font-size:13px">${(t.share || 0).toFixed(0)}%</span><span style="width:70px;text-align:right;font-size:13px;font-variant-numeric:tabular-nums;line-height:1.25"><b>฿${(t.cogs_head || 0).toFixed(0)}</b>/หัว<br><span style="color:${textInk(_msCpCol(t.food_pct))}">${t.food_pct != null ? t.food_pct.toFixed(0) + '%' : '—'}</span></span></div>`).join('')
+    + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">แถบ = สัดส่วนลูกค้า · ฿/หัว = ต้นทุนอาหาร · % = food cost ของกลุ่มราคา${T.mix_effect != null ? ` · ผลจากการย้ายกลุ่มราคาต่อยอด/หัว ${T.mix_effect > 0 ? '+' : ''}฿${T.mix_effect}` : ''}</p>`;
 }
 // discount leak cards (bills, baht, change, top branches)
 function msLeakCards(L) {
@@ -2185,7 +2298,7 @@ function msLeakCards(L) {
     o = o || {}; if (o.unavailable) return '';
     const bad = (o.bills || 0) > 0, c = bad ? '#ef4444' : '#10b981';
     const top = (o.by_branch || []).slice(0, 2).map(x => esc(x.branch)).join(', ');
-    return `<div class="ms-kpi" style="border:1px solid ${c}"><p class="lbl">${title}</p><p class="val" style="font-size:20px;color:${textInk(c)}">${fmtN(o.bills || 0)} <span style="font-size:12px;font-weight:400;${_msMuted}">บิล</span></p><p class="sub" style="font-size:12px">${fmt(o.baht || 0)}${o.bills_wow != null ? ' ' + msPchip(o.bills_wow, false) : ''}</p>${top ? `<p style="font-size:12px;${_msMuted}">${top}</p>` : ''}<p style="font-size:12px;${_msMuted}">${hint}</p></div>`;
+    return `<div class="ms-kpi" style="border:1px solid ${c}"><p class="lbl">${title}</p><p class="val" style="font-size:20px;color:${textInk(c)}">${fmtN(o.bills || 0)} <span style="font-size:13px;font-weight:400;${_msMuted}">บิล</span></p><p class="sub" style="font-size:13px">${fmt(o.baht || 0)}${o.bills_wow != null ? ' ' + msPchip(o.bills_wow, false) : ''}</p>${top ? `<p style="font-size:13px;${_msMuted}">${top}</p>` : ''}<p style="font-size:13px;${_msMuted}">${hint}</p></div>`;
   };
   return card('ลดหนัก ≥30%', L.heavy_discount, 'ลดตั้งแต่ 30% ของมูลค่าบิล') + card('ลดแล้วจ่ายเงินสด', L.cash_heavy, 'สัญญาณเสี่ยงเงินขาด')
     + card('บิลพิมพ์ซ้ำ', L.reprinted, 'บิลส่วนลดที่พิมพ์ >1 ครั้ง') + card('บิลยอดศูนย์', L.zero_gross, 'เหลือ ฿0 หลังลด');
@@ -2202,9 +2315,9 @@ function msRenderSummary() {
   const brs = j.branches || [], withMom = brs.filter(b => b.rev_delta != null);
   const best = withMom.slice().sort((a, b) => b.rev_delta - a.rev_delta)[0];
   const worst = withMom.slice().sort((a, b) => a.rev_delta - b.rev_delta)[0];
-  const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border:1px solid ${good ? '#10b981' : '#ef4444'}" data-br="${esc(b.branch)}" onclick="msOpenBranch(this.dataset.br)">
+  const bwCard = (b, good) => !b ? '' : `<div class="ms-kpi" style="border:1px solid ${good ? 'var(--good-ink)' : 'var(--bad-ink)'}" data-br="${esc(b.branch)}" onclick="msOpenBranch(this.dataset.br)">
       <p class="lbl">${good ? 'เพิ่มมากสุด (บาท)' : '⚠ ลดมากสุด (บาท)'}</p>
-      <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)} <span style="font-size:12px;${_msMuted}">›</span></p>
+      <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)} <span style="font-size:13px;${_msMuted}">›</span></p>
       <p class="sub"><b style="color:${b.rev_delta < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'};font-variant-numeric:tabular-nums">${dvBaht(b.rev_delta)}</b> ${msPchip(b.wow_pct)}</p></div>`;
   const bw = document.getElementById('msBestWorst');
   if (bw) { bw.innerHTML = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.parentElement.style.display = brs.length > 1 ? '' : 'none'; }
@@ -2245,8 +2358,9 @@ function msYesterdayHtml(brief, sc, br) {
   const when = isNaN(d) ? brief.yesterday : `${_MS_TH_DOW[d.getDay()]} ${d.getDate()} ${_MS_TH_MON[d.getMonth()]}`;
   const rows = ((sc || {}).branches || []);
   // the Daily Brief's rule (js/07-home.js): status down, or 8 % or more under the branch's trailing average
-  const down = rows.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
-                   .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
+  // PR-PD no. 4: a branch whose bills have not arrived (reported: false) is not "down"
+  const down = _phDownRows(sc);
+  const miss = (sc && sc.missing) || rows.filter(b => b.reported === false).map(b => b.branch);
   const bad = 'color:var(--bad-ink,#b91c1c)', good = 'color:var(--good-ink,#047857)';
   let line3 = '', go = '', target = '';
   if (br) {
@@ -2258,8 +2372,9 @@ function msYesterdayHtml(brief, sc, br) {
     }
     go = 'msOpenBranch(this.dataset.br)'; target = br;
   } else {
+    // PR-PD no. 1: the cause beside the branch ("ปลวกแดง −40% ลูกค้า −35%"), so the call is about the right thing
     line3 = down.length
-      ? `<span style="${bad}">${down.length} สาขาต่ำกว่าปกติ</span> · ${down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}`).join(' · ')}`
+      ? `<span style="${bad}">${down.length} สาขาต่ำกว่าปกติ</span> · ${down.slice(0, 2).map(b => { const why = _phCauseTxt(b); return `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}${why ? ` <span style="${_msMuted}">${why}</span>` : ''}`; }).join(' · ')}`
       : `<span style="${good}">ทุกสาขาอยู่ในเกณฑ์ปกติ</span>`;
     if (down.length) { go = 'msOpenBranch(this.dataset.br)'; target = down[0].branch; }
     else go = "msSwitchView('branches')";
@@ -2268,12 +2383,13 @@ function msYesterdayHtml(brief, sc, br) {
   if (brief.skipped_day) {
     const sd = new Date(brief.skipped_day + 'T00:00:00');
     const sWhen = isNaN(sd) ? brief.skipped_day : `${sd.getDate()} ${_MS_TH_MON[sd.getMonth()]}`;
-    skipNote = `<p style="font-size:12px;${_msMuted};margin-top:4px">ข้อมูลวันที่ ${esc(sWhen)} มีเพียง ${fmtN(brief.skipped_bills || 0)} บิล ยังมาไม่ครบ จึงแสดงวันก่อนหน้า</p>`;
+    skipNote = `<p style="font-size:13px;${_msMuted};margin-top:4px">ข้อมูลวันที่ ${esc(sWhen)} มีเพียง ${fmtN(brief.skipped_bills || 0)} บิล ยังมาไม่ครบ จึงแสดงวันก่อนหน้า</p>`;
   }
+  if (!br && miss.length) skipNote += `<p style="font-size:13px;color:var(--amber-ink);margin-top:4px">ข้อมูลยังไม่มา ${fmtN(miss.length)} สาขา: ${esc(miss.slice(0, 4).join(' · '))}${miss.length > 4 ? ` +${miss.length - 4}` : ''} — ไม่นับเป็นสาขาต่ำกว่าปกติ</p>`;
   return `<div data-br="${esc(target)}" onclick="${go}" role="button" aria-label="เมื่อวาน — แตะเพื่อดูรายสาขา" style="cursor:pointer;min-height:44px">
-    <p style="font-size:12px;${_msMuted}">${brief.skipped_day ? 'วันล่าสุดที่ข้อมูลครบ' : 'เมื่อวาน'} · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
-    <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${wowPct != null ? msPchip(wowPct) : ''}<span style="font-size:12px;${_msMuted}">เทียบวันเดียวกันสัปดาห์ก่อน</span></p>
-    <p style="font-size:12px;${_msMuted};margin-top:2px">ลูกค้า ${fmtN(brief.customer_yesterday || 0)} · ${fmtN(brief.tx_yesterday || 0)} บิล · ${fmt(brief.avg_ticket_yesterday || 0)}/บิล</p>
+    <p style="font-size:13px;${_msMuted}">${brief.skipped_day ? 'วันล่าสุดที่ข้อมูลครบ' : 'เมื่อวาน'} · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
+    <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${wowPct != null ? msPchip(wowPct) : ''}<span style="font-size:13px;${_msMuted}">เทียบวันเดียวกันสัปดาห์ก่อน</span></p>
+    <p style="font-size:13px;${_msMuted};margin-top:2px">ลูกค้า ${fmtN(brief.customer_yesterday || 0)} · ${fmtN(brief.tx_yesterday || 0)} บิล · ${fmt(brief.avg_ticket_yesterday || 0)}/บิล</p>
     ${line3 ? `<p style="font-size:13px;margin-top:6px;display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">${line3}</span><span style="${_msMuted}">›</span></p>` : ''}
     ${skipNote}
   </div>`;
@@ -2320,19 +2436,19 @@ function msRenderBranches() {
     : glanceRangeSentence(branches.map(b => b.branch), branches.map(b => metric.v(b) ?? null), metric.o);
   const withT = branches.filter(b => b.vs_target_pct != null), onT = withT.filter(b => b.vs_target_pct >= 100).length;
   const head = (sentence ? `<div style="padding-top:8px">${msGlanceLine(sentence)}</div>` : '')
-    + `<p style="font-size:12px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า${withT.some(b => b.target_basis === 'projected') ? ' (ประมาณการสิ้นเดือน)' : ''} · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
+    + `<p style="font-size:13px;${_msMuted};margin:0 0 6px">${hasTgt ? `<b style="color:${textInk(onT >= withT.length / 2 ? '#10b981' : '#f59e0b')}">${onT}/${withT.length}</b> สาขาถึงเป้า${withT.some(b => b.target_basis === 'projected') ? ' (ประมาณการสิ้นเดือน)' : ''} · ` : ''}แตะชื่อสาขาเพื่อดูรายละเอียด${(j.headline || {}).mom_basis === 'to_date' ? ' · % เทียบวันเดียวกันของเดือนก่อน' : ''}</p>`;
   document.getElementById('msBranches').innerHTML = head + branches.map(b => {
     const right = S === 'rph'
       ? `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${b.rev_per_head != null ? fmt(b.rev_per_head) : '—'}/หัว</span>`
       : S === 'tgt'
-      ? `<span style="text-align:right;line-height:1.25">${gapOf(b) != null ? `<b style="font-size:13px;font-variant-numeric:tabular-nums;color:${gapOf(b) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(gapOf(b))}</b><br>` : ''}<span style="font-size:12px;${_msMuted}">${b.target != null ? 'เป้า ' + fmt(b.target) : ''}</span></span><span class="ms-chip" style="background:${_msTgtCol(b.vs_target_pct)}22;color:${textInk(_msTgtCol(b.vs_target_pct))}">${b.vs_target_pct != null ? b.vs_target_pct.toFixed(0) + '%' : '—'}</span>`
+      ? `<span style="text-align:right;line-height:1.25">${gapOf(b) != null ? `<b style="font-size:13px;font-variant-numeric:tabular-nums;color:${gapOf(b) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(gapOf(b))}</b><br>` : ''}<span style="font-size:13px;${_msMuted}">${b.target != null ? 'เป้า ' + fmt(b.target) : ''}</span></span><span class="ms-chip" style="background:${_msTgtCol(b.vs_target_pct)}22;color:${textInk(_msTgtCol(b.vs_target_pct))}">${b.vs_target_pct != null ? b.vs_target_pct.toFixed(0) + '%' : '—'}</span>`
       : S === 'chg'
-      ? `<span style="text-align:right;line-height:1.25"><b style="font-size:13px;font-variant-numeric:tabular-nums;color:${(b.rev_delta || 0) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${b.rev_delta != null ? dvBaht(b.rev_delta) : '—'}</b><br><span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span></span>${msPchip(b.wow_pct)}`
+      ? `<span style="text-align:right;line-height:1.25"><b style="font-size:13px;font-variant-numeric:tabular-nums;color:${(b.rev_delta || 0) < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${b.rev_delta != null ? dvBaht(b.rev_delta) : '—'}</b><br><span style="font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span></span>${msPchip(b.wow_pct)}`
       : `<span style="font-size:13px;color:var(--text-secondary,#475569);font-variant-numeric:tabular-nums">${fmt(b.revenue)}</span>${msPchip(b.wow_pct)}`;
     const sub = [yoy && b.yoy_pct != null ? `เทียบปีก่อน ${b.yoy_pct > 0 ? '+' : ''}${b.yoy_pct}%` : '',
                  b.vs_target_pct != null && S !== 'tgt' ? `<span style="color:${textInk(_msTgtCol(b.vs_target_pct))}">เป้า ${b.vs_target_pct.toFixed(0)}%</span>` : ''].filter(Boolean).join(' · ');
     return `<div class="ms-row" data-br="${esc(b.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
-      <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}${sub ? ` <span style="font-size:12px;font-weight:400;${_msMuted}">${sub}</span>` : ''}</span>
+      <span style="flex:1;min-width:0"><span style="font-size:13px;font-weight:500;color:var(--text-primary,#1e293b);display:block">${esc(b.branch)}${sub ? ` <span style="font-size:13px;font-weight:400;${_msMuted}">${sub}</span>` : ''}</span>
       <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (b.revenue || 0) / maxRev), '#4a70b0', avgW)}</span></span>
       <span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${right}<span style="${_msMuted}">›</span></span>
     </div>`;
@@ -2372,9 +2488,9 @@ function msMomTxt(v, goodUp = true, unit = '%') {
 const _msMomBasisNote = m => !m.mtd ? ''
   : (m.mom.basis === 'to_date' || m.mom.basis === 'same_days') ? 'เทียบวันที่ 1 ถึงวันเดียวกันของเดือนก่อน' : '';
 function msMonthCell(label, value, mom, yoy) {
-  return `<div style="min-width:0"><div style="font-size:12px;${_msMuted}">${label}</div>
+  return `<div style="min-width:0"><div style="font-size:13px;${_msMuted}">${label}</div>
     <div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b);white-space:nowrap">${value}</div>
-    <div style="font-size:12px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:12px;white-space:nowrap"><span style="${_msMuted}">เทียบปีก่อน</span> ${yoy}</div>` : ''}</div>`;
+    <div style="font-size:13px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:13px;white-space:nowrap"><span style="${_msMuted}">เทียบปีก่อน</span> ${yoy}</div>` : ''}</div>`;
 }
 function msMonthsHtml(d, selected) {
   const asc = d.months || [];
@@ -2397,13 +2513,13 @@ function msMonthsHtml(d, selected) {
     under, fmt, grain: 'month', height: 138, aria: 'รายได้รายเดือน และ % เทียบเดือนก่อน' });
   const cards = asc.slice().reverse().map(m => {
     const on = m.month === selected, M = m.mom, Y = m.yoy;
-    const tag = m.mtd ? ` <span class="ms-chip" style="padding:1px 8px;font-size:12px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">สะสม ถึงวันที่ ${_msYmd(m.through)[2]}</span>` : '';
+    const tag = m.mtd ? ` <span class="ms-chip" style="padding:1px 8px;font-size:13px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">สะสม ถึงวันที่ ${_msYmd(m.through)[2]}</span>` : '';
     const note = _msMomBasisNote(m);
     const gpCell = showGp ? msMonthCell('GP %', m.gp_pct != null ? m.gp_pct.toFixed(1) + '%' : '—', m.gp_pct != null ? msMomTxt(M.gp_pp, true, 'pp') : `<span style="${_msMuted}">ไม่มีต้นทุน</span>`, null) : '';
     return `<div class="ms-mrow" role="button" tabindex="0" data-m="${esc(m.month)}" onclick="msPickMonth(this.dataset.m)" onkeydown="if(event.key==='Enter')msPickMonth(this.dataset.m)"
         style="padding:10px 0 12px;min-height:44px;cursor:pointer;border-top:1px solid var(--border,#e2e8f0);${on ? 'box-shadow:inset 3px 0 0 var(--group, var(--accent,#1f3a6b));padding-left:10px;margin-left:-10px;' : ''}">
-      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:14px;color:var(--text-primary,#1e293b)">${esc(msPeriodLabel(m.range[0], 'month'))}</b>${tag}<span style="flex:1"></span><span style="font-size:12px;${_msMuted}">แตะเพื่อดูสรุป ›</span></div>
-      ${note ? `<div style="font-size:12px;${_msMuted};margin:-2px 0 6px">${note}</div>` : ''}
+      <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:14px;color:var(--text-primary,#1e293b)">${esc(msPeriodLabel(m.range[0], 'month'))}</b>${tag}<span style="flex:1"></span><span style="font-size:13px;${_msMuted}">แตะเพื่อดูสรุป ›</span></div>
+      ${note ? `<div style="font-size:13px;${_msMuted};margin:-2px 0 6px">${note}</div>` : ''}
       <div style="display:grid;grid-template-columns:repeat(${showGp ? 4 : 3},1fr);gap:6px">
         ${msMonthCell('รายได้', fmt(m.revenue), msMomTxt(M.revenue), Y ? msMomTxt(Y.revenue) : null)}
         ${msMonthCell('ลูกค้า', fmtN(m.customers), msMomTxt(M.customers), Y ? msMomTxt(Y.customers) : null)}
@@ -2412,9 +2528,9 @@ function msMonthsHtml(d, selected) {
       </div></div>`;
   }).join('');
   return `<div style="padding:10px 0 8px">${msGlanceLine(sentence)}${chart}</div>
-    <p style="font-size:12px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบวันเท่ากันของเดือนก่อน ไม่เทียบกับทั้งเดือน</p>
+    <p style="font-size:13px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบวันเท่ากันของเดือนก่อน ไม่เทียบกับทั้งเดือน</p>
     ${cards}
-    <p style="font-size:12px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · เทียบปีก่อน แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
+    <p style="font-size:13px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · เทียบปีก่อน แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
 }
 async function msLoadMonths(wrap) {
   wrap.innerHTML = '<div class="ms-row">กำลังโหลด…</div>';
@@ -2458,11 +2574,11 @@ async function msLoadSales() {
     const ai = asc.length - 1 - i, inProg = ai === part.i;
     const latest = i === (part.i >= 0 ? 1 : 0);   // the newest complete period
     const wkend = gran === 'day' && [0, 6].includes(msDow(x.start));
-    const tag = inProg ? ` <span class="ms-chip" style="padding:1px 6px;font-size:12px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">${gran === 'day' ? 'วันนี้' : gran === 'week' ? 'สัปดาห์นี้' : 'MTD'}</span>` : '';
+    const tag = inProg ? ` <span class="ms-chip" style="padding:1px 6px;font-size:13px;background:var(--bg-subtle);color:var(--text-secondary,#475569)">${gran === 'day' ? 'วันนี้' : gran === 'week' ? 'สัปดาห์นี้' : 'MTD'}</span>` : '';
     return `<div class="ms-row" style="${wkend ? 'background:var(--bg-subtle);margin:0 -16px;padding-left:16px;padding-right:16px' : ''}">
-      <span style="width:${gran === 'month' ? 58 : 82}px;font-size:12px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
+      <span style="width:${gran === 'month' ? 58 : 82}px;font-size:13px;font-weight:${latest ? '700' : '400'};color:${latest ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#64748b)'}">${lblOf(x)}</span>
       ${msBar(w, inProg ? 'var(--border,#cbd5e1)' : latest ? 'var(--group, var(--accent,#1f3a6b))' : 'color-mix(in srgb, var(--group, var(--accent,#1f3a6b)) 38%, transparent)', avgW)}
-      <span style="width:${inProg ? 104 : 64}px;text-align:right;font-size:12px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}${tag}</span>
+      <span style="width:${inProg ? 104 : 64}px;text-align:right;font-size:13px;font-weight:${latest ? '700' : '400'};font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b)">${fmt(x.revenue || 0)}${tag}</span>
     </div>`;
   }).join('');
   // PR-PP2: the latest period (to date when it is not finished) with เทียบช่วงก่อน + เทียบปีก่อน
@@ -2472,7 +2588,7 @@ async function msLoadSales() {
     + periodCmpHtml(T0.revenue, T0.prev && T0.prev.revenue, T0.ly && T0.ly.revenue, { range: R0 }) + `</div>` : '';
   wrap.innerHTML = rows
     ? `${cmp0}<div style="padding:10px 0 8px">${msTrendBlock(asc, gran, 110)}</div>
-       <p style="font-size:12px;${_msMuted};margin:0 0 2px">ขีดในแถบ = ค่าเฉลี่ย${gran === 'day' ? ' · แถบเทา = เสาร์-อาทิตย์' : gran === 'week' ? ' · สัปดาห์ จ.–อา.' : ''}</p>${rows}`
+       <p style="font-size:13px;${_msMuted};margin:0 0 2px">ขีดในแถบ = ค่าเฉลี่ย${gran === 'day' ? ' · แถบเทา = เสาร์-อาทิตย์' : gran === 'week' ? ' · สัปดาห์ จ.–อา.' : ''}</p>${rows}`
     : '<div class="ms-row">ไม่มีข้อมูล</div>';
 }
 function msRenderPeakPay() {
@@ -2522,23 +2638,24 @@ function msCostRisersHtml(j, key, top) {
   const body = rows.map((m, i) => {
     const b = bahtOf(m), share = total ? 100 * b / total : 0;
     cum += share;
-    const why = m.price_delta != null && m.usage_delta != null ? ` · ราคาต่อจาน ${sg(m.price_delta)} · กินต่อหัว ${sg(m.usage_delta)}` : '';
+    // PR-PD no. 18: the dish's COST per plate (never a selling price); an unchanged one is said in words
+    const why = m.price_delta != null && m.usage_delta != null ? ` · ${Math.abs(m.price_delta) < 0.005 ? 'ต้นทุนต่อจานเท่าเดิม' : 'ต้นทุนต่อจาน ' + sg(m.price_delta)} · กินต่อหัว ${sg(m.usage_delta)}` : '';
     return `<div class="ms-row"${dvMoreAttr(key, i, rows.length, top)} style="align-items:flex-start">
-      <span style="width:18px;font-size:12px;${_msMuted};margin-top:1px">${i + 1}</span>
+      <span style="width:18px;font-size:13px;${_msMuted};margin-top:1px">${i + 1}</span>
       <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.menu)}</span>
-      <span style="font-size:12px;${_msMuted};display:block;line-height:1.35">${sg(m.delta)}/หัว${why}</span></span>
-      <span style="flex-shrink:0;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;color:var(--bad-ink)">+฿${fmt(b)}</b><br><span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${share.toFixed(0)}% · สะสม ${Math.min(100, cum).toFixed(0)}%</span></span>
+      <span style="font-size:13px;${_msMuted};display:block;line-height:1.35">${sg(m.delta)}/หัว${why}</span></span>
+      <span style="flex-shrink:0;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;color:var(--bad-ink)">+฿${fmt(b)}</b><br><span style="font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${share.toFixed(0)}% · สะสม ${Math.min(100, cum).toFixed(0)}%</span></span>
     </div>`;
   }).join('');
   return head + body + dvMoreBtn(key, rows.length, top)
-    + `<p style="font-size:12px;${_msMuted};margin:6px 0 4px">บาท = ต้นทุนต่อหัวที่เพิ่ม × ลูกค้า ${fmtN(cov)} คน · % = สัดส่วนของต้นทุนที่เพิ่มทั้งหมด</p>`;
+    + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">บาท = ต้นทุนต่อหัวที่เพิ่ม × ลูกค้า ${fmtN(cov)} คน · % = สัดส่วนของต้นทุนที่เพิ่มทั้งหมด</p>`;
 }
 function msTopMenuHtml(items) {
   const maxQ = Math.max(1, ...items.map(x => x.qty || 0));
   return items.map((x, i) => {
     const nm = (x.description || x.sku_code || '').replace(/^\((?:A|B)\)\s*/, '');
     return `<div class="ms-row">
-      <span style="width:18px;font-size:12px;${_msMuted}">${i + 1}</span>
+      <span style="width:18px;font-size:13px;${_msMuted}">${i + 1}</span>
       <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(nm)}</span>
       <span style="display:flex;align-items:center;gap:6px;margin-top:3px">${msBar(Math.round(100 * (x.qty || 0) / maxQ), '#0891b2')}</span></span>
       <span style="width:74px;text-align:right;flex-shrink:0"><span style="font-size:13px;font-weight:600;font-variant-numeric:tabular-nums">${fmtN(x.qty || 0)}</span><br>${msPchip(x.qty_mom_pct)}</span>
@@ -2559,12 +2676,12 @@ function msProfitKpisHtml(j) {
     { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: `<span class="ms-fc-badge">เป้า ${fcTargetTxt(fct)}%${P.food_cost_pct != null ? ' · ' + fcStatusText(P.food_cost_pct, fct) : ''}</span>${fcPrev != null ? ` · เดือนก่อน ${fcPrev.toFixed(1)}%` : ''}` },
     { l: 'ต้นทุนอาหาร/หัว', v: cph != null ? fmt(cph) : '—', c: '#ef4444', s: cphD != null ? `${cphD > 0 ? '+' : cphD < 0 ? '−' : ''}฿${Math.abs(cphD).toFixed(1)} vs เดือนก่อน` : '' },
     { l: 'GP/หัว', v: G.gp_per_head != null ? fmt(G.gp_per_head) : '—', c: '#0891b2', s: H.rev_per_head != null ? `รายได้/หัว ${fmt(H.rev_per_head)}` : '' },
-  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p><p class="sub" style="font-size:12px;${_msMuted}">${k.s}</p></div>`).join('');
+  ].map(k => `<div class="ms-kpi"><p class="lbl">${k.l}</p><p class="val" style="font-size:20px;color:${textInk(k.c)}">${k.v}</p><p class="sub" style="font-size:13px;${_msMuted}">${k.s}</p></div>`).join('');
 }
 function msCoverageNote(j) {
   const cc = (j.pace || {}).cost_coverage;
   return (cc && cc.coverage_pct != null && cc.coverage_pct < 99.5)
-    ? `<p style="font-size:12px;color:var(--amber-ink,#b45309);margin:4px 0 0">ต้นทุนครอบคลุม ${cc.coverage_pct}% ของจาน${cc.est_food_cost_pct != null ? ` · ประมาณการ food cost จริง ~${cc.est_food_cost_pct}%` : ''} — ตัวเลขต้นทุนจึงเป็นขั้นต่ำ</p>` : '';
+    ? `<p style="font-size:13px;color:var(--amber-ink,#b45309);margin:4px 0 0">ต้นทุนครอบคลุม ${cc.coverage_pct}% ของจาน${cc.est_food_cost_pct != null ? ` · ประมาณการ food cost จริง ~${cc.est_food_cost_pct}%` : ''} — ตัวเลขต้นทุนจึงเป็นขั้นต่ำ</p>` : '';
 }
 async function msRenderProfit() {
   const j = _msRpt; if (!j) return;
@@ -2589,7 +2706,7 @@ async function msRenderProfit() {
   const sentence = branches.length > 1 ? glanceRangeSentence(branches.map(r => r.branch), branches.map(r => r.cost_pct), { pct: true, fmt: v => v + '%' }) : '';
   br.innerHTML = (sentence ? `<div style="padding-top:8px">${msGlanceLine(`ต้นทุนอาหาร ${sentence}${over ? ` · <b style="color:var(--bad-ink)">${over} สาขาเกินเป้า ${fcTargetTxt(fct)}%</b>` : ''}`)}</div>` : '') + branches.map(r => `<div class="ms-row" data-br="${esc(r.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer">
       <span style="flex:1;font-size:13px;color:var(--text-primary,#1e293b)">${esc(r.branch)}</span>
-      <span style="font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
+      <span style="font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${r.cost_per_head != null ? fmt(r.cost_per_head) : '—'}/หัว</span>
       <span class="ms-chip" style="background:${_msCpCol(r.cost_pct)}22;color:${textInk(_msCpCol(r.cost_pct))}">${r.cost_pct}%</span>
       <span style="${_msMuted}">›</span>
     </div>`).join('') || '<div class="ms-row">ไม่มีข้อมูล</div>';
@@ -2602,13 +2719,13 @@ function msRenderDiscounts() {
   const pol = H.discount_policy_pct, over = H.discount_excess;
   const c = H.discount_pct == null ? '#94a3b8' : (pol != null && H.discount_pct > pol) ? '#ef4444' : '#10b981';
   document.getElementById('msDiscKpis').innerHTML =
-    `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">ส่วนลดรวม${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk(c)}">${fmt(H.discount || 0)}</p><p class="sub"><b style="color:${textInk(c)}">${H.discount_pct != null ? H.discount_pct.toFixed(1) + '%' : '—'}</b> <span style="${_msMuted};font-size:12px">ของยอดก่อนลด${pol != null ? ` · เพดาน ${pol}%` : ''}${over ? ` · เกินเพดาน ${fmt(over)}` : ''}</span></p></div>`;
+    `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">ส่วนลดรวม${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk(c)}">${fmt(H.discount || 0)}</p><p class="sub"><b style="color:${textInk(c)}">${H.discount_pct != null ? H.discount_pct.toFixed(1) + '%' : '—'}</b> <span style="${_msMuted};font-size:13px">ของยอดก่อนลด${pol != null ? ` · เพดาน ${pol}%` : ''}${over ? ` · เกินเพดาน ${fmt(over)}` : ''}</span></p></div>`;
   document.getElementById('msDiscCards').innerHTML = msLeakCards(L) || _msNone('ไม่มีข้อมูลส่วนลดช่วงนี้');
   const mb = L.by_master_branch || [], maxP = Math.max(1, ...mb.map(x => x.pct || 0));
   document.getElementById('msDiscBranches').innerHTML = mb.length ? mb.map(x => {
     const bad = pol != null && x.pct > pol;
-    return `<div class="ms-row" data-br="${esc(x.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer;padding:6px 0"><span style="width:88px;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.branch)}</span>${msBar(Math.round(100 * (x.pct || 0) / maxP), bad ? '#ef4444' : '#f59e0b')}<span style="width:40px;text-align:right;font-size:12px;font-weight:600;font-variant-numeric:tabular-nums;color:${textInk(bad ? '#ef4444' : '#475569')}">${x.pct != null ? x.pct.toFixed(1) + '%' : '—'}</span><span style="width:58px;text-align:right;font-size:12px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(x.disc)}</span></div>`;
-  }).join('') + `<p style="font-size:12px;${_msMuted};margin:6px 0 4px">เฉพาะสาขาบริษัท · % = ส่วนลด ÷ ยอดขายของสาขา · แตะเพื่อดูสาขา</p>` : _msNone('ไม่มีข้อมูลรายสาขา');
+    return `<div class="ms-row" data-br="${esc(x.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer;padding:6px 0"><span style="width:88px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.branch)}</span>${msBar(Math.round(100 * (x.pct || 0) / maxP), bad ? '#ef4444' : '#f59e0b')}<span style="width:40px;text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:${textInk(bad ? '#ef4444' : '#475569')}">${x.pct != null ? x.pct.toFixed(1) + '%' : '—'}</span><span style="width:58px;text-align:right;font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(x.disc)}</span></div>`;
+  }).join('') + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">เฉพาะสาขาบริษัท · % = ส่วนลด ÷ ยอดขายของสาขา · แตะเพื่อดูสาขา</p>` : _msNone('ไม่มีข้อมูลรายสาขา');
 }
 
 // ── BRANCH SHEET: tap a branch anywhere → everything about it for the month ──

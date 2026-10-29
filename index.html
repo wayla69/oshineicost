@@ -1570,9 +1570,20 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-section-title { font-size: 13px; font-weight: 700; color: var(--text-primary,#1e293b); margin-bottom: 8px; }
 .ms-kpi { background: var(--bg-card,#fff); border-radius:var(--r-md); padding: 14px 16px;
   box-shadow: 0 1px 3px rgba(15,23,42,.08); border: 1px solid var(--border,#e2e8f0); }
-.ms-kpi .lbl { font-size: 12px; color: var(--text-muted,#64748b); }
+.ms-kpi .lbl { font-size: 13px; color: var(--text-muted,#64748b); }
 .ms-kpi .val { font-size: 26px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
-.ms-kpi .sub { font-size: 12px; margin-top: 3px; }
+.ms-kpi .sub { font-size: 13px; margin-top: 3px; }
+/* PR-PD (owner 2026-10-29, phone decisions) · the run-rate line of the target card, the food-cost tile's tag, the weak weekday line */
+.ms-runrate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 2px 0 8px; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-input); border-left: 4px solid var(--text-muted); font-size: 13px; }
+.ms-runrate b { font-size: 17px; }
+.ms-runrate.is-bad { border-left-color: var(--bad-ink); } .ms-runrate.is-bad b { color: var(--bad-ink); }
+.ms-runrate.is-good { border-left-color: var(--good-ink); } .ms-runrate.is-good b { color: var(--good-ink); }
+.ms-runrate-l { font-weight: 700; } .ms-runrate-s { flex-basis: 100%; color: var(--text-muted); }
+.ms-fc-tag { display: inline-block; margin-left: 4px; padding: 0 7px; border-radius: 4px; font-size: 12px; font-weight: 700; line-height: 18px; vertical-align: 1px; }
+.ms-fc-tag:empty { display: none; }
+.ms-fc-tag-focused, .ms-fc-tag-one { color: var(--bad-ink); background: var(--fix-t); }
+.ms-fc-tag-wide { color: var(--text-secondary); background: var(--bg-input); }
+.ms-weakday { font-size: 13px; margin: 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--bg-input); color: var(--text-primary); }
 .ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
 .ms-row:first-child { border-top: 0; }
 .ms-row[onclick] { min-height: 44px; }   /* a tappable row is a thumb-sized row */
@@ -1601,6 +1612,7 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
   align-items: center; gap: 2px; font-size: 12px; color: var(--text-muted,#94a3b8); padding: 6px 0; cursor: pointer; }
 #msNav button .ic { font-size: 19px; line-height: 1; }
 #msNav button.active { color: var(--accent); font-weight: 700; }
+body:not(.ph-on) #msnav-home { display: none; }                      /* PR-PD no. 15: หน้าแรก is the phone shell's */
 @media (max-width: 700px) { body:not(.force-desktop) #msNav { display: flex; } }
 /* วิธีใช้หน้านี้ (PR-M2): the explanation of a วัตถุดิบและใบสั่งซื้อ page sits folded at the bottom of the page, never above the controls */
 .bmc-help { margin: 0 0 12px; padding: 8px 12px; border: 1px dashed var(--border); border-radius: var(--r-md, 12px); }
@@ -2242,6 +2254,13 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-yest { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-height: 48px; padding: 0; border: 0; background: none; color: #fff; text-align: left; font: inherit; cursor: pointer; }
 .ph-yest-l, .ph-yest-s { font-size: 13px; color: #c9d4e6; }
 .ph-yest-v { font-size: 26px; font-weight: 700; line-height: 1.25; }
+/* PR-PD (owner 2026-10-29) · the three decision lines under the hero figure and the change pill (arrow + word, never colour alone) */
+.ph-yest-c, .ph-yest-t, .ph-yest-p { font-size: 14px; line-height: 1.4; color: #e6ecf7; margin-top: 4px; }
+.ph-yest-c small, .ph-yest-t small { font-size: 13px; color: #c9d4e6; }
+.ph-ink-bad { color: #ffb4b4; } .ph-ink-good { color: #9fe3c4; } .ph-ink-watch { color: #ffd98a; }
+.ph-pill { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; background: rgba(255,255,255,.14); color: #fff; }
+.ph-pill-good { background: #1f8a5a; } .ph-pill-bad { background: #c0392b; }
+.ph-yest-s { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
 .ph-taskcard { position: relative; margin: -14px 16px 0; min-height: 52px; box-sizing: border-box; padding: 10px 14px; display: flex; align-items: center; gap: 10px;
   background: var(--bg-card, #fff); border: 1px solid var(--border, #d5dbe3); border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); color: var(--text-primary); text-decoration: none; }
 .ph-taskcard-t { flex: 1; min-width: 0; font-size: 15px; font-weight: 600; }
@@ -2321,6 +2340,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 :is(.ph-dept, .ph-ptile, .ph-bigtile, .ph-row, .ph-nav-i, .ph-todo, .ph-taskcard, .ph-yest, .ph-back, .ph-signout, .ph-search):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 @media (max-width: 700px) {
   body.ph-on #phNav { display: grid; }
+  body.ph-on.ph-summary #phNav { display: none; }                     /* PR-PD no. 15: one bottom bar while the summary is open (#msNav, หน้าแรก first) */
   body.ph-on.ph-home #phHome { display: block; }
   /* a launcher view hides everything else; the summary and the pages are behind it until a tile opens them */
   body.ph-on.ph-home .app-layout, body.ph-on.ph-home #mobileSummary, body.ph-on.ph-home #msNav, body.ph-on.ph-home #msSheet { display: none !important; }
@@ -3134,6 +3154,7 @@ body.php-open { overflow: hidden; }
 </div>
 <div id="phSheetBack" hidden onclick="msCloseSheet()"></div>
 <nav id="msNav">
+  <button id="msnav-home" data-g="home" onclick="phShowHome()" aria-label="หน้าแรก"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/></svg></span>หน้าแรก</button>
   <button id="msnav-summary"   data-g="home"   class="active" onclick="msSwitchView('summary')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>สรุป</button>
   <button id="msnav-sales"     data-g="sales"  onclick="msSwitchView('sales')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg></span>ยอดขาย</button>
   <button id="msnav-branches"  data-g="buffet" onclick="msSwitchView('branches')"><span class="ic"><svg class="ui-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg></span>สาขา</button>
