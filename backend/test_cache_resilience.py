@@ -139,3 +139,36 @@ def test_cache_stays_under_its_byte_cap(monkeypatch):
     mine = {k: v for k, v in core._resp_cache.items() if k.startswith("_t_bytes")}
     assert sum(len(v[1]) for v in mine.values()) <= 4000
     assert core._cache_key("_t_bytes", {"i": 11}) in core._resp_cache   # newest kept
+
+
+def test_a_daily_report_is_keyed_on_the_thai_day_and_warmed_under_todays_key(monkeypatch):
+    """ttl_cache(daily=True): the key carries the Thai date, so a long-lived answer never crosses midnight; the warm
+    after a swap computes it under TODAY's key, not the day it was asked on."""
+    n = [0]
+
+    def report(day: str = "x"):
+        n[0] += 1
+        return {"day": day, "n": n[0]}
+    report.__name__ = "_t_daily"
+    cached = core.ttl_cache(report, ttl=core.HEAVY_TTL, stale=core.HEAVY_TTL, daily=True)
+    monkeypatch.setattr(core, "_th_today", lambda: "2026-10-29")
+    a = _body(cached(day="m")); b = _body(cached(day="m"))
+    assert a == b and n[0] == 1
+    assert core._cache_key("_t_daily", {"day": "m"}) + "|day=2026-10-29" in core._resp_cache
+    monkeypatch.setattr(core, "_th_today", lambda: "2026-10-30")
+    assert _body(cached(day="m"))["n"] == 2                      # midnight: a fresh answer
+    core.invalidate_cache("_t_daily")
+    core.warm_cache_async(top=500).join(10)
+    assert core._cache_key("_t_daily", {"day": "m"}) + "|day=2026-10-30" in core._resp_cache
+    assert n[0] == 3
+
+
+def test_menu_spike_web_answer_is_cached():
+    from fastapi.testclient import TestClient
+    import main
+    c = TestClient(main.app)
+    core.invalidate_cache("_menu_spike_cached")
+    before = dict(core._cache_stats)
+    a = c.get("/api/sales/menu-spike?period=mtd&slim=1").json()
+    b = c.get("/api/sales/menu-spike?period=mtd&slim=1").json()
+    assert a == b and core._cache_stats["misses"] == before["misses"] + 1 and core._cache_stats["hits"] == before["hits"] + 1

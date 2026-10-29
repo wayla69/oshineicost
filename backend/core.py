@@ -83,6 +83,12 @@ _resp_cache: dict = {}          # key -> (monotonic ts of computation, json byte
 
 
 _CACHE_TTL  = 300   # 5 minutes — safe for an analytics dashboard
+# The heavy reports (the management report, its month series, the menu spike) only change when the data does, and every
+# data change invalidates the cache outright (sync swap, upload, edit). 2026-10-29: with the 5 min + 25 min policy the
+# warm-after-swap entry of 06:05 was gone by the owner's 08:00 open (3-6 s cold, every morning). They now live until the
+# next invalidation or Thai midnight (ttl_cache(..., daily=True) puts the Thai date in the key, so "today"-anchored lines
+# such as days_left never cross midnight on an old answer).
+HEAVY_TTL = 12 * 3600
 _STALE_WINDOW = int(_os_db.environ.get("OSHINEI_CACHE_STALE_SECS", "1500"))   # serve-stale window after the TTL
 # 1, measured: on one pinned core a 24-report cold burst kept a light request at
 # p95 79 ms / max 3.6 s with 1, vs 576 ms / 6.5 s with 2 (burst 33 s vs 29 s).
@@ -163,7 +169,13 @@ def _refresh_in_background(fn, args, kwargs, key: str):
     threading.Thread(target=run, daemon=True, name="cache-refresh").start()
 
 
-def ttl_cache(fn=None, *, ttl=None, stale=None):
+def _th_today() -> str:
+    """The Thai calendar day (UTC+7), the clock the reports anchor on (rules.TH_TODAY_SQL)."""
+    import datetime as _dt
+    return (_dt.datetime.utcnow() + _dt.timedelta(hours=7)).date().isoformat()
+
+
+def ttl_cache(fn=None, *, ttl=None, stale=None, daily=False):
     """Decorator: caches the pre-serialized JSON bytes for 5 min (+ a serve-stale window).
 
     ``@ttl_cache`` keeps the 5 min / stale-window defaults. ``@ttl_cache(ttl=60, stale=0)`` is a short cache for a small answer
@@ -177,7 +189,7 @@ def ttl_cache(fn=None, *, ttl=None, stale=None):
     Guard it at import time so the collision can never recur silently.
     """
     if fn is None:
-        return lambda f: ttl_cache(f, ttl=ttl, stale=stale)
+        return lambda f: ttl_cache(f, ttl=ttl, stale=stale, daily=daily)
     ttl_s = _CACHE_TTL if ttl is None else ttl
     stale_s = _STALE_WINDOW if stale is None else stale
     if fn.__name__ in _cached_fn_names:
@@ -198,17 +210,20 @@ def ttl_cache(fn=None, *, ttl=None, stale=None):
         except TypeError:
             bound_kwargs = kwargs
 
-        key = _cache_key(fn.__name__, bound_kwargs)
+        keyfn = (lambda: _cache_key(fn.__name__, bound_kwargs) + "|day=" + _th_today()) if daily \
+            else (lambda: _cache_key(fn.__name__, bound_kwargs))
+        key = keyfn()
+        dkey = _cache_key(fn.__name__, bound_kwargs)   # demand is counted per report, whatever the day
         now = _time.monotonic()
         with _cache_lock:
-            d = _demand.get(key)
+            d = _demand.get(dkey)
             if d:
                 d[0] += 1
                 d[1] = now
             else:
                 if len(_demand) >= _DEMAND_MAX:   # forget the least recently asked key
                     del _demand[min(_demand, key=lambda k: _demand[k][1])]
-                _demand[key] = [1, now, fn, args, kwargs]
+                _demand[dkey] = [1, now, fn, args, kwargs, keyfn]
             entry = _resp_cache.get(key)
             if entry:
                 age = now - entry[0]
@@ -265,7 +280,8 @@ def warm_cache_async(top: int = 40, max_age_hours: float = 24.0):
                        key=lambda kd: -kd[1][0])[:top]
 
     def run():
-        for key, (_, _, fn, args, kwargs) in picks:
+        for _dkey, (_, _, fn, args, kwargs, keyfn) in picks:
+            key = keyfn()                      # a day-keyed report is warmed under TODAY's key
             with _cache_lock:
                 if key in _resp_cache or key in _inflight:
                     continue

@@ -249,6 +249,8 @@ def _no_usage_cache(monkeypatch):
     from bom_center import forecast
     monkeypatch.setattr(forecast, "USAGE_CACHE_TTL", 0)
     forecast.clear_usage_cache()
+    import core
+    core.invalidate_cache("_menu_spike_cached")   # 2026-10-29: the web menu-spike answer is cached (core.HEAVY_TTL); a test swaps the DB under it
     yield
 
 

@@ -7,7 +7,7 @@ URLs unchanged. Same host-module pattern as routers/reports.py.
 from fastapi import Query, Request
 from typing import Optional
 from rules import VAT_DIVISOR, closed_branches, closed_day_clause, drop_closed, hidden_amount, effective_unit_cost_sql, net_revenue_row, needs_cost_sql, net_revenue_sum, non_food_sql, scope_filter, tier_code_sql
-from core import (
+from core import (HEAVY_TTL,
     _FOOD_CATEGORY_FILTER, _cogs_case, _effective_cost_subquery, _group_filter, _iso_week_sql,
     _month_range_filter, _partial_months, _txn_fallback_counts, _unified_cogs_expr, _ym_parts,
     get_db, ttl_cache,
@@ -2390,12 +2390,36 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
             with_cost = bool(_auth.request_modules(request) & _SPIKE_COST_MODULES)
         bf = base_from if isinstance(base_from, str) else None          # a direct call leaves the Query default
         bt = base_to if isinstance(base_to, str) else None
+        if request is not None:   # 2026-10-29 (speed): a web call answers from the response cache, keyed on the role's cost view
+            return _menu_spike_cached(period=period, date=date, date_from=date_from, date_to=date_to, branch=branch,
+                                      group=group, limit=limit, threshold=threshold, top=top, base_from=bf, base_to=bt,
+                                      with_cost=with_cost, slim=slim)
         out = _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
                                  with_cost=with_cost, top=top, base_from=bf, base_to=bt)
-        if slim == 1 and isinstance(out, dict):
-            return {"slim": True, "dishes": [{"menu": d.get("menu"), "concentration": d.get("concentration")}
-                                             for d in (out.get("dishes") or [])]}
+        return _spike_slim(out) if slim == 1 else out
+
+
+def _spike_slim(out):
+    if not isinstance(out, dict):
         return out
+    return {"slim": True, "dishes": [{"menu": d.get("menu"), "concentration": d.get("concentration")}
+                                     for d in (out.get("dishes") or [])]}
+
+
+@ttl_cache(ttl=HEAVY_TTL, stale=HEAVY_TTL, daily=True)   # lives until the next data swap or Thai midnight (core.HEAVY_TTL)
+def _menu_spike_cached(period, date, date_from, date_to, branch, group, limit, threshold, top, base_from, base_to,
+                       with_cost, slim):
+    """The web answer of /api/sales/menu-spike, cached per parameters and cost view (the route checks the role first)."""
+    with get_db() as con:
+        pfilt = ""
+        pparams: dict = {}
+        if branch:
+            pfilt += " AND b.name=:branch"; pparams["branch"] = branch
+        if group:
+            pfilt += " AND COALESCE(b.branch_type,'master')=:grp"; pparams["grp"] = group
+        out = _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
+                                 with_cost=with_cost, top=top, base_from=base_from, base_to=base_to)
+        return _spike_slim(out) if slim == 1 else out
 
 
 @router.get("/api/sales/cost-per-head")
