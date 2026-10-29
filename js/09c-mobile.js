@@ -2251,6 +2251,29 @@ function msActionsHtml(j) {
     return `<div class="ms-row ms-act" style="align-items:flex-start;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${_msSevCol(a.sev)};flex-shrink:0;margin-top:6px"></span><span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.text)}</span>${right}</div>`;
   }).join('') || _msNone('ไม่พบประเด็นเร่งด่วน');
 }
+// PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: payload.watch.items, each a finding with its level (fix / watch / ok / none), the
+// sentence that names the branches and the action, and the rows behind it. Sorted by level on the server. Unavailable items fold
+// into one grey line (their reasons behind ดูเหตุผล), so a month with no issue slips still reads as a short card.
+let _msWatchWhy = false;
+function msWatchToggleWhy() { _msWatchWhy = !_msWatchWhy; if (_msRpt) msRenderWatch(_msRpt); }
+function msRenderWatch(j) {
+  const wrap = document.getElementById('msWatchWrap'), el = document.getElementById('msWatch'), cnt = document.getElementById('msWatchCount');
+  if (!wrap || !el) return;
+  const W = j.watch;
+  if (!W || !(W.items || []).length) { wrap.style.display = 'none'; return; }
+  const live = W.items.filter(it => it.available), dead = W.items.filter(it => !it.available);
+  const brChips = it => (it.rows || []).map(r => r.branch).filter(Boolean).slice(0, 3)
+    .map(b => `<span class="ms-watch-br" data-br="${esc(b)}" onclick="msOpenBranch(this.dataset.br)">${esc(b)}</span>`).join('');
+  const row = it => `<div class="ms-watch ms-watch-${it.level || 'none'}"><span class="ms-watch-dot" aria-hidden="true"></span>`
+    + `<span style="flex:1;min-width:0"><span class="ms-watch-t">${esc(it.title)}</span><div class="ms-watch-l">${esc(it.line || '')}</div>${it.level === 'fix' || it.level === 'watch' ? `<div>${brChips(it)}</div>` : ''}</span></div>`;
+  const deadHtml = !dead.length ? '' : `<div class="ms-watch ms-watch-none"><span class="ms-watch-dot" aria-hidden="true"></span><span style="flex:1;min-width:0">`
+    + `<span class="ms-watch-t">ยังไม่มีข้อมูล ${fmtN(dead.length)} รายการ</span><div class="ms-watch-l">${dead.map(it => esc(it.title)).join(' · ')}`
+    + ` <button type="button" class="ms-watch-more" onclick="msWatchToggleWhy()">${_msWatchWhy ? 'ซ่อนเหตุผล' : 'ดูเหตุผล'}</button></div>`
+    + (_msWatchWhy ? dead.map(it => `<div class="ms-watch-l" style="color:var(--text-muted)">${esc(it.title)}: ${esc(it.line || '')}</div>`).join('') : '') + '</span></div>';
+  el.innerHTML = live.map(row).join('') + deadHtml;
+  if (cnt) cnt.textContent = (W.fix || W.watch) ? `· ต้องดู ${fmtN((W.fix || 0) + (W.watch || 0))}` : '';
+  wrap.style.display = '';
+}
 const _MS_DP = { Lunch: 'กลางวัน (11–14)', Dinner: 'เย็น (17–22)', Other: 'อื่นๆ' };
 const _MS_DOW_EN = { Mon: 'จ.', Tue: 'อ.', Wed: 'พ.', Thu: 'พฤ.', Fri: 'ศ.', Sat: 'ส.', Sun: 'อา.' };
 const _hh = h => String(h).padStart(2, '0') + ':00';
@@ -2310,6 +2333,7 @@ function msRenderSummary() {
   document.getElementById('msKpis').innerHTML = msKpisHtml(j);
   const tEl = document.getElementById('msTarget'); if (tEl) tEl.innerHTML = msTargetHtml(j);
   const aEl = document.getElementById('msActions'); if (aEl) aEl.innerHTML = msActionsHtml(j);
+  msRenderWatch(j);
   // DV6 (review §3.3): โตสุด / ตกสุด by the baht against last month (rev_delta), not the % - a small branch's −25 % is not the
   // branch that lost the most money; the % stays beside the baht
   const brs = j.branches || [], withMom = brs.filter(b => b.rev_delta != null);

@@ -3460,11 +3460,23 @@ def report_management(
         except Exception as e:      # pragma: no cover — degraded, not broken
             print(f"[mgt] §13A stock variance unavailable: {e}")
 
+    # PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: the phone's second block (monthly only; every item guarded)
+    watch = None
+    if period == "monthly":
+        try:
+            from routers import mgt_watch as _mw
+            with get_db() as _wcon:              # the sections' connection is closed by here (as §12 / §13A do)
+                watch = _mw.build(_wcon, cs=cs, ce=ce, ps=ps if has_prev else None, pe=pe if has_prev else None, has_prev=has_prev,
+                                  where=where, params=params, branch=branch, group=group, th=th)
+        except Exception as e:      # pragma: no cover — degraded, not broken
+            print(f"[mgt] watch unavailable: {e}")
+
     return {
         "available": True,
         "period": period,
         "lang": ("th" if th else "en"),
         "label": label,
+        "watch": watch,
         "comp_label": comp_label,
         "focus": focus,
         "range": [cs.isoformat(), ce.isoformat()],
