@@ -88,7 +88,8 @@ for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่า
     expect(m.secs.length).toBe(2);
     expect(m.secs.some(c => /sp-sec-plates|sp-sec-hv/.test(c))).toBe(false);
     expect(m.tiles[1]).toContain('เมนูที่ถึงเกณฑ์ 12 เมนู');
-    expect(m.tiles[2]).toMatch(/^ต้นทุนเพิ่มสุทธิ \+฿[\d.]+K เพิ่ม ฿[\d.]+K · ลด ฿20\.0K$/);
+    // PR-SK2: the decreases (฿20.0K) take back 37 % of the increases (฿54.2K) -> the หักกลบ chip follows the gross figures
+    expect(m.tiles[2]).toMatch(/^ต้นทุนเพิ่มสุทธิ \+฿[\d.]+K เพิ่ม ฿[\d.]+K · ลด ฿20\.0K หักกลบ 37%$/);
     if (mode === 'touch') {
       const c = await page.evaluate(() => { const card = document.querySelector('#dsSpike .sp-sec-old .ph-cl .ph-cl-card');
         return card ? { labels: [...card.querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()), txt: card.textContent } : null; });
