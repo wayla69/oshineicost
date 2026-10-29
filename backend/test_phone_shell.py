@@ -65,8 +65,9 @@ def test_the_bottom_navigation_replaces_the_branch_strip_and_the_top_bar_control
 
 
 def test_the_phone_shell_adds_no_route_and_no_endpoint_of_its_own():
-    # tasks: the supply todo of หน้างาน; the header figure: the Daily Brief's own call. Nothing else is fetched.
-    assert sorted(set(re.findall(r"api\(`\$\{API\}(/api/[a-z/-]+)", SHELL))) == ["/api/bom-center/todo", "/api/home/brief"]
+    # tasks: the supply todo of หน้างาน; the header figure: the Daily Brief's own call; PR-PD (owner 2026-10-29): the cause and
+    # data-trust lines under it read the Daily Brief's branch scorecard (an existing route). Nothing else is fetched.
+    assert sorted(set(re.findall(r"api\(`\$\{API\}(/api/[a-z/-]+)", SHELL))) == ["/api/bom-center/todo", "/api/home/branch-scorecard", "/api/home/brief"]
     assert "fetch(" not in SHELL
     # a tile opens through the existing functions
     assert "deptOpenPage(p)" in SHELL and "supplyGo({ tab: e.tab, pane: e.pane })" in SHELL and "_shmOpen(g.first.go)" in SHELL
