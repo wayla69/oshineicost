@@ -1,0 +1,24 @@
+<div id="tab-pricetier" style="display:none">
+  <!-- PR-AT (owner 2026-10-29, "เพิ่มเมนูให้ analyst เข้าดูต้นทุนราย tier"): วิเคราะห์ระดับราคาขาย - guests, food cost per head and GP per
+       head by adult buffet price, the period against the one before it (/api/reports/price-tier; js/07-home.js loadPriceTier). It lived at
+       the foot of วิเคราะห์วัตถุดิบ, a recipe page that stock mode hides from every role. -->
+  <div class="card p-3 mb-4 flex flex-wrap items-center gap-3">
+    <span class="text-xs font-semibold" style="color:var(--text-secondary)">ช่วง:</span>
+    <input type="date" id="ptFrom" onchange="loadPriceTier(true)" aria-label="ตั้งแต่วันที่" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+    <span class="text-xs" style="color:var(--text-muted)">→</span>
+    <input type="date" id="ptTo" onchange="loadPriceTier(true)" aria-label="ถึงวันที่" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+    <select id="ptScope" onchange="loadPriceTier(true)" aria-label="ขอบเขตสาขา" style="border:1px solid var(--border);border-radius:var(--r-md);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
+      <option value="all">ทุกสาขา</option>
+      <option value="master">สาขาหลัก (เจ้าของเอง)</option>
+      <option value="franchise">แฟรนไชส์</option>
+    </select>
+    <span id="ptCoverage" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+  </div>
+  <div class="card p-4">
+    <div class="flex items-center justify-between flex-wrap gap-2 mb-1">
+      <h2 class="text-base font-bold" style="color:var(--text-primary)">วิเคราะห์ระดับราคาขาย (บุฟเฟ่ต์ผู้ใหญ่) <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-pricetier-mb" title="คำอธิบาย">?</button></h2><template id="hlp-pricetier-mb" data-title="วิเคราะห์ระดับราคาขาย"><p>แบ่งบิลตามราคาบุฟเฟ่ต์ผู้ใหญ่ <b>ตามเมนูของช่วงนั้น</b> — ถึง ส.ค. 2026 คือราคาก่อนบวก service charge 5% + VAT 7% (฿799/฿689/฿649/฿590/฿350) · ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) คือราคา NET รวมทั้งสองอย่างแล้ว (฿1,299/฿999/฿789/฿629/฿459) และราคาเก่าไม่มีขายแล้ว · ช่วงที่เลือก (A) เทียบช่วงก่อนหน้าความยาวเท่ากัน (B) อัตโนมัติ · จำนวนคนทาน, การทาน Top-30 เมนูต้นทุน, เทรนด์ และข้อเสนอแนะ</p></template>
+      <span id="ptRange" class="text-[11px]" style="color:var(--text-muted)"></span>
+    </div>
+    <div id="ptBody"><p class="text-center text-slate-400 py-10">กำลังโหลด…</p></div>
+  </div>
+</div>

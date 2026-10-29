@@ -415,3 +415,13 @@ def test_http_import_refreshes_the_reports_and_the_sync_route_is_token_gated(web
     ok = c.get("/api/_admin/bc-sku-cost-list", headers={"X-Seed-Token": "tok"})
     assert ok.status_code == 200 and ok.json()["columns"] == ["sku_code", "month", "unit_cost", "note", "imported_by", "imported_at"]
     assert [r[:3] for r in ok.json()["rows"]] == [["DCW-1", "2026-10", 15.0]]
+
+
+def test_the_month_list_runs_from_the_grand_menu_month_to_next_month(client):
+    # PR-AT (owner 2026-10-29): the import's own month picker - every month a list may be imported for, and nothing outside it
+    from bom_center import dish_cost as DC
+    d = client.get("/api/bom-center/dish-cost/months").json()
+    ms = [m["month"] for m in d["months"]]
+    assert d["min"] == DC.MIN_MONTH == "2026-09" and d["max"] == DC.max_month()
+    assert ms[0] == d["min"] and ms[-1] >= d["max"] and ms == sorted(ms)
+    assert all({"month", "listed"} <= set(m) for m in d["months"])

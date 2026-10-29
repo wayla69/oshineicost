@@ -905,7 +905,9 @@ def bc_dish_cost(month: Optional[str] = Query(None)):
 def bc_dish_cost_months():
     with get_db() as con:
         _ensure(con)
-        return {"default": _this_month(), "months": _dc.months(con, _this_month())}
+        # PR-AT (owner 2026-10-29): the import's own month picker - the Grand Menu month through next month (dish_cost.check_month)
+        mx = _dc.max_month()
+        return {"default": _this_month(), "min": _dc.MIN_MONTH, "max": mx, "months": _dc.months(con, mx)}
 
 
 @router.get("/api/bom-center/dish-cost/template.xlsx")

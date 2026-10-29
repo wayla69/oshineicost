@@ -32,7 +32,7 @@ REG = CORE[CORE.index("const _SUPPLY_CENTRE"):CORE.index("// ── end page reg
 # the brief's per-page defaults (with the lead's decisions of 2026-10-24 for the pages the brief did not name)
 FIT = ["overall", "dailysales", "trend", "gpbranch", "pnlbranch", "cost", "buffetperf", "childbuffet", "menu", "menuactionboard",
        "menuopportunities", "menucompare", "feedback", "custtype", "timeflow", "opsreport", "discounts", "cashctl", "cancelbill", "staff", "modifiers",
-       "pricezone", "closetime", "costhead", "coverage", "menuefficiency", "simhub", "profit", "benchmark", "pnl", "pnlbill", "orderhub|comp",
+       "pricezone", "closetime", "costhead", "coverage", "menuefficiency", "pricetier", "simhub", "profit", "benchmark", "pnl", "pnlbill", "orderhub|comp",
        "orderhub|issues", "orderhub|issuevar", "orderhub|adoption", "orderhub|queue", "orderhub|claims", "orderhub|persales", "bomcenter|fc",
        "bomcenter|price", "bomcenter|issue", "fmsg",
        "guest", "compare", "more", "heavyeater", "bomcost", "menuimpact", "branchbom", "ops", "report", "action", "checklist", "ordering",

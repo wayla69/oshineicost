@@ -324,7 +324,7 @@ function bmcSetSub(k) {
   if (k === 'rcheck') bmcLoadRcheck();
   if (k === 'codereq') bmcLoadCodeReq();
   const strip = document.getElementById('bmcMonthStrip');            // PR-X: the recipe check has a month list of its own (months with purchases); a code request has none
-  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq' || k === 'events' || k === 'issue' || k === 'rec') ? 'none' : '';
+  if (strip) strip.style.display = (k === 'rcheck' || k === 'codereq' || k === 'events' || k === 'issue' || k === 'rec' || k === 'dishcost') ? 'none' : '';   // PR-AT: dishcost has its own month picker
   try { _updateClusterBar(activeTab); } catch (e) { /* no bar on this page */ }
 }
 // The month strip sits above every pane: a change reloads the pane that is open.
@@ -1097,8 +1097,36 @@ function _bmcDcPct(p) {
   const big = Math.abs(p) > 30;
   return `<span style="color:${big ? 'var(--amber-ink)' : 'var(--text-secondary)'};${big ? 'font-weight:600' : ''}">${p > 0 ? '+' : ''}${_bmcNum(p, 1)}%</span>`;
 }
+// PR-AT (owner 2026-10-29) · the import's own month picker: the months the list may hold (the Grand Menu month through next month, with
+// how many dishes each already has), the page's shared month follows it, and a shared month outside the range moves to the nearest one
+let _bmcDcMonths = null;
+async function _bmcDcMonthFill() {
+  const sel = document.getElementById('bmcDcMonth'); if (!sel) return _bmcMonth();
+  if (!_bmcDcMonths) {
+    try { _bmcDcMonths = await _bmcJson(`${API}/api/bom-center/dish-cost/months`); } catch (e) { _bmcDcMonths = null; }
+  }
+  const M = _bmcDcMonths, list = M && M.months ? M.months.slice().reverse() : [];
+  let m = _bmcMonth();
+  if (M && M.min && m < M.min) m = M.min;
+  if (M && M.max && m > M.max) m = M.max;
+  if (list.length) {
+    sel.innerHTML = list.map(x => `<option value="${x.month}">${fmtMonthTh(x.month)}${x.listed ? ` · มีแล้ว ${fmtN(x.listed)} เมนู` : ' · ยังไม่นำเข้า'}</option>`).join('');
+    if (!list.some(x => x.month === m)) m = list[0].month;
+  }
+  sel.value = m;
+  const shared = document.getElementById('bmcMonth');
+  if (shared && shared.value !== m) { supplyMonthPut(shared, m); supplyCtxSet({ month: m }); }
+  return m;
+}
+function bmcDcMonthChanged() {
+  const m = document.getElementById('bmcDcMonth').value; if (!m) return;
+  const shared = document.getElementById('bmcMonth');
+  if (shared) supplyMonthPut(shared, m);
+  supplyCtxSet({ month: m });
+  bmcLoadDishCost();
+}
 async function bmcLoadDishCost(force) {
-  const m = _bmcMonth();
+  const m = await _bmcDcMonthFill();
   document.getElementById('bmcDcMonthLbl').textContent = fmtMonthTh(m);
   if (_bmcDc && _bmcDc.month !== m) { _bmcDcPre = null; _bmcDcSend = null; document.getElementById('bmcDcPreview').innerHTML = ''; }
   try {
@@ -1160,12 +1188,13 @@ async function bmcDcEdit(code) {
     bmcLoadDishCost();
   } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e), 'var(--bad-ink)'); }
 }
-function bmcDcTemplate() { bmcDownload(`${API}/api/bom-center/dish-cost/template.xlsx?month=${_bmcMonth()}`, `แม่แบบ_ต้นทุนต่อจาน_${_bmcMonth()}.xlsx`, 'bmcDcStatus'); }
-function bmcDcExport() { bmcDownload(`${API}/api/bom-center/dish-cost/export.xlsx?month=${_bmcMonth()}`, `ต้นทุนต่อจาน_${_bmcMonth()}.xlsx`, 'bmcDcStatus'); }
+function _bmcDcM() { const el = document.getElementById('bmcDcMonth'); return (el && el.value) || _bmcMonth(); }
+function bmcDcTemplate() { bmcDownload(`${API}/api/bom-center/dish-cost/template.xlsx?month=${_bmcDcM()}`, `แม่แบบ_ต้นทุนต่อจาน_${_bmcDcM()}.xlsx`, 'bmcDcStatus'); }
+function bmcDcExport() { bmcDownload(`${API}/api/bom-center/dish-cost/export.xlsx?month=${_bmcDcM()}`, `ต้นทุนต่อจาน_${_bmcDcM()}.xlsx`, 'bmcDcStatus'); }
 async function bmcDcImport(input) {
   const file = input?.files?.[0];
   if (!file) return;
-  const m = _bmcMonth();
+  const m = _bmcDcM();                       // PR-AT: the month the picker on this row shows
   _bmcDcName = file.name;
   _bmcDcSend = (dry, zero) => { const fd = new FormData(); fd.append('file', file, file.name);
     return _bmcJson(`${API}/api/bom-center/dish-cost/import?month=${m}&dry_run=${dry}${zero ? '&confirm_zero=true' : ''}`, { method: 'POST', body: fd }); };
@@ -1215,6 +1244,7 @@ async function bmcDcCommit() {
     bmcDcShowPreview(d, true);
     _bmcStatus('bmcDcStatus', `✓ นำเข้าต้นทุนต่อจาน ${d.imported} เมนู${d.facts_note ? ' · ' + d.facts_note : ''}`, 'var(--good-ink)');
     _bmcDcPre = null;
+    _bmcDcMonths = null;                     // PR-AT: the picker's "มีแล้ว N เมนู" counts changed
     await bmcLoadDishCost('reset');
     bmcDcView('imported');                  // RV-M: the rows just saved (the reset opened on ไม่มีในตาราง and hid them)
   } catch (e) { _bmcStatus('bmcDcStatus', 'ไม่สำเร็จ: ' + String(e.message || e).slice(0, 200), 'var(--bad-ink)'); }
@@ -1235,7 +1265,7 @@ async function bmcImportPrices(input) {
 async function bmcSubmitPriceFile(input) {
   const file = input?.files?.[0];
   if (!file) return;
-  const m = _bmcMonth();
+  const m = _bmcDcM();                       // PR-AT: the month the picker on this row shows
   try {
     if (!await uiConfirm(`ส่งไฟล์ ${file.name} สำหรับเดือน${fmtMonthTh(m)} ให้ฝ่ายวิเคราะห์?`, { title: 'ยืนยันการส่งไฟล์ราคา', ok: 'ส่งไฟล์ราคา', cancel: 'ยกเลิก' })) {
       _bmcStatus('bmcSubStatus', 'ยังไม่ได้ส่งไฟล์');

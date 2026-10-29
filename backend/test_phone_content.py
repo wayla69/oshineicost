@@ -93,7 +93,7 @@ MB_PAGES = {   # the brief's list (Thai name -> page key)
     "ผลต่างตัดเบิกรายวัน": "orderhub|issuevar", "ตรวจสอบการสั่ง": "orderhub|comp", "การใช้งานทุกสาขา": "orderhub|adoption",
     "ใช้วัตถุดิบต่อยอดขาย": "orderhub|persales", "ยอดแนะนำรายรอบ": "bomcenter|fc", "ราคารายเดือน": "bomcenter|price",
     "ต้นทุนต่อจาน": "bomcenter|dishcost", "ทะเบียนวัตถุดิบ": "bomcenter|ing", "ใบสรุปตัดเบิก": "bomcenter|issue", "เสียงลูกค้า": "feedback",
-    "ข้อความจากเจ้าของสาขา": "fmsg", "High Value Product Monitor": "hvmonitor",
+    "ข้อความจากเจ้าของสาขา": "fmsg", "High Value Product Monitor": "hvmonitor", "วิเคราะห์ระดับราคา": "pricetier",
 }
 # pages whose daily list is not a <table>: it is already one card per row, drawn by the page itself, with the shared state filter
 OWN_CARDS = {

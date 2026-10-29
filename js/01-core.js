@@ -625,7 +625,7 @@ const TAB_MODULE = {
   home:'sales.overview', overall:'sales.overview', action:'sales.overview',
   dailysales:'sales.overview', trend:'sales.overview', compare:'sales.overview', more:'sales.overview',
   buffetperf:'customer.buffet', childbuffet:'customer.buffet', guest:'customer.buffet', timeflow:'customer.buffet',
-  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis',
+  menu:'menu.analysis', engineering:'menu.analysis', menucompare:'menu.analysis', menuefficiency:'cost.analysis', pricetier:'cost.analysis',
   menuactionboard:'cost.analysis', menuopportunities:'menu.analysis', feedback:'customer.feedback', checklist:'customer.feedback',
   cost:'cost.analysis', bomcost:'cost.analysis', costhead:'cost.analysis', costheadtop60:'cost.analysis',
   hvmonitor:['cost.analysis','profit.pnl','menu.analysis','customer.buffet'],   // High Value Product Monitor (owner 2026-10-25): บาท = cost.analysis / profit.pnl; DV4: จำนวนจาน (no cost) for the plates roles too
@@ -3660,7 +3660,7 @@ async function onGroupChange() {
 
 // ── Tab switching ──────────────────────────────────────────────
 // owner 2026-10-20: plain Thai titles - the English duplicates in brackets are gone; GP / P&L / BoM / SKU stay (staff use them)
-const PAGE_TITLES = { hvmonitor:'High Value Product Monitor', franchise:'ร้านของฉัน', fmsg:'ข้อความจากเจ้าของสาขา', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน', launcher:'หน้าแรก', allpages:'หน้ารายงานทั้งหมด' };
+const PAGE_TITLES = { hvmonitor:'High Value Product Monitor', pricetier:'วิเคราะห์ระดับราคา', franchise:'ร้านของฉัน', fmsg:'ข้อความจากเจ้าของสาขา', home:'สรุปประจำวัน', overall:'ภาพรวมยอดขาย', action:'ต้องดูวันนี้', buffetperf:'ผลงานบุฟเฟ่ต์', menu:'วิเคราะห์เมนู', trend:'แนวโน้ม', cost:'วิเคราะห์ต้นทุน', profit:'วิเคราะห์กำไร', pnl:'P&L เชิงลึก', compare:'เปรียบเทียบช่วงเวลา', report:'รายงานรายเดือน (ฉบับเต็ม)', mgtreport:'รายงานผู้บริหาร (รายวัน · รายสัปดาห์ · รายเดือน)', ops:'ปฏิบัติการเชิงลึก', settings:'ตั้งค่า', guest:'ลูกค้าและยอดต่อหัว', benchmark:'เทียบสาขา', engineering:'วิเคราะห์เมนู', staff:'ผลงานพนักงาน', discounts:'ส่วนลดและเงินรั่วไหล', childbuffet:'บุฟเฟ่ต์เด็ก', timeflow:'ช่วงเวลาและรอบโต๊ะ', gpbranch:'GP รายสาขา', branchbom:'BoM รายสาขา', bomcost:'ต้นทุนตามสูตร (BoM)', simhub:'ตัวจำลอง', menucompare:'เทียบเมนู A/B', menuefficiency:'เป้าลดต้นทุนเมนู', menuactionboard:'ปรับเมนู', menuopportunities:'โอกาสเมนู', feedback:'เสียงลูกค้า', checklist:'รายการตรวจ เสียงลูกค้า (เปิดใช้ · การตลาด)', coverage:'ความครอบคลุมต้นทุน', pnlbranch:'P&L รายสาขา', more:'ข้อสังเกตเพิ่มเติม', manual:'คู่มือการใช้งาน', dailysales:'ยอดขายรายวัน', costhead:'ต้นทุนต่อหัว รายสาขา', costheadtop60:'Top 60 ต้นทุนต่อหัว · สาขาของบริษัท (เทียบภาพรวม)', menuimpact:'วิเคราะห์วัตถุดิบ (มี เทียบ ไม่มี)', pnlbill:'P&L ต่อบิล', opsreport:'รายงานปฏิบัติการ (การชำระเงิน · บิลยกเลิก · โต๊ะ · โปรโมชัน)', cashctl:'เงินสดขาด/เกิน', custtype:'ประเภทลูกค้าและเดลิเวอรี', modifiers:'ความต้องการพิเศษ', pricezone:'ราคาและโซนโต๊ะ', cancelbill:'บิลยกเลิก/ลบ', closetime:'เวลาปิดร้านและความสดของข้อมูล', heavyeater:'ต่อหัวและนักกินหนัก', ordering:'แผนสั่งวัตถุดิบรายสาขา', ordersetup:'ตั้งค่าการสั่งซื้อ (ขนาดบรรจุ · ปฏิทินเทศกาล)', ingpurchase:'ยอดซื้อวัตถุดิบ เทียบ ยอดขาย รายสาขา (รายสัปดาห์)', bomcenter:'วัตถุดิบและใบสั่งซื้อ · ข้อมูลตั้งต้นและสูตร', branchstock:'วัตถุดิบและใบสั่งซื้อ · สาขาของฉัน', orderhub:'วัตถุดิบและใบสั่งซื้อ · ใบสั่งซื้อและปิดงวดเดือน', supplyhome:'วัตถุดิบและใบสั่งซื้อ · หน้างาน', launcher:'หน้าแรก', allpages:'หน้ารายงานทั้งหมด' };
 
 // Every sidebar tab, once. `load` is what runs when the tab is opened (an arrow,
 // because the loaders are defined in later slices and must resolve at call time) (or the
@@ -3686,6 +3686,7 @@ const TABS = {
   dailysales: { load: () => loadDailySales(), follow: { period: { kinds: ['day', 'week', 'month', 'year'] } } },
   costhead: { load: () => loadCostHead(), follow: { period: { kinds: ['day', 'week', 'month', 'year'] } } },   // PR-PP3
   menuimpact: { load: () => loadMenuImpact() },
+  pricetier: { load: () => loadPriceTier() },   // PR-AT: วิเคราะห์ระดับราคาขาย, its own page
   pnlbill: { load: () => loadPnlBill(), follow: { period: { kinds: ['day', 'week', 'month'] } } },   // PR-PP3: per-bill COGS is a rolling window
   opsreport: { load: () => loadOpsReport(), follow: { month: 'opMonth', period: { kinds: ['week', 'month', 'range'] }, prepare: () => _opFillMonths() } },
   ordering: { load: () => loadOrderPlan() },
@@ -3958,7 +3959,7 @@ const TAB_CLUSTERS = [
   { key: 'sales',  label: 'ยอดขาย',          tabs: [['overall','ภาพรวมและตัวชี้วัด'],['dailysales','ยอดขายรายวัน'],['trend','แนวโน้ม'],['timeflow','ช่วงเวลา'],['custtype','ช่องทาง & ประเภทลูกค้า'],['compare','เทียบ A/B'],['more','ข้อสังเกตเพิ่มเติม']] },
   { key: 'buffet', label: 'ลูกค้า & บุฟเฟ่ต์', tabs: [['buffetperf','ผลงานบุฟเฟ่ต์'],['guest','ลูกค้า & ยอด/หัว'],['childbuffet','บุฟเฟ่ต์เด็ก']] },
   { key: 'menu',   label: 'เมนู',            tabs: [['menu','วิเคราะห์เมนู',['engineering']],['menuactionboard','ปรับเมนู'],['menuopportunities','โอกาสเมนู'],['menucompare','เทียบเมนู A/B']] },
-  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['hvmonitor','High Value Product Monitor'],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','ตัวจำลอง']] },
+  { key: 'cost',   label: 'ต้นทุน',           tabs: [['cost','ภาพรวม'],['bomcost','ต้นทุนตามสูตร'],['costhead','ต้นทุน/หัว',['costheadtop60']],['hvmonitor','High Value Product Monitor'],['heavyeater','นักกินหนัก'],['menuimpact','วิเคราะห์วัตถุดิบ'],['pricetier','ระดับราคา'],['menuefficiency','เป้าลดต้นทุน'],['coverage','ความครอบคลุม'],['branchbom','BoM รายสาขา'],['simhub','ตัวจำลอง']] },
   { key: 'profit', label: 'กำไร',            tabs: [['gpbranch','GP รายสาขา'],['pnlbranch','P&L รายสาขา'],['pnlbill','P&L ต่อบิล'],['profit','กำไร SKU'],['benchmark','เทียบสาขา'],['pnl','P&L เชิงลึก']] },
   { key: 'money',  label: 'ส่วนลด & เงิน',    tabs: [['discounts','ส่วนลด'],['staff','พนักงาน'],['cashctl','เงินสดขาด/เกิน'],['cancelbill','บิลยกเลิก']] },
   { key: 'ops',    label: 'ปฏิบัติการ',       tabs: [['opsreport','รายงานปฏิบัติการ'],['ops','เชิงลึก'],['modifiers','ความต้องการพิเศษ'],['pricezone','ราคา/โซน'],['closetime','ปิดร้าน/ข้อมูล']] },
@@ -4089,6 +4090,7 @@ const DEPARTMENTS = [
     { tab: 'hvmonitor', label: 'High Value Product Monitor', icon: 'gem' },
     { tab: 'coverage', label: 'ความครอบคลุมต้นทุน', icon: 'pie' },
     { tab: 'menuimpact', bom: true, label: 'วิเคราะห์วัตถุดิบ', icon: 'flask' },
+    { tab: 'pricetier', label: 'วิเคราะห์ระดับราคา', icon: 'tag' },   // PR-AT (owner 2026-10-29): cost per buffet price tier
     { tab: 'menuefficiency', label: 'เป้าลดต้นทุน', icon: 'target' },
     { tab: 'branchbom', bom: true, label: 'BoM รายสาขา', icon: 'store' },
     { tab: 'simhub', label: 'ตัวจำลอง', icon: 'calc' },
@@ -4147,7 +4149,7 @@ const PAGE_KEYWORDS = {
   'mgtreport': 'รายงาน mgt report ผู้บริหาร ประชุม', 'report': 'รายงาน รายเดือน monthly',
   'gpbranch': 'กำไร gp margin กำไรขั้นต้น', 'pnlbranch': 'กำไร p&l กำไรขาดทุน profit', 'pnl': 'กำไร p&l profit กำไรขาดทุน', 'pnlbill': 'กำไร p&l บิล bill',
   'profit': 'กำไร sku margin', 'benchmark': 'เทียบ สาขา benchmark', 'cost': 'ต้นทุน cost bom อาหาร', 'bomcost': 'ต้นทุน cost bom สูตร recipe',
-  'costhead': 'ต้นทุน หัว cost per head', 'hvmonitor': 'high value product monitor ติดตามวัตถุดิบมูลค่าสูง วัตถุดิบหลัก แซลมอน ทูน่า ฮามาจิ กุ้งหวาน หอยเชลล์ ปลาไหล หอยนางรม เนื้อ ต้นทุนต่อหัว', 'coverage': 'ต้นทุน ครอบคลุม coverage', 'menuimpact': 'วัตถุดิบ ต้นทุน ingredient', 'menuefficiency': 'ลดต้นทุน เป้า target',
+  'costhead': 'ต้นทุน หัว cost per head', 'pricetier': 'ระดับราคา tier ราคาบุฟเฟ่ต์ ต้นทุนต่อหัว gp ต่อหัว price tier', 'hvmonitor': 'high value product monitor ติดตามวัตถุดิบมูลค่าสูง วัตถุดิบหลัก แซลมอน ทูน่า ฮามาจิ กุ้งหวาน หอยเชลล์ ปลาไหล หอยนางรม เนื้อ ต้นทุนต่อหัว', 'coverage': 'ต้นทุน ครอบคลุม coverage', 'menuimpact': 'วัตถุดิบ ต้นทุน ingredient', 'menuefficiency': 'ลดต้นทุน เป้า target',
   'branchbom': 'bom สูตร สาขา ต้นทุน', 'simhub': 'จำลอง simulator what-if', 'heavyeater': 'นักกิน ต้นทุน heavy eater',
   'buffetperf': 'บุฟเฟ่ต์ ลูกค้า buffet customer', 'childbuffet': 'เด็ก บุฟเฟ่ต์ child', 'guest': 'ลูกค้า ยอด หัว guest', 'custtype': 'ช่องทาง ประเภทลูกค้า grab line man delivery',
   'timeflow': 'ช่วงเวลา ชั่วโมง peak time', 'menu': 'เมนู menu วิเคราะห์ ขายดี', 'menuactionboard': 'ปรับเมนู action ต้นทุนต่อหัว บุฟเฟ่ต์', 'menuopportunities': 'โอกาส เมนูใหม่ opportunity',
@@ -4179,7 +4181,7 @@ const PAGE_PHONE = {
   launcher: 'touch', allpages: 'touch', home: 'touch', supplyhome: 'touch', franchise: 'touch', manual: 'touch', settings: 'touch',
   mgtreport: 'touch', report: 'fit', overall: 'fit', dailysales: 'fit', trend: 'fit', compare: 'fit', more: 'fit', action: 'fit', checklist: 'fit',
   gpbranch: 'fit', pnlbranch: 'fit', pnlbill: 'fit', profit: 'fit', benchmark: 'fit', pnl: 'fit',
-  cost: 'fit', bomcost: 'fit', costhead: 'fit', hvmonitor: 'fit', coverage: 'fit', menuimpact: 'fit', menuefficiency: 'fit', branchbom: 'fit', simhub: 'fit', heavyeater: 'fit',
+  cost: 'fit', bomcost: 'fit', costhead: 'fit', hvmonitor: 'fit', coverage: 'fit', menuimpact: 'fit', pricetier: 'fit', menuefficiency: 'fit', branchbom: 'fit', simhub: 'fit', heavyeater: 'fit',
   buffetperf: 'fit', childbuffet: 'fit', guest: 'fit', custtype: 'fit', timeflow: 'fit', feedback: 'fit',
   menu: 'fit', menuactionboard: 'fit', menuopportunities: 'fit', menucompare: 'fit',
   opsreport: 'fit', ops: 'fit', discounts: 'fit', cashctl: 'fit', cancelbill: 'fit', staff: 'fit', modifiers: 'fit', pricezone: 'fit', closetime: 'fit',
@@ -4252,6 +4254,9 @@ const PAGE_CARDS = {
   // DV4 (phone table review 2026-10-25): บาท = ทั้งหมด (one card per ingredient: the change, its main cause, the cost now; สาขาที่ดัน under
   // the name) or one ingredient (one card per branch: the change with its cause, สะสม, cost / head); จำนวนจาน = one group or the matrix
   // (DV5 cap: the 8 ingredients and the branch lists fold under their own floor - ฿1,000 / 20 plates - so no second cap; the matrix 10)
+  // PR-AT: วิเคราะห์ระดับราคา - the tier table (one row per adult buffet price) and the Top-30 dishes by cost per buffet head
+  pricetier: [{ sel: '#ptTierTbl', title: 'ระดับราคา', keyCols: ['ต้นทุน/หัวบุฟเฟ่ต์ (Δ)', 'GP/หัว', 'ต้นทุนขาย %'], figSub: true },
+    { sel: '#ptTop30', title: 'เมนู', keyCols: ['ต้นทุน/หัวบุฟเฟ่ต์', 'ต้นทุน/หน่วย'], figSub: true }],
   hvmonitor: [{ sel: '#hvmAll', title: 'วัตถุดิบ', keyCols: ['เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน'], figSub: true, cap: false },
     { sel: '#hvmTable', title: 'สาขา', keyCols: ['เปลี่ยน', 'สะสม', 'ต้นทุน/หัว'], figSub: true, cap: false },
     { sel: '#hvpTable', title: 'สาขา', keyCols: ['จากกินต่อหัว', 'จาน/หัว', 'จานที่ออก'], figSub: true, cap: false },

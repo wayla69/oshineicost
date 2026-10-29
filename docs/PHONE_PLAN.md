@@ -170,6 +170,7 @@ To register a table, add it to `PAGE_CARDS` (js/01-core.js, keyed like `PAGE_PHO
 | เสียงลูกค้า | feedback | all items (`#fbItems`) · branches (`#fbBranches`); the reply queue is already cards | สาขา · วันที่, ช่องทาง, ข้อความ | ดาว, ตอบกลับ · เสียง, ดาว, ลบ % | ความรู้สึก | — |
 | ข้อความจากเจ้าของสาขา | fmsg | — (own cards) | | | | |
 | High Value Product Monitor | hvmonitor | `#hvmTable` (one group) · `#hvmMatrix` (ทั้งหมด) | สาขา | ต้นทุน/หัว, จาน/หัว, ต้นทุน/จาน · แซลมอน, ทูน่า, ต้นทุนอาหาร/หัว | — | — |
+| วิเคราะห์ระดับราคา | pricetier | `#ptTierTbl` (one row per adult buffet price) · `#ptTop30` (dishes by cost per buffet head) | ระดับราคา · เมนู | ต้นทุน/หัวบุฟเฟ่ต์ (Δ), GP/หัว, ต้นทุนขาย % · ต้นทุน/หัวบุฟเฟ่ต์, ต้นทุน/หน่วย | — | — |
 
 **Left as they are, with the reason:**
 
