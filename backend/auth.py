@@ -115,7 +115,7 @@ ROLE_MODULES: Dict[str, Set[str]] = {
     },
     "innovation": {
         "sales.overview", "menu.analysis", "cost.analysis", "cost.simulator",
-        "bom.edit", "system.settings", "customer.feedback", "bom.recipes",   # the kitchen edits recipes only (owner 2026-10-07)
+        "bom.edit", "customer.feedback", "bom.recipes",   # the kitchen edits recipes only (owner 2026-10-07); no ตั้งค่า (owner 2026-10-29)
     },
     "salessupport": {
         # Brief = "ใช้เมนู จัดซื้อ/วัตถุดิบ". Only the supply cluster — the purchase
