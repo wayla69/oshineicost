@@ -1584,6 +1584,17 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-fc-tag-focused, .ms-fc-tag-one { color: var(--bad-ink); background: var(--fix-t); }
 .ms-fc-tag-wide { color: var(--text-secondary); background: var(--bg-input); }
 .ms-weakday { font-size: 13px; margin: 0; padding: 8px 12px; border-radius: var(--r-md); background: var(--bg-input); color: var(--text-primary); }
+/* PR-PW · ตรวจวันนี้ rows: a level dot, the title, the finding, the branches as chips (tap = the branch sheet) */
+.ms-watch { display: flex; align-items: flex-start; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border); }
+.ms-watch:first-child { border-top: 0; }
+.ms-watch-dot { width: 9px; height: 9px; border-radius: 50%; flex-shrink: 0; margin-top: 6px; background: var(--text-muted); }
+.ms-watch-fix .ms-watch-dot { background: var(--bad-ink); } .ms-watch-watch .ms-watch-dot { background: var(--amber-ink); } .ms-watch-ok .ms-watch-dot { background: var(--good-ink); }
+.ms-watch-t { font-size: 13px; font-weight: 700; color: var(--text-primary); }
+.ms-watch-fix .ms-watch-t { color: var(--bad-ink); }
+.ms-watch-l { font-size: 13px; line-height: 1.45; color: var(--text-primary); margin-top: 1px; overflow-wrap: anywhere; }
+.ms-watch-none .ms-watch-t, .ms-watch-none .ms-watch-l { color: var(--text-muted); font-weight: 400; }
+.ms-watch-br { display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--bg-input); font-size: 12px; font-weight: 700; line-height: 20px; color: var(--text-primary); margin: 2px 4px 0 0; cursor: pointer; }
+.ms-watch-more { font-size: 13px; color: var(--text-muted); background: none; border: 0; padding: 6px 0 0; font: inherit; cursor: pointer; }
 .ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
 .ms-row:first-child { border-top: 0; }
 .ms-row[onclick] { min-height: 44px; }   /* a tappable row is a thumb-sized row */
@@ -3045,6 +3056,11 @@ body.php-open { overflow: hidden; }
     <div class="ms-section">
       <div class="ms-section-title">สิ่งที่ต้องทำ</div>
       <div id="msActions" class="ms-card"></div>
+    </div>
+    <!-- PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: the findings with the branches to act on (payload.watch, msWatchHtml) -->
+    <div class="ms-section" id="msWatchWrap" style="display:none">
+      <div class="ms-section-title">ตรวจวันนี้ <span id="msWatchCount" style="font-weight:400;color:var(--text-muted,#64748b)"></span></div>
+      <div id="msWatch" class="ms-card"></div>
     </div>
     <div class="ms-section" id="msVoiceWrap" style="display:none">
       <div class="ms-section-title">เสียงลูกค้า — รอตอบ <span id="msVoiceCount" style="font-weight:400;color:var(--text-muted,#64748b)"></span></div>
