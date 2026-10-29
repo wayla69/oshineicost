@@ -186,6 +186,8 @@ def detail(con, order_id: int, receive: bool = False) -> dict:
     o["buffer_reason_th"] = BUFFER_REASON_TH.get(o.get("buffer_reason")) if o.get("buffer_reason") else None
     from .hub import delivery_of
     o["delivery"] = delivery_of(con, o["branch_id"], o["round"], o["cycle_date"], o.get("delivery_date"))
+    from .reschedule import delay_of
+    o["delay"] = delay_of(con, o["branch_id"], o["round"], o["delivery"])     # เลื่อนรอบส่ง: {from, to, reason, …} or None
     o["late"] = int(o.get("late") or 0)
     from .hub import with_values
     with_values(con, [o])                  # value / value_ordered / value_sent / value_label — see hub.with_values
@@ -578,6 +580,12 @@ def history(con, branch_id: int, limit: int = 20, statuses=None) -> list:
         d["status_th"] = STATUS_TH.get(d["status"], d["status"])
         d["delivery"] = delivery_of(con, branch_id, d["round"], d["cycle_date"], d.pop("delivery_date"))
         out.append(d)
+    from .reschedule import add_delays
+    for d in out:
+        d["branch_id"] = branch_id
+    add_delays(con, out)                       # เลื่อนรอบส่ง: `delay` on an order whose delivery was moved
+    for d in out:
+        d.pop("branch_id")
     from .hub import with_values
     return with_values(con, out)
 
@@ -696,6 +704,9 @@ def plan(con, branch_id: int, rnd: str, delivery: date, as_of: date = None, buff
             x["late"] = False
     s.update(delivery_th=day_th(dlv), late=now_ > cut and not late_exempt(con, branch_id, cyc, now_.date(), first_day),
              open=now_ <= cut, hours_left=round((cut - now_).total_seconds() / 3600.0, 1), deliveries=dels)
+    from . import reschedule as _rs            # เลื่อนรอบส่ง: this delivery's move (the plan above already covers from the new day)
+    s["delay"] = _rs.delay_of(con, branch_id, rnd, dlv)
+    s["round_notices"] = _rs.notices(con, branch_id, now_.date(), now_)
     cu = count_units(con, [r["code"] for r in s["rows"]])
     cmap = central_map(con)
     month = s["order_day"][:7]

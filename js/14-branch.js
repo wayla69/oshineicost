@@ -1154,7 +1154,7 @@ async function brnLoadRecvOpen() {
     // only an order the warehouse has sent (คลังจัดส่งแล้ว) has the receive button; one that is only sent waits for the warehouse
     const row = (x, ready) => `<div style="border-top:1px solid var(--border);padding:8px 0;display:flex;gap:8px;align-items:center">
         <div style="flex:1 1 0;min-width:0"><div class="text-sm" style="color:var(--text-primary);font-weight:600">${esc(_brnRoundLabel(x.round))} · ส่ง ${esc(fmtDay(x.delivery || x.cycle_date))}</div>
-          <div class="text-xs" style="color:var(--text-secondary)">${x.lines} รายการ · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)} ${_bmcChip(x.status_th, ready ? 'var(--navy-ink)' : 'var(--amber-ink)')}${x.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div></div>
+          <div class="text-xs" style="color:var(--text-secondary)">${x.lines} รายการ · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)} ${_bmcChip(x.status_th, ready ? 'var(--navy-ink)' : 'var(--amber-ink)')}${x.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}${x.delay ? ' ' + _bmcDelayChip(x.delay) : ''}</div></div>
         ${ready ? `<button class="brn-act" onclick="brnOpenReceive(${x.order_id})">รับของ</button>` : ''}</div>`;
     const sent = d.orders.filter(x => x.status === 'processed'), waiting = d.orders.filter(x => x.status !== 'processed');
     box.innerHTML = d.orders.length
@@ -1384,7 +1384,7 @@ async function brnOpenReceive(id, quiet) {
     const day = o.delivery && o.delivery <= today ? o.delivery : today;
     const sel = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 8px;font-size:16px;background:var(--bg-input);color:var(--text-primary)';
     box.style.display = '';
-    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">รับของ · ${esc(_brnRoundLabel(o.round))} · ส่ง ${esc(fmtDay(o.delivery || o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}</div>
+    box.innerHTML = `<div class="text-sm font-semibold" style="color:var(--text-primary)">รับของ · ${esc(_brnRoundLabel(o.round))} · ส่ง ${esc(fmtDay(o.delivery || o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}${o.delay ? ' ' + _bmcDelayChip(o.delay) : ''}</div>
       <label class="text-xs mt-2 block" style="color:var(--text-muted)">วันที่รับ <input type="date" id="brnRecvOrdDate" value="${day}" style="${sel}"></label>
       <div id="brnRecvForm" class="mt-2"></div>
       <div class="brn-q mt-3">รับครบตามที่คลังส่งทุกรายการ?</div>
@@ -2095,8 +2095,8 @@ function _brnDelivChips() {
     const [st, ink] = _brnDelivState(d);
     const cut = String(d.cutoff_at || '');
     return `<button onclick="brnSetDelivery('${d.round}','${d.delivery}')" style="display:flex;flex-wrap:wrap;gap:2px 8px;align-items:center;justify-content:space-between;border:1px solid ${on ? 'var(--accent)' : 'var(--border)'};border-radius:12px;padding:6px 12px;min-height:44px;font-size:13px;cursor:pointer;text-align:left;background:${on ? 'var(--accent)' : 'transparent'};color:${on ? 'var(--on-accent)' : 'var(--text-primary)'}">
-      <span>${esc(d.round_th)} · ${esc(fmtDayShort(d.delivery))} · ส่งใบสั่งซื้อภายใน ${esc(fmtCutoff(cut))}</span>
-      <span style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid ${on ? 'currentColor' : 'var(--border)'};font-size:11px;white-space:nowrap;color:${on ? 'inherit' : ink}">${st}</span></button>`;
+      <span>${esc(d.round_th)} · ${d.delay ? `<s>${esc(fmtDayShort(d.delivery))}</s> เลื่อนเป็น <b>${esc(d.delay.to_th)}</b>` : esc(fmtDayShort(d.delivery))} · ส่งใบสั่งซื้อภายใน ${esc(fmtCutoff(cut))}</span>
+      <span style="display:inline-flex;gap:4px">${d.delay ? `<span style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid ${on ? 'currentColor' : 'var(--watch-f)'};font-size:11px;white-space:nowrap;color:${on ? 'inherit' : 'var(--amber-ink)'}">ล่าช้า</span>` : ''}<span style="display:inline-block;padding:1px 8px;border-radius:999px;border:1px solid ${on ? 'currentColor' : 'var(--border)'};font-size:11px;white-space:nowrap;color:${on ? 'inherit' : ink}">${st}</span></span></button>`;
   }).join('');
 }
 let _brnOrdWhy = new Set();   // the rows whose "ดูที่มา" is open
@@ -2119,6 +2119,8 @@ async function brnLoadOrder(opts) {
     _brnPlan = await _bmcJson(`${API}/api/bom-center/order/plan${qs ? '?' + qs : ''}`);
     _brnRound = _brnPlan.round || _brnRound || '1';
     _brnDelivery = _brnPlan.delivery;
+    const mv = document.getElementById('brnOrdMoved');          // เลื่อนรอบส่ง: the branch's moved deliveries, before anything else
+    if (mv) { mv.innerHTML = bmcMovedNotices(_brnPlan.round_notices); mv.style.marginBottom = mv.innerHTML ? '10px' : ''; }
     _brnDelivChips();
     const kept = opts.keepEdits ? { qty: _brnOrdQty, reason: _brnOrdReason, edited: _brnOrdEdited } : null;
     _brnOrdQty = {}; _brnOrdReason = {}; _brnOrdEdited = new Set(); _brnOrdTyped = {};
@@ -2343,7 +2345,7 @@ function brnRenderOrder() {
     return a + Number(v) * (r.order_unit === 'pack' ? (r.qty_per_recv || 1) : 1) * r.price_per_base;
   }, 0);
   const left = p.hours_left == null || !(p.open && editable) ? '' : ` (${fmtLeft(p.hours_left)})`;
-  document.getElementById('brnOrdHead').innerHTML = `<div style="color:var(--text-primary)" class="text-sm">รอบส่งของ <b>${esc(fmtDayShort(p.delivery))}</b> · ส่งใบสั่งซื้อภายใน <b>${esc(p.cutoff_th)}</b>${left} ·
+  document.getElementById('brnOrdHead').innerHTML = `<div style="color:var(--text-primary)" class="text-sm">รอบส่งของ ${p.delay ? `<s>${esc(fmtDayShort(p.delivery))}</s> เลื่อนเป็น <b>${esc(p.delay.to_th)}</b> ${_bmcDelayChip(p.delay)}` : `<b>${esc(fmtDayShort(p.delivery))}</b>`} · ส่งใบสั่งซื้อภายใน <b>${esc(p.cutoff_th)}</b>${left} ·
       สั่งให้พอใช้ ${esc(_brnIssRunTxt(p.cover_from, p.cover_to))} (${p.cover_days} วัน)</div>
     <div class="mt-1" style="color:var(--text-secondary)">${stockLine}</div>${_brnSrcLine(p)}${gapLine}
     <div class="mt-1" style="color:var(--text-secondary)">${o ? `ใบสั่งซื้อ ${_bmcRoundDay({ round: p.round || _brnRound, delivery: p.delivery })} ${_bmcChip(o.status_th, o.status === 'received' ? 'var(--good-ink)' : (o.status === 'submitted' || o.status === 'processed') ? 'var(--navy-ink)' : 'var(--amber-ink)')}${o.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}` : _bmcChip('ยังไม่มีใบสั่งซื้อรอบนี้', 'var(--text-muted)')}
@@ -2729,7 +2731,7 @@ async function brnLoadOrderHistory() {
     _brnDelivChips();                                   // "สั่งแล้ว" on the deliveries that already have an order
     // PR-D6: an order is finished once the branch received it (or it was cancelled); the ones still on their way are the list (shared filter)
     _brnHist('brnOrdHistory', d.orders, x => x.status === 'received' || x.status === 'cancelled', x => `<div style="border-top:1px solid var(--border);padding:4px 0;display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center">
-        <span><a href="#" onclick="brnOpenOrder(${x.order_id});return false" style="color:var(--accent);font-weight:600">${esc(_bmcRoundDay(x))}</a> · ส่งก่อน ${esc(fmtDay(x.cycle_date))} · ${esc(x.status_th)} · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)}${x.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</span>
+        <span><a href="#" onclick="brnOpenOrder(${x.order_id});return false" style="color:var(--accent);font-weight:600">${esc(_bmcRoundDay(x))}</a> · ส่งก่อน ${esc(fmtDay(x.cycle_date))} · ${esc(x.status_th)} · ${esc(x.value_label || 'มูลค่า')} ฿${_bmcNum(x.value, 0)}${x.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}${x.delay ? ' ' + _bmcDelayChip(x.delay) : ''}</span>
         ${x.status === 'processed' ? `<a href="#" onclick="brnSetSub('recv');setTimeout(() => brnOpenReceive(${x.order_id}), 200);return false" style="margin-left:auto;color:var(--accent)">รับของที่มาถึง →</a>` : ''}</div>`, 'ใบสั่งซื้อ');
   } catch (e) { document.getElementById('brnOrdHistory').textContent = String(e.message || e); }
 }
@@ -2739,7 +2741,7 @@ async function brnOpenOrder(id) {
   try {
     const o = await _bmcJson(`${API}/api/bom-center/order/${id}`);
     box.style.display = '';
-    box.innerHTML = `<div class="flex flex-wrap items-center gap-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">ใบสั่งซื้อ ${esc(_bmcRoundDay(o))} · ส่งก่อน ${esc(fmtDay(o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}${o.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
+    box.innerHTML = `<div class="flex flex-wrap items-center gap-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">ใบสั่งซื้อ ${esc(_bmcRoundDay(o))} · ส่งก่อน ${esc(fmtDay(o.cycle_date))} ${_bmcChip(o.status_th, 'var(--navy-ink)')}${o.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}${o.delay ? ' ' + _bmcDelayChip(o.delay) : ''}</div>
         <button onclick="document.getElementById('brnOrdDetail').style.display='none'" class="ml-auto" style="border:0;background:none;color:var(--text-muted);font-size:12px;cursor:pointer">ปิด</button></div>
       <div class="text-[11px] mt-1" style="color:var(--text-muted)">${o.po_ref ? 'PO ' + esc(o.po_ref) + ' · ' : ''}${o.processed_by ? 'คลังบันทึกจำนวนที่ส่งโดย ' + esc(whoTh(o.processed_by)) : ''}</div>
       <table class="w-full text-xs mt-2"><thead><tr class="text-left" style="color:var(--text-muted)"><th class="pr-2">รายการ</th><th class="pr-2 text-right">แนะนำ</th><th class="pr-2 text-right">สั่ง</th><th class="pr-2 text-right">ส่งจริง</th><th class="text-right">รับจริง</th></tr></thead>

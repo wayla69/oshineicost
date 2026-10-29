@@ -538,6 +538,7 @@ function _ohbCard(o) {
   const st = _OHB_ST_CHIP[o.status] || [o.status_th || o.status, 'var(--text-muted)'];
   const wh = _ohbIsWarehouse();
   const chips = [_bmcChip(st[0] + (o.status === 'processed' && o.po_ref ? ' · ' + o.po_ref : ''), st[1]),
+    _bmcDelayChip(o.delay),                                                     // เลื่อนรอบส่ง: ล่าช้า + the new day + the reason
     o.late ? _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : '',
     o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : '',
     o.processed_on_time === false ? _bmcChip('ยืนยันยอดส่งหลัง 14:00', 'var(--bad-ink)') : '',
@@ -569,7 +570,8 @@ function ohbRenderQueueList() {
     const dayTotal = rows => [['มูลค่าที่สั่ง'], ['มูลค่าที่จัดส่ง']].map(([l]) => rows.some(o => o.value_label === l) ? `${l} ฿${_bmcNum(sumBy(rows, l), 0)}` : '').filter(Boolean).join(' · ');
     const phone = _ohbPhone() && !_ohbSharedCards();
     // desktop (2026-10-19): one table per delivery day — the order, its round, lines, value and every status as a stacked chip column
-    const tags = o => [o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : '',
+    const tags = o => [_bmcDelayChip(o.delay),
+      o.branch_changes ? _bmcChip(`สาขาแก้ไข ${o.branch_changes} รายการ`, 'var(--amber-ink)') : '',
       o.buffer_pct ? _bmcChip(`สาขาปรับ ${o.buffer_pct > 0 ? '+' : ''}${_bmcNum(o.buffer_pct, 0)}% (${esc(o.buffer_reason_th || '')})`, 'var(--navy-ink)') : '',
       o.stock_deducted ? '' : _bmcChip('ยังไม่ได้หักของที่เหลืออยู่', 'var(--text-muted)'),
       o.late ? _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : '',
@@ -690,7 +692,7 @@ function ohbRenderDetail() {
   document.getElementById('ohbDetail').innerHTML = `<div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap">
       <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(_bmcOrderTitle(o))} · ตัดรอบ ${esc(fmtDay(o.cycle_date))}${o.late ? ' ' + _bmcChip('ส่งช้า (มีค่าปรับ)', 'var(--bad-ink)') : ''}</div>
       ${_ohbBtn('ปิด', "document.getElementById('ohbDetail').style.display='none'")}</div>
-    <div class="mt-1">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}</div>
+    <div class="mt-1">${_bmcChip(o.status_th, o.status === 'submitted' ? 'var(--amber-ink)' : 'var(--good-ink)')}${o.delay ? ' ' + _bmcDelayChip(o.delay) : ''}</div>
     ${bmcStats([[esc(VALUE_ORDERED_TH), '฿' + _bmcNum(o.value_ordered, 0)], [esc(VALUE_SENT_TH), o.value_sent != null ? '฿' + _bmcNum(o.value_sent, 0) : null]])}
     <div class="text-sm" style="color:var(--text-secondary)">${bmcLines([o.stock_count_id ? 'ยอดแนะนำหักคงเหลือตามระบบแล้ว' : 'สาขายังไม่มีผลนับสิ้นเดือน ยอดแนะนำจึงไม่หักคงเหลือ',
       o.note ? 'หมายเหตุ: ' + esc(o.note) : '', o.processed_by ? `คลังยืนยันโดย ${esc(whoTh(o.processed_by))}` : '',
