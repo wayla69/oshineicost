@@ -278,3 +278,50 @@ def test_the_endpoint_answer_carries_the_groups_and_the_kind_split():
     assert r["dish_groups"] == [{"slug": "salmon", "label": "แซลมอน", "net_cost": 5600.0, "dishes": 1, "share_pct": round(5600 / 7014 * 100, 1)}]
     assert r["dish_kind_count"] == {"buffet": 0, "alc": 3}
     assert all(x["thin_base"] is False for x in r["dishes"])
+
+
+# ── PR-SK2 (owner 2026-10-29, "Do 4-7") · กระจุก / ทั้งเครือ, พุ่งต่อเนื่อง N สัปดาห์, ต้นทุน/จาน ──
+def test_the_streak_counts_the_up_weeks_in_a_row_from_the_latest():
+    # the latest week 30 vs the 3 before it (10, 10, 10) = 3x; two weeks (30, 10) vs (10, 10, 10): 10 is not up -> streak 1
+    assert sales._spike_streak([30, 10, 10, 10, 10, 10, 10, 10]) == 1
+    # three rising weeks 40, 30, 20 vs the (10, 10, 10) before them, all >= 1.2x; four would take 10 vs 10 -> 3
+    assert sales._spike_streak([40, 30, 20, 10, 10, 10, 10, 10]) == 3
+    assert sales._spike_streak([4, 1, 1, 1, 1, 1, 1, 1]) == 0            # under 5 plates never counts
+    assert sales._spike_streak([30, 0, 0, 0, 0, 0, 0, 0]) == 0           # no base behind it
+    assert sales._spike_streak([30] * 8) == 0                            # flat = no streak
+    assert sales._spike_streak([20] * 5 + [10] * 3) == 5                 # a plateau: five 20s vs the (10, 10, 10) before them
+    assert sales._spike_streak([30, 30, 30, 30, 30, 30, 10, 10, 10]) == 5   # capped at _SPIKE_STREAK_WEEKS
+
+
+def test_a_dish_carries_its_concentration_its_streak_and_its_cost_per_plate():
+    ents = [("buffet", "ซาชิมิแซลมอน", 1, "สาขาเอ", 1, 100, 40), ("buffet", "ซาชิมิแซลมอน", 2, "สาขาบี", 2, 50, 40),
+            ("buffet", "ซาชิมิแซลมอน", 3, "สาขาซี", 3, 30, 40),
+            ("buffet", "ข้าวผัด", 1, "สาขาเอ", 4, 60, 40), ("buffet", "ข้าวผัด", 2, "สาขาบี", 5, 60, 40)]
+    weekly = {(1, 1): [60, 30, 10, 10, 10, 10, 10, 10], (2, 2): [30, 10, 10, 10, 10, 10, 10, 10], (3, 3): [10] * 8,
+              (1, 4): [40, 40, 40, 40, 40, 40, 40, 40]}
+    rows, _ = sales._spike_dishes(ents, _Sc({1: 50.0, 2: 50.0, 3: 40.0, 4: 10.0, 5: 10.0}), {}, False, weekly=weekly)
+    sal, rice = (next(r for r in rows if r["menu"] == m) for m in ("ซาชิมิแซลมอน", "ข้าวผัด"))
+    # กระจุก: branch A holds 3,000 of the 3,500 ฿ of increases (the decrease of C is not in the base)
+    assert sal["concentration"] == {"branch": "สาขาเอ", "share_pct": round(3000 / 3500 * 100, 1), "up_branches": 2, "spread": "focused"}
+    assert rice["concentration"]["spread"] == "wide" and rice["concentration"]["share_pct"] == 50.0
+    # the streak sums the branches' weeks: 100, 50, 30, 30, ... -> 100 vs 36.7 = up; 50 vs 30 = 1.67 up; 30 vs 30 = no -> 2
+    assert sal["streak_weeks"] == 2 and rice["streak_weeks"] == 0
+    # ต้นทุน/จาน = plate-weighted: (100x50 + 50x50 + 30x40) / 180
+    assert sal["unit_cost"] == round((5000 + 2500 + 1200) / 180, 2) and rice["unit_cost"] == 10.0
+    # one branch only: the pushers and the concentration are chain-view keys; the streak stays
+    rows1, _ = sales._spike_dishes(ents[:1], _Sc({1: 50.0}), {}, True, weekly=weekly)
+    assert "concentration" not in rows1[0] and rows1[0]["streak_weeks"] == 2
+    # a role without cost: plates decide the concentration, no unit cost
+    rows2, _ = sales._spike_dishes(ents, None, {}, False, weekly=weekly)
+    s2 = next(r for r in rows2 if r["menu"] == "ซาชิมิแซลมอน")
+    assert s2["concentration"]["share_pct"] == round(60 / 70 * 100, 1) and "unit_cost" not in s2
+    # without the weekly figures (the table could not be read): no streak key at all
+    rows3, _ = sales._spike_dishes(ents, None, {}, False)
+    assert all("streak_weeks" not in r for r in rows3)
+
+
+def test_the_endpoint_answer_carries_the_streak_rule_and_the_rows_their_streak():
+    r = _run()
+    assert r["dish_focus_pct"] == 50 and r["dish_streak"] == {"weeks": 5, "x": 1.2, "min_plates": 5}
+    assert all(isinstance(x["streak_weeks"], int) and "unit_cost" in x for x in r["dishes"] if not x["uncosted"])
+    assert all("concentration" in x for x in r["dishes"] if x["excess"] > 0 and x["pushers"])

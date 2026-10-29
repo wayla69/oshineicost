@@ -17,12 +17,18 @@
   "baht": 1000,
   "share_pct": 0.1
  },
+ "dish_focus_pct": 50,
  "dish_groups": [],
  "dish_kind_count": {
   "alc": 0,
   "buffet": 0
  },
  "dish_material_count": 0,
+ "dish_streak": {
+  "min_plates": 5,
+  "weeks": 5,
+  "x": 1.2
+ },
  "dish_totals": {
   "down_cost": 0.0,
   "down_excess": 0.0,

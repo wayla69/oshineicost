@@ -1745,28 +1745,37 @@ _NEW_FLOOR_BAHT = 1000           # ... or from ฿1,000 of food cost in the peri
 _DISH_PUSHERS = 3
 
 
-def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
+def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5, weekly=None) -> tuple:
     """ents = [(kind, menu, bid, branch, sid, plates, expected)] = every existing branch x SKU of the scope with a sale in the period or
     in its baseline (new / returning menus and non-food lines excluded). spk = {(bid, sid): the ranked row} (tiers, spike). sc =
     _SpikeCost or None (then not one cost key, PL3). Returns (rows, totals): rows = the dishes above their normal - net extra cost > 0
     (cost view; an uncosted dish above its normal comes last) or net extra plates > 0 - sorted by it, each with its share of the food
     cost (cost_share), the cumulative % of the rows above it (cum_pct, of the summed positive dishes) and material (the floor);
-    totals = the up / down / net sums over EVERY dish (the net = increases minus decreases)."""
+    totals = the up / down / net sums over EVERY dish (the net = increases minus decreases).
+    weekly = {(bid, sid): [plates of week 0 (the latest, ending the period end), 1, ... _SPIKE_STREAK_WEEKS + 2]} from
+    _spike_weekly, or None: the rows then carry streak_weeks (PR-SK2, see _spike_streak)."""
     acc: dict = {}
+    nwk = _SPIKE_STREAK_WEEKS + 3
     for kind, menu, bid, branch, sid, pq, exp in ents:
         key = (kind, _spike_norm(menu))          # PR-SK: one row per dish, whatever the SKU's spelling
         a = acc.get(key)
         if a is None:
             a = acc[key] = {"kind": kind, "menu": menu, "names": {}, "pq": 0.0, "exp": 0.0, "net": 0.0, "rev": 0.0, "costed": False,
-                            "br": {}, "keys": [], "spike": set()}
+                            "cpl": 0.0, "wk": [0.0] * nwk, "br": {}, "keys": [], "spike": set()}
         a["names"][menu] = a["names"].get(menu, 0.0) + pq
         uc = sc.unit_of(bid, sid) if sc is not None else 0.0
         ex = pq - exp
         a["pq"] += pq
         a["exp"] += exp
         a["net"] += ex * uc
+        a["cpl"] += pq * uc                      # PR-SK2: plates x unit cost -> the dish's plate-weighted cost per plate
         a["rev"] += sc.rev.get((bid, sid), 0.0) if sc is not None else 0.0
         a["costed"] = a["costed"] or uc > 0
+        if weekly is not None:
+            wk = weekly.get((bid, sid))
+            if wk:
+                for i, v in enumerate(wk[:nwk]):
+                    a["wk"][i] += v
         b = a["br"].setdefault(branch, [0.0, 0.0, 0.0])      # [excess plates, net ฿, plates]
         b[0] += ex
         b[1] += ex * uc
@@ -1799,6 +1808,8 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
                "spike_branches": len(a["spike"]), "_net": a["net"] if cost else ex, "_ex": ex}
         if len(a["names"]) > 1:
             row["merged"] = sorted(n for n in a["names"] if n != name)
+        if weekly is not None:
+            row["streak_weeks"] = _spike_streak(a["wk"], threshold)
         if not one_branch:
             # PR-SK: a normal under 5 plates over the whole chain is no normal (the one-branch rows carry the ranked row's flag)
             row["thin_base"] = a["exp"] < _SPIKE_THIN_EXPECTED
@@ -1807,6 +1818,14 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
             row["pushers"] = [{"branch": n, "excess": round(b[0]), **({"extra_cost": round(b[1], 2)} if cost else {})}
                               for n, b in push[:_DISH_PUSHERS]]
             row["pushers_more"] = max(0, len(push) - _DISH_PUSHERS)
+            # PR-SK2 (owner 2026-10-29) · กระจุก / ทั้งเครือ: the top branch's share of the summed increases (the branches above
+            # their normal only; ฿ with cost, plates without). spread = one (one branch up) | focused (top > 50 %) | wide
+            up = sum(b[i] for _n, b in push)
+            if push and up > 0:
+                top_n, top_b = push[0]
+                share = top_b[i] / up * 100
+                row["concentration"] = {"branch": top_n, "share_pct": round(share, 1), "up_branches": len(push),
+                                        "spread": "one" if len(push) == 1 else "focused" if share > _SPIKE_FOCUS_PCT else "wide"}
         else:
             # one branch: the branch's own ranked row (its tiers, per-head figures) when the dish is one SKU there
             r = spk.get(a["keys"][0]) if len(a["keys"]) == 1 else None
@@ -1817,6 +1836,9 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
         if cost:
             row.update({"net_cost": round(a["net"], 2), "cost_share": sc.share(a["net"]), "net_pp": sc.pp(a["net"]),
                         "uncosted": not a["costed"]})
+            # PR-SK2 · ต้นทุน/จาน: the dish's cost per plate, weighted by the period's plates (the normal's when none sold)
+            if a["costed"]:
+                row["unit_cost"] = round(a["cpl"] / a["pq"], 2) if a["pq"] > 0 else (round(a["net"] / ex, 2) if ex else None)
             # PR-SK (owner 2026-10-29) · a PAID dish (à la carte, delivery, takeaway) sells its extra plates: the price side.
             # price = the period's ex-VAT revenue per plate of the dish; extra_revenue = net extra plates x price;
             # extra_gp = extra_revenue - the net extra cost. A buffet dish has no price (its revenue is the package's).
@@ -1851,6 +1873,44 @@ def _spike_dishes(ents, sc, spk, one_branch, threshold=1.5) -> tuple:
 
 
 _SPIKE_THIN_EXPECTED = 5         # PR-SK: a chain-wide normal under 5 plates marks the dish row thin_base
+_SPIKE_FOCUS_PCT = 50            # PR-SK2: one branch holding more than 50 % of a dish's increases = กระจุก (focused)
+_SPIKE_STREAK_WEEKS = 5          # PR-SK2: พุ่งต่อเนื่อง counts up to 5 weeks back from the period end
+_SPIKE_STREAK_X = 1.2            # ... a week counts when its plates are >= 1.2x the mean of the 3 weeks before it (and >= 5)
+
+
+def _spike_streak(wk, threshold=1.5) -> int:
+    """PR-SK2 (owner 2026-10-29) · พุ่งต่อเนื่อง N สัปดาห์: wk = the dish's plates per 7-day block back from the period end
+    (wk[0] = the latest week). The streak is N when EVERY one of the latest N weeks has >= 5 plates and >= _SPIKE_STREAK_X x
+    the mean of the 3 weeks before those N (that mean > 0) - the largest such N up to _SPIKE_STREAK_WEEKS, so a plateau
+    (five high weeks after three low ones) counts as five, a single high week as one, a flat line as none. Raw plates, no
+    per-head weighting: the badge says the rise is not one week's noise; the row's × figure stays the per-head answer."""
+    best = 0
+    for n in range(1, min(_SPIKE_STREAK_WEEKS, len(wk) - 3) + 1):
+        base = (wk[n] + wk[n + 1] + wk[n + 2]) / 3.0
+        if base > 0 and all(wk[k] >= 5 and wk[k] / base >= _SPIKE_STREAK_X for k in range(n)):
+            best = n
+    return best
+
+
+def _spike_weekly(cur, scan, bjoin, bfilt, q, pe) -> dict:
+    """PR-SK2 · plates per branch x SKU x 7-day block back from the period end pe, _SPIKE_STREAK_WEEKS + 3 blocks
+    (the streak needs 3 weeks of base behind its last week). One pass over the window, the same scan hint as the baseline."""
+    import datetime as _dt
+    nwk = _SPIKE_STREAK_WEEKS + 3
+    ws = pe - _dt.timedelta(days=7 * nwk - 1)
+    out: dict = {}
+    for bid, sid, i, qq in cur.execute(f"""
+        SELECT d.branch_id, d.sku_id, CAST((julianday(:wpe) - julianday(d.day)) / 7 AS INTEGER) i, SUM(d.qty)
+        FROM sales_sku_daily d {scan} {bjoin}
+        WHERE d.day BETWEEN :wps AND :wpe {bfilt}
+        GROUP BY d.branch_id, d.sku_id, i""", {**q, "wps": ws.isoformat(), "wpe": pe.isoformat()}):
+        if i is None or i < 0 or i >= nwk:
+            continue
+        wk = out.get((bid, sid))
+        if wk is None:
+            wk = out[(bid, sid)] = [0.0] * nwk
+        wk[i] += qq or 0
+    return out
 
 
 def _spike_groups(rows, cost: bool) -> list:
@@ -2200,7 +2260,12 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
                     "top_pp": sc.pp(tx), "uncosted_count": sum(1 for s in spikes if s["uncosted"])}
     # PR-SX (owner 2026-10-25) · a raw-plates row whose menu is also a per-head spike (same branch x SKU) carries in_per_head: true; the
     # card hides those by default, so แบบเดิม lists what spiked only because more customers came (plates_only_count = the rest)
-    dishes, dtot = _spike_dishes(dents, sc, {(s["_bid"], s["_sid"]): s for s in spikes}, one_branch, threshold)
+    try:
+        weekly = _spike_weekly(cur, scan, bjoin, bfilt, q, pe)          # PR-SK2: the streak behind each dish row
+    except Exception as e:
+        print(f"[menu-spike] weekly skipped: {e}")
+        weekly = None
+    dishes, dtot = _spike_dishes(dents, sc, {(s["_bid"], s["_sid"]): s for s in spikes}, one_branch, threshold, weekly)
     phk = {(s["_bid"], s["_sid"]) for s in spikes if s["spike"]}       # PR-RK: "also per head" = in the ranked list AND spike
     for r in plates:
         r["in_per_head"] = r.pop("_k") in phk
@@ -2251,6 +2316,8 @@ def _menu_spike_period(con, period, focus_arg, date_from, date_to, bfilt, params
             # PR-SK · the list by high-value ingredient (_spike_groups) and the paid / buffet split of the dish rows
             "dish_groups": _spike_groups(dishes, sc is not None),
             "dish_kind_count": {"buffet": sum(1 for r in dishes if r["kind"] == "buffet"), "alc": sum(1 for r in dishes if r["kind"] != "buffet")},
+            # PR-SK2 · the rules behind กระจุก / ทั้งเครือ and พุ่งต่อเนื่อง N สัปดาห์ (streak_weeks on the rows)
+            "dish_focus_pct": _SPIKE_FOCUS_PCT, "dish_streak": {"weeks": _SPIKE_STREAK_WEEKS, "x": _SPIKE_STREAK_X, "min_plates": 5},
             "new_dish_floor": {"per_day": _NEW_FLOOR_PER_DAY, **({"baht": _NEW_FLOOR_BAHT} if sc is not None else {})},
             "new_dish_count": len(new_dishes), "new_dish_material_count": sum(1 for r in new_dishes if r["material"]),
             "new_dishes": new_dishes[:limit]}
