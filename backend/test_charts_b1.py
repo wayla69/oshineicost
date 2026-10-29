@@ -288,7 +288,7 @@ def _lum(h):
 def test_change_pills_on_the_tiles_keep_their_ink_and_clear_4_5_to_1():
     # the tile rule forced every span in a tile to inherit the tile's white, which turned msPchip's deep ink white on its pale pill
     css = _src("docs/ui-kit/theme-vivid.css")
-    rule = [ln for ln in css.splitlines() if ln.startswith("body .ms-kpi :is(p, span")][0]
+    rule = [ln for ln in css.splitlines() if ln.startswith("body .ms-kpi:not(#mobileSummary .ms-kpi) :is(p, span")][0]
     assert ".ms-chip, .ms-chip *" in rule
     for ink, bg in (("#047857", "#dcfce7"), ("#b91c1c", "#fee2e2"), ("#5f6c80", "#f1f5f9")):     # msPchip: up / down / flat, and the none chip
         assert ink in MOB and bg in MOB
