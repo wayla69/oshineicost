@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สอบถามความสามารถของตัวเชื่อม HO_CRM — Oshinei</title>
+<style>
+{{CSS}}
+body{ font-size:11pt; line-height:1.7; }
+.lh{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--accent); padding-bottom:8pt; margin-bottom:16pt; }
+.lh .org{ font-size:16pt; font-weight:700; color:var(--accent); }
+.lh .meta{ text-align:right; font-size:9.5pt; color:var(--muted); line-height:1.5; }
+table.addr{ border:0; margin:0 0 14pt; font-size:11pt; }
+table.addr td{ border:0; padding:2pt 10pt 2pt 0; vertical-align:top; }
+table.addr td.k{ font-weight:600; width:13%; white-space:nowrap; }
+p{ margin:0 0 8pt; text-align:left; }
+ul{ margin:0 0 10pt 18pt; }
+li{ margin:0 0 2pt; }
+.q{ border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:4px; padding:8pt 12pt; margin:0 0 10pt; break-inside:avoid; }
+.q h3{ margin:0 0 4pt; font-size:11.5pt; }
+.q p:last-child{ margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<div class="lh">
+  <div class="org">Oshinei</div>
+  <div class="meta">เลขที่ OSH-CRM-2026-003 Rev. 1<br>27 ตุลาคม 2569</div>
+</div>
+
+<table class="addr">
+  <tr><td class="k">เรื่อง</td><td>สอบถามการตั้งค่าคูปองภายนอก ใบเสร็จรับเงิน และรอบการส่งข้อมูลของสาขา สำหรับระบบสมาชิก Buzzebees CRM PLUS</td></tr>
+  <tr><td class="k">เรียน</td><td>ฝ่ายดูแลลูกค้า และทีมเทคนิค Easy POS</td></tr>
+  <tr><td class="k">อ้างถึง</td><td>หนังสือ Oshinei เลขที่ OSH-CRM-2026-003 ลงวันที่ 27 ตุลาคม 2569 เรื่อง สอบถามความสามารถของตัวเชื่อม HO_CRM</td></tr>
+</table>
+
+<p>ตามที่ Oshinei ได้สอบถามเรื่องตัวเชื่อม HO_CRM ตามหนังสือที่อ้างถึงนั้น Oshinei ได้เลือกรูปแบบการเชื่อมต่อระบบสมาชิก Buzzebees CRM PLUS ที่<b>ไม่ต้องพัฒนาระบบ Easy POS เพิ่มเติม</b> โดย Oshinei จะอ่านข้อมูลการขายจากฐานข้อมูล HQ_Oshinei ด้วยบัญชีอ่านอย่างเดียวที่ใช้อยู่ในปัจจุบัน และส่งต่อให้ Buzzebees ผ่าน API ของ Oshinei เอง จึงขอยกเลิกคำถามตามหนังสือฉบับก่อน และ Easy POS ไม่ต้องสร้าง view บัญชีผู้ใช้ หรือเปิดการเชื่อมต่อเครือข่ายเพิ่มเติม</p>
+
+<p>ในรูปแบบนี้ สมาชิกจะใช้คูปองของ Buzzebees ที่หน้าร้านผ่านฟังก์ชันคูปองภายนอก (external coupon) ที่มีอยู่ใน Easy POS แล้ว Oshinei จึงขอสอบถามข้อมูล 3 ข้อ ดังนี้</p>
+
+<div class="q">
+  <h3>1. ชุดคูปองภายนอกสำหรับรหัสคูปองของ Buzzebees</h3>
+  <p>ขอให้ตั้งชุดคูปอง (coupon series) สำหรับรหัสคูปองของ Buzzebees และขอทราบรายละเอียด ดังนี้</p>
+  <ul>
+    <li>รหัสคูปองที่ระบบรับได้มีรูปแบบและความยาวเท่าใด</li>
+    <li>ต้องบันทึกรหัสคูปองเข้าระบบล่วงหน้าก่อนใช้หรือไม่ หากต้องบันทึก สามารถนำเข้าเป็นชุดจากไฟล์ได้หรือไม่ และใช้รูปแบบไฟล์ใด</li>
+    <li>การตั้งค่า <code>IsUniqueCouponNumber</code> ป้องกันการใช้รหัสเดียวกันซ้ำที่หน้าร้านได้หรือไม่</li>
+  </ul>
+</div>
+
+<div class="q">
+  <h3>2. ใบเสร็จรับเงิน</h3>
+  <p>ใบเสร็จรับเงินพิมพ์ชื่อสาขาและเลขที่บิล (<code>SaleNum</code>) ชัดเจนในทุกสาขาหรือไม่ และฟังก์ชัน QR บนใบเสร็จ (<code>QrDataReceipt</code>) ซึ่งกำหนดไว้แล้ว 35 สาขาแต่ยังไม่เปิดใช้งาน สามารถเปิดใช้ได้หรือไม่</p>
+</div>
+
+<div class="q">
+  <h3>3. รอบการส่งข้อมูลของสาขาเข้าสำนักงานใหญ่</h3>
+  <p>แต่ละสาขาส่งข้อมูลการขายเข้าฐานข้อมูล HQ_Oshinei ทุกกี่นาที และสามารถปรับให้ส่งทุก 15 นาทีได้หรือไม่ เนื่องจากสมาชิกจะได้รับคะแนนหลังจากข้อมูลบิลเข้าถึงสำนักงานใหญ่แล้วเท่านั้น</p>
+</div>
+
+<p>นอกจากนี้ ขอสอบถามเพิ่มเติมว่า หน้าจอแคชเชียร์สามารถบันทึกหมายเลขโทรศัพท์ของสมาชิกลงในช่อง <code>CustRefNum</code> ได้โดยไม่ต้องพัฒนาเพิ่มหรือไม่ ข้อนี้ใช้ประกอบการพิจารณาในระยะถัดไป</p>
+
+</body>
+</html>

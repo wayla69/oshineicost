@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สอบถามความสามารถของตัวเชื่อม HO_CRM — Oshinei</title>
+<style>
+{{CSS}}
+body{ font-size:11pt; line-height:1.7; }
+.lh{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--accent); padding-bottom:8pt; margin-bottom:16pt; }
+.lh .org{ font-size:16pt; font-weight:700; color:var(--accent); }
+.lh .meta{ text-align:right; font-size:9.5pt; color:var(--muted); line-height:1.5; }
+table.addr{ border:0; margin:0 0 14pt; font-size:11pt; }
+table.addr td{ border:0; padding:2pt 10pt 2pt 0; vertical-align:top; }
+table.addr td.k{ font-weight:600; width:13%; white-space:nowrap; }
+p{ margin:0 0 8pt; text-align:left; }
+ul{ margin:0 0 10pt 18pt; }
+li{ margin:0 0 2pt; }
+.q{ border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:4px; padding:8pt 12pt; margin:0 0 10pt; break-inside:avoid; }
+.q h3{ margin:0 0 4pt; font-size:11.5pt; }
+.q p:last-child{ margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<div class="lh">
+  <div class="org">Oshinei</div>
+  <div class="meta">เลขที่ OSH-CRM-2026-003<br>27 ตุลาคม 2569</div>
+</div>
+
+<table class="addr">
+  <tr><td class="k">เรื่อง</td><td>สอบถามความสามารถของตัวเชื่อม HO_CRM สำหรับการเชื่อมต่อระบบสมาชิก Buzzebees CRM PLUS</td></tr>
+  <tr><td class="k">เรียน</td><td>ฝ่ายดูแลลูกค้า และทีมเทคนิค Easy POS</td></tr>
+  <tr><td class="k">อ้างถึง</td><td>ข้อกำหนด API CRM PLUS ของ Buzzebees (API CRM PLUS_full – 2026)</td></tr>
+</table>
+
+<p>ด้วย Oshinei มีแผนเปิดใช้ระบบสมาชิกและสะสมคะแนนของ Buzzebees (CRM PLUS ผ่าน LINE Official Account) ในทุกสาขาที่ใช้ระบบ Easy POS (ปัจจุบัน 33 สาขา) โดย Buzzebees ได้เสนอ API มาตรฐานที่ระบบ POS จะต้องเรียกใช้ขณะชำระเงิน ได้แก่ การค้นหาสมาชิก การสะสมคะแนน การตรวจสอบและใช้สิทธิ์คูปอง และการยกเลิกคะแนน</p>
+
+<p>จากการตรวจสอบฐานข้อมูล HQ_Oshinei พบว่าระบบ Easy POS มีโครงสร้างรองรับการเชื่อมต่อระบบ CRM ภายนอกอยู่แล้ว แต่ยังไม่เคยมีการใช้งาน ได้แก่</p>
+<ul>
+  <li>ตัวเชื่อม HO_CRM ในตาราง <code>ThirdParty</code> (สถานะเปิดใช้งาน)</li>
+  <li>ตาราง <code>PromotionByCRM</code> และ <code>CallAPILog</code></li>
+  <li>ช่อง <code>EarnPoint</code>, <code>RedeemedPoint</code> และ <code>BalancePoint</code> ในตาราง <code>Sale</code></li>
+  <li>ช่อง <code>IsSucceedSendHOCRM</code> ในตาราง <code>SaleSync</code></li>
+  <li>ช่อง <code>IsCRMCoupon</code> ในตาราง <code>CouponSeries</code></li>
+</ul>
+
+<p>Oshinei จึงขอสอบถามข้อมูล 3 ข้อ เพื่อประกอบการพิจารณาเลือกรูปแบบการเชื่อมต่อ ดังนี้</p>
+
+<div class="q">
+  <h3>1. การเชื่อมต่อกับ Buzzebees ผ่าน HO_CRM</h3>
+  <p>ตัวเชื่อม HO_CRM สามารถเชื่อมต่อกับ API ของ Buzzebees ได้ด้วยการตั้งค่าเท่านั้น หรือจะต้องพัฒนาเพิ่มเติม และ Easy POS เคยเชื่อมต่อ HO_CRM กับ Buzzebees หรือผู้ให้บริการ CRM รายอื่นมาก่อนหรือไม่ หากเคย ขอทราบชื่อผู้ให้บริการและรูปแบบการเชื่อมต่อที่ใช้</p>
+</div>
+
+<div class="q">
+  <h3>2. หน้าจอสมาชิกและคะแนนบนเครื่อง POS</h3>
+  <p>ระบบ POS มีหน้าจอให้พนักงานแคชเชียร์สแกน QR สมาชิกหรือระบุหมายเลขโทรศัพท์ แสดงคะแนนคงเหลือและคูปองที่ใช้ได้ บันทึกการใช้คูปอง และพิมพ์คะแนนที่ได้รับบนใบเสร็จรับเงินอยู่แล้วหรือไม่ และในกรณีที่ระบบสมาชิกไม่ตอบกลับ ระบบ POS ยังสามารถปิดรายการขายได้ตามปกติ และส่งข้อมูลซ้ำภายหลังได้หรือไม่</p>
+</div>
+
+<div class="q">
+  <h3>3. ระยะเวลาและค่าใช้จ่าย</h3>
+  <p>หากจำเป็นต้องพัฒนาเพิ่มเติม ขอทราบขอบเขตงาน ระยะเวลาดำเนินการ และค่าใช้จ่ายโดยประมาณ ทั้งในส่วนการพัฒนาและการติดตั้งในทุกสาขา</p>
+</div>
+
+<p>ทั้งนี้ Oshinei กำลังพิจารณาอีกทางเลือกหนึ่ง คือให้ Buzzebees อ่านข้อมูลการขายจากฐานข้อมูล HQ_Oshinei ผ่าน view แบบอ่านอย่างเดียว ซึ่งไม่ต้องแก้ไขระบบ POS คำตอบของ Easy POS จะใช้ประกอบการตัดสินใจระหว่างสองทางเลือกนี้</p>
+
+</body>
+</html>

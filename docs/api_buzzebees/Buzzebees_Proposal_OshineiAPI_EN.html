@@ -1,0 +1,846 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Proposal: Buzzebees CRM PLUS integration through the Oshinei CRM API — Oshinei</title>
+<style>
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Regular.woff2') format('woff2');font-weight:400;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Medium.woff2') format('woff2');font-weight:500;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-SemiBold.woff2') format('woff2');font-weight:600;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Bold.woff2') format('woff2');font-weight:700;font-style:normal}
+
+:root{
+  --ink:#141414; --muted:#5a5a5a; --rule:#cfcfcf; --soft:#f3f4f6;
+  --accent:#1f4e8c; --accent-soft:#e7eef8;
+}
+@page{ size:A4; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:'KIRA UI',sans-serif; font-synthesis:none;
+  color:var(--ink); font-size:10.5pt; line-height:1.55;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+h1{ font-size:22pt; font-weight:700; line-height:1.3; margin:0 0 6pt; }
+h2{ font-size:15pt; font-weight:600; color:var(--accent); margin:0 0 4pt; padding-bottom:4pt; border-bottom:1.5px solid var(--accent); break-before:page; break-after:avoid; }
+h2.first{ break-before:auto; }
+h3{ font-size:12pt; font-weight:600; margin:14pt 0 4pt; break-after:avoid; }
+h4{ font-size:10.5pt; font-weight:600; margin:10pt 0 3pt; break-after:avoid; }
+p{ margin:0 0 6pt; orphans:3; widows:3; }
+p.lead{ margin:4pt 0 8pt; }
+p.owner{ color:var(--accent); font-weight:500; font-size:9.5pt; margin:0 0 8pt; }
+p.note{ font-size:9.5pt; color:var(--muted); margin:3pt 0 8pt; }
+code{ font-family:'KIRA UI',monospace; font-size:9.5pt; background:var(--soft); padding:0 3px; border-radius:3px; }
+pre{ font-family:'KIRA UI',monospace; font-size:9.5pt; line-height:1.45; background:var(--soft); border:1px solid var(--rule); border-radius:4px; padding:8pt 10pt; margin:4pt 0 8pt; white-space:pre; break-inside:avoid; }
+table{ width:100%; border-collapse:collapse; font-size:9.5pt; line-height:1.45; margin:4pt 0 10pt; break-inside:avoid; }
+th,td{ border:1px solid var(--rule); padding:3.5pt 5pt; vertical-align:top; text-align:left; }
+th{ background:var(--soft); font-weight:600; }
+th.own{ white-space:nowrap; }
+td.own{ color:var(--accent); font-weight:500; }
+td.k{ white-space:nowrap; }
+ul,ol{ margin:0 0 8pt 18pt; padding:0; }
+li{ margin:0 0 3pt; break-inside:avoid; }
+ul.check{ list-style:none; margin-left:0; }
+ul.check li{ padding-left:18pt; position:relative; }
+ul.check li::before{ content:""; position:absolute; left:0; top:3.5pt; width:9pt; height:9pt; border:1.2px solid var(--muted); border-radius:2px; }
+.api{ break-inside:avoid; margin-bottom:6pt; }
+.api h3{ margin-top:12pt; }
+.api .path{ font-weight:400; font-size:10pt; color:var(--muted); margin-left:6pt; }
+.grp{ break-inside:avoid; }
+.keep{ break-inside:avoid; }
+.fig{ break-inside:avoid; margin:6pt 0 10pt; }
+.fig svg{ width:100%; height:auto; display:block; }
+.fig .cap{ font-size:9pt; color:var(--muted); margin-top:2pt; }
+hr.sp{ border:0; border-top:1px solid var(--rule); margin:10pt 0; }
+
+/* cover */
+.cover{ break-after:page; padding-top:70pt; }
+.cover .kicker{ color:var(--accent); font-weight:600; font-size:11pt; letter-spacing:.3px; margin-bottom:10pt; }
+.cover h1{ font-size:26pt; }
+.cover .sub{ font-size:12.5pt; color:var(--muted); margin:0 0 26pt; }
+.cover table{ font-size:10.5pt; }
+.cover .status{ margin-top:22pt; border-left:3px solid var(--accent); padding:6pt 10pt; background:var(--accent-soft); }
+.cover .meta{ margin-top:30pt; font-size:9.5pt; color:var(--muted); }
+/* toc */
+.toc{ break-after:page; }
+.toc ol{ list-style:none; margin:8pt 0 0; }
+.toc li{ display:flex; justify-content:space-between; border-bottom:1px dotted var(--rule); padding:3pt 0; }
+.toc li span.n{ color:var(--muted); width:22pt; flex:none; }
+.toc li span.t{ flex:1; }
+.toc li span.pg{ width:30pt; text-align:right; flex:none; color:var(--muted); }
+
+.lh{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--accent); padding-bottom:8pt; margin-bottom:14pt; }
+.lh .org{ font-size:16pt; font-weight:700; color:var(--accent); }
+.lh .meta{ text-align:right; font-size:9pt; color:var(--muted); line-height:1.5; }
+table.addr{ border:0; margin:0 0 12pt; font-size:10pt; }
+table.addr td{ border:0; padding:1.5pt 8pt 1.5pt 0; }
+table.addr td.k{ color:var(--muted); width:16%; }
+.subject{ font-size:13pt; font-weight:600; margin:4pt 0 10pt; }
+.box{ border:1px solid var(--rule); border-left:3px solid var(--accent); background:var(--accent-soft); padding:8pt 10pt; margin:6pt 0 10pt; break-inside:avoid; }
+.box p:last-child{ margin-bottom:0; }
+.pri{ display:inline-block; font-size:8.5pt; font-weight:600; padding:0 5pt; border-radius:3px; border:1px solid currentColor; white-space:nowrap; }
+.pri.b{ color:#b42318; } .pri.p{ color:#9a5b00; } .pri.n{ color:#5a5a5a; }
+.req{ break-inside:avoid; border:1px solid var(--rule); border-radius:4px; padding:8pt 10pt; margin:0 0 10pt; }
+.req h3{ margin:0 0 4pt; }
+.req table{ margin:4pt 0 0; }
+.req td.k{ width:20%; color:var(--muted); }
+.kpi{ display:flex; gap:8pt; margin:6pt 0 10pt; break-inside:avoid; }
+.kpi div{ flex:1; border:1px solid var(--rule); border-radius:4px; padding:6pt 8pt; }
+.kpi b{ display:block; font-size:15pt; font-weight:700; color:var(--ink); }
+.kpi span{ font-size:8.5pt; color:var(--muted); line-height:1.3; display:block; }
+.sign{ margin-top:20pt; break-inside:avoid; }
+.sign table td{ height:34pt; vertical-align:bottom; }
+.m{ display:inline-block; min-width:30pt; font-weight:600; font-size:8.5pt; }
+.m.get{ color:#1f4e8c; } .m.post,.m.put{ color:#9a5b00; }
+pre{ font-size:8.8pt; }
+</style>
+</head>
+<body>
+
+<div class="lh">
+  <div class="org">Oshinei</div>
+  <div class="meta">Ref. OSH-CRM-2026-002 Rev. 2<br>27 October 2026</div>
+</div>
+
+<table class="addr">
+  <tr><td class="k">To</td><td>Buzzebees Co., Ltd. — CRM PLUS project team</td></tr>
+  <tr><td class="k">Cc</td><td>Easy POS — account manager (section 7 only)</td></tr>
+  <tr><td class="k">From</td><td>Oshinei — project owner, CRM integration</td></tr>
+  <tr><td class="k">Re</td><td>Your document "API CRM PLUS_full - 2026.xlsx" (10 sheets, specification versions 1–3, 2022–2025)</td></tr>
+</table>
+
+<div class="subject">Proposal: integrate CRM PLUS through the Oshinei CRM API, with Buzzebees as the lead party and no change to the Easy POS application</div>
+
+<p>Thank you for the CRM PLUS POS API specification. Your API requires the POS application to call Buzzebees at checkout, which would require development by Easy POS. We propose a model that needs no change to the POS application and no access by any third party to our POS database. Oshinei already reads completed sales from the Easy POS head-office database (HQ_Oshinei) into its own analytics application with a read-only account. We will add a CRM module to that application and publish an HTTPS API: Buzzebees reads bills from it, runs point earning, reversal and coupon tracking in CRM PLUS, and writes every result back to it. This letter sets out the model, the evidence from our sales data, the API specification, and what we ask of Buzzebees and Easy POS.</p>
+
+<h2 class="first" id="s1">1. Summary</h2>
+<div class="box">
+<p><b>Model.</b> Buzzebees is the lead party and builds a connector to the Oshinei CRM API. Every 5 minutes it reads bills that are new or changed, including voids. Members identify a bill by claiming the receipt in the LINE Official Account. Buzzebees credits points, reverses them when a bill is voided on any later day, marks coupons used when a cashier enters the code in Easy's existing "external coupon" function, and reports each of these results back to Oshinei through the API.</p>
+<p><b>What changes.</b> Oshinei builds and operates the API (section 4). Easy POS develops nothing and grants no database access; it only confirms how its coupon and receipt functions work (section 7).</p>
+<p><b>Trade-off.</b> Points arrive after the bill reaches the head office and the member claims it, not at the counter, and coupons are checked after use rather than before. Section 2.2 compares this with the earlier options.</p>
+</div>
+
+<table>
+  <tr><th style="width:8%">Ref.</th><th>Request to Buzzebees</th><th style="width:17%">Priority</th></tr>
+  <tr><td>R1</td><td>Confirm that Buzzebees will build and operate the connector to the Oshinei CRM API and credit points from it</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R2</td><td>Provide a receipt-claim flow in the LINE Official Account, with the anti-abuse checks in section 6</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R3</td><td>Reverse points automatically when a claimed bill is voided, on any later day</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R4</td><td>Issue unique coupon codes usable as Easy external coupons, and mark them used from the API</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R5</td><td>Let members exchange points for coupons in LINE (no point burning at the counter)</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R6</td><td>Write every claim, credit, reversal and coupon result back to the API within 5 minutes</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R7</td><td>Send a daily summary through the API and resolve reconciliation differences</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R8</td><td>Sign a data processing agreement and store only the data listed in section 9</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R9</td><td>Optional: credit points automatically when the cashier records the member's phone on the bill</td><td><span class="pri n">Optional</span></td></tr>
+  <tr><td>R10</td><td>Revoke the tokens contained in the specification file and issue Oshinei credentials separately</td><td><span class="pri p">Before pilot</span></td></tr>
+</table>
+<p>We request a written reply to R1–R10 within 10 business days (proposed), followed by a joint meeting.</p>
+
+<section class="toc">
+  <h2 class="first" style="break-before:page">Contents</h2>
+  <ol>
+    <li><span class="n">1</span><span class="t">Summary</span><span class="pg" data-key="s1">1</span></li>
+    <li><span class="n">2</span><span class="t">Proposed integration model</span><span class="pg" data-key="s2">4</span></li>
+    <li><span class="n">3</span><span class="t">Evidence from our sales database</span><span class="pg" data-key="s3">6</span></li>
+    <li><span class="n">4</span><span class="t">Oshinei CRM API specification</span><span class="pg" data-key="s4">9</span></li>
+    <li><span class="n">5</span><span class="t">Process flows</span><span class="pg" data-key="s5">15</span></li>
+    <li><span class="n">6</span><span class="t">Requests to Buzzebees (R1–R10)</span><span class="pg" data-key="s6">17</span></li>
+    <li><span class="n">7</span><span class="t">Requests to Easy POS (E1–E4)</span><span class="pg" data-key="s7">19</span></li>
+    <li><span class="n">8</span><span class="t">Items Oshinei will confirm (D1–D6)</span><span class="pg" data-key="s8">20</span></li>
+    <li><span class="n">9</span><span class="t">Security and data protection</span><span class="pg" data-key="s9">21</span></li>
+    <li><span class="n">10</span><span class="t">Pilot, acceptance tests and next steps</span><span class="pg" data-key="s10">22</span></li>
+    <li><span class="n">A</span><span class="t">Appendix A — Use of the CRM PLUS API in this model</span><span class="pg" data-key="s11">24</span></li>
+    <li><span class="n">B</span><span class="t">Appendix B — Data sources and method</span><span class="pg" data-key="s12">25</span></li>
+  </ol>
+</section>
+
+<!-- ===================== 2. MODEL ===================== -->
+<h2 id="s2">2. Proposed integration model</h2>
+<p class="lead">Sales flow from branch POS terminals to the head-office database as they do today. Oshinei's application reads them with its existing read-only account and publishes them through the CRM API. Buzzebees reads from the API, runs all loyalty logic on its own platform, and writes the results back. No party other than Oshinei connects to the POS database.</p>
+<div class="fig">
+<svg viewBox="0 0 760 470" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12.5">
+  <defs><marker id="m1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="16" y="24" font-size="14" font-weight="600" fill="#141414">Buzzebees reads and writes through the Oshinei CRM API; the POS is not changed</text>
+  <!-- Easy column -->
+  <rect x="16" y="44" width="210" height="336" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="121" y="66" text-anchor="middle" font-weight="600" fill="#141414">Easy POS — unchanged</text>
+  <rect x="28" y="80" width="186" height="72" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="40" y="102" font-weight="600" fill="#141414">POS in 33 branches</text>
+  <text x="40" y="120" font-size="11" fill="#5a5a5a">bill closed as today</text>
+  <text x="40" y="136" font-size="11" fill="#5a5a5a">coupon typed as external</text>
+  <rect x="28" y="200" width="186" height="90" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="40" y="222" font-weight="600" fill="#141414">HQ_Oshinei</text>
+  <text x="40" y="240" font-size="11" fill="#5a5a5a">SQL Server, head office</text>
+  <text x="40" y="256" font-size="11" fill="#5a5a5a">Oshinei read-only login</text>
+  <text x="40" y="272" font-size="11" fill="#5a5a5a">no third-party access</text>
+  <!-- Oshinei column -->
+  <rect x="275" y="44" width="210" height="336" rx="8" fill="#1f4e8c" fill-opacity="0.05" stroke="#1f4e8c" stroke-width="1.5"/>
+  <text x="380" y="66" text-anchor="middle" font-weight="600" fill="#141414">Oshinei application</text>
+  <rect x="287" y="80" width="186" height="56" rx="6" fill="#ffffff" stroke="#8a8a8a"/>
+  <text x="299" y="102" font-weight="600" fill="#141414">Bill feed</text>
+  <text x="299" y="120" font-size="11" fill="#5a5a5a">reads changes every 5 min</text>
+  <rect x="287" y="156" width="186" height="70" rx="6" fill="#1f4e8c" fill-opacity="0.12" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="299" y="178" font-weight="600" fill="#141414">Oshinei CRM API</text>
+  <text x="299" y="196" font-size="11" fill="#141414">read: bills · branches</text>
+  <text x="299" y="212" font-size="11" fill="#141414">write: events · summary</text>
+  <rect x="287" y="246" width="186" height="56" rx="6" fill="#ffffff" stroke="#8a8a8a"/>
+  <text x="299" y="268" font-weight="600" fill="#141414">CRM store</text>
+  <text x="299" y="286" font-size="11" fill="#5a5a5a">own file, append-only</text>
+  <rect x="287" y="316" width="186" height="52" rx="6" fill="#ffffff" stroke="#8a8a8a"/>
+  <text x="299" y="338" font-weight="600" fill="#141414">CRM module</text>
+  <text x="299" y="356" font-size="11" fill="#5a5a5a">claims · coupons · reconciliation</text>
+  <!-- Buzzebees column -->
+  <rect x="534" y="44" width="210" height="336" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="639" y="66" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees — lead party</text>
+  <rect x="546" y="80" width="186" height="56" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="558" y="102" font-weight="600" fill="#141414">CRM PLUS</text>
+  <text x="558" y="120" font-size="11" fill="#5a5a5a">credit · reverse · coupons</text>
+  <rect x="546" y="156" width="186" height="70" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="558" y="178" font-weight="600" fill="#141414">Connector</text>
+  <text x="558" y="196" font-size="11" fill="#5a5a5a">reads changes every 5 min</text>
+  <text x="558" y="212" font-size="11" fill="#5a5a5a">writes every result back</text>
+  <rect x="546" y="246" width="186" height="56" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="558" y="268" font-weight="600" fill="#141414">LINE Official Account</text>
+  <text x="558" y="286" font-size="11" fill="#5a5a5a">claim receipt · get coupons</text>
+  <!-- customer -->
+  <rect x="534" y="404" width="210" height="52" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="550" y="426" font-weight="600" fill="#141414">Customer</text>
+  <text x="550" y="444" font-size="11" fill="#5a5a5a">pays · claims · uses coupons</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M121 152V200" marker-end="url(#m1)"/>
+    <path d="M214 245H250V108H287" marker-end="url(#m1)"/>
+    <path d="M380 136V156" marker-end="url(#m1)"/>
+    <path d="M473 178H546" marker-end="url(#m1)"/>
+    <path d="M546 206H473" marker-end="url(#m1)"/>
+    <path d="M380 226V246" marker-end="url(#m1)"/>
+    <path d="M380 302V316" marker-end="url(#m1)"/>
+    <path d="M639 156V136" marker-end="url(#m1)"/>
+    <path d="M732 108H740V274H732" marker-end="url(#m1)"/>
+    <path d="M639 404V302" marker-end="url(#m1)"/>
+    <path d="M534 430H8V116H28" marker-end="url(#m1)"/>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a">
+    <text x="129" y="180">branch upload</text>
+    <text x="490" y="172">GET</text>
+    <text x="492" y="222">POST</text>
+    <text x="300" y="424">pays; shows coupon to the cashier</text>
+  </g>
+</svg>
+<div class="cap">Figure 1. Proposed model. Only Oshinei reads the POS database. Buzzebees uses the HTTPS API in both directions.</div>
+</div>
+
+<h3>2.1 Responsibilities</h3>
+<table>
+  <tr><th style="width:18%">Party</th><th>Responsibilities</th></tr>
+  <tr><td class="own">Buzzebees</td><td>Build and operate the connector to the Oshinei CRM API; receipt claim, crediting, reversal and coupon tracking in CRM PLUS; LINE Official Account; write every result back (R6) and send a daily summary (R7); data protection as a processor</td></tr>
+  <tr><td class="own">Oshinei</td><td>Build and operate the bill feed and the CRM API to the service levels in section 4.9; keep the results in a separate store; CRM module for head office and branches; business rules (section 8); cashier instructions; reconciliation review; acceptance</td></tr>
+  <tr><td class="own">Easy POS</td><td>No development and no database access for third parties. Confirm the coupon, receipt and upload items in section 7</td></tr>
+</table>
+
+<h3>2.2 Comparison with the earlier options</h3>
+<table>
+  <tr><th style="width:19%">Topic</th><th style="width:27%">Oshinei CRM API (this revision)</th><th style="width:27%">Direct database read (Rev. 1)</th><th>Real-time POS (your specification)</th></tr>
+  <tr><td>Development</td><td>Buzzebees connector; Oshinei API</td><td>Buzzebees connector</td><td>Easy develops the POS side through HO_CRM</td></tr>
+  <tr><td>Easy POS work</td><td>Confirmations only</td><td>Views, login, network access</td><td>Development and roll-out to all branches</td></tr>
+  <tr><td>Third-party access to the POS database</td><td>None</td><td>Read-only login to the HQ server</td><td>None</td></tr>
+  <tr><td>Interface</td><td>HTTPS and JSON, change cursor</td><td>SQL views, time watermark</td><td>CRM PLUS API at checkout</td></tr>
+  <tr><td>Results to Oshinei</td><td>Every event, within 5 minutes</td><td>Daily report</td><td>Through the POS</td></tr>
+  <tr><td>Points available</td><td>After upload to HQ and claim (minutes to hours)</td><td>Same</td><td>Immediately; printed on the receipt</td></tr>
+  <tr><td>Void on a later day</td><td>Always reversed</td><td>Always reversed</td><td><code>/earn/cancel</code>: same day only</td></tr>
+  <tr><td>Coupon check</td><td>After use; second use reported</td><td>Same</td><td>Before use at the counter</td></tr>
+  <tr><td>Counter workload</td><td>Type a coupon code when used</td><td>Same</td><td>Scan member QR or enter phone on every bill</td></tr>
+</table>
+<p>The real-time model remains possible later. The API would still be needed for reconciliation, so this work is not wasted if we move to real time.</p>
+
+<!-- ===================== 3. EVIDENCE ===================== -->
+<h2 id="s3">3. Evidence from our sales database</h2>
+<p class="lead">Figures from HQ_Oshinei, January–September 2026 unless stated. They size the data the API will carry and justify the rules in sections 4–6.</p>
+
+<h3>3.1 Volume</h3>
+<div class="kpi">
+  <div><b>500,905</b><span>finalised bills, Jan–Sep 2026</span></div>
+  <div><b>≈1,650</b><span>bills on an average day (Sep 2026)</span></div>
+  <div><b>452</b><span>bills in the busiest hour (12 Aug 2026, 13:00)</span></div>
+  <div><b>33</b><span>trading branches (Sep 2026), one POS terminal each in most</span></div>
+</div>
+<table>
+  <tr><th>Month 2026</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th></tr>
+  <tr><td>Finalised bills</td><td>69,475</td><td>63,003</td><td>50,381</td><td>54,507</td><td>61,337</td><td>47,754</td><td>50,806</td><td>54,314</td><td>49,328</td></tr>
+  <tr><td>Trading branches</td><td>27</td><td>27</td><td>27</td><td>29</td><td>30</td><td>31</td><td>32</td><td>33</td><td>33</td></tr>
+  <tr><td>Voided bills</td><td>295</td><td>233</td><td>263</td><td>254</td><td>258</td><td>275</td><td>251</td><td>317</td><td>337</td></tr>
+</table>
+<div class="fig">
+<svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">Dinner is the peak: 262 bills an hour on an average day at 20:00</text>
+  <text x="24" y="42" font-size="11" fill="#5a5a5a">Average bills closed per hour, all branches, September 2026 (hour of payment)</text>
+  <g stroke="#e3e3e3" stroke-width="1">
+    <line x1="70" x2="736" y1="250" y2="250" stroke="#8a8a8a"/>
+    <line x1="70" x2="736" y1="200" y2="200"/><line x1="70" x2="736" y1="150" y2="150"/><line x1="70" x2="736" y1="100" y2="100"/>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="end">
+    <text x="62" y="254">0</text><text x="62" y="204">100</text><text x="62" y="154">200</text><text x="62" y="104">300</text>
+  </g>
+  <!-- bars: hours 11..22, x step 54, width 40; scale 0.5 px per bill -->
+  <g fill="#8fa9cc">
+    <rect x="84" y="247.5" width="40" height="2.5"/>
+    <rect x="138" y="209.5" width="40" height="40.5" rx="2"/>
+    <rect x="192" y="160" width="40" height="90" rx="2"/>
+    <rect x="246" y="163.5" width="40" height="86.5" rx="2"/>
+    <rect x="300" y="178" width="40" height="72" rx="2"/>
+    <rect x="354" y="193" width="40" height="57" rx="2"/>
+    <rect x="408" y="188" width="40" height="62" rx="2"/>
+    <rect x="462" y="170" width="40" height="80" rx="2"/>
+    <rect x="516" y="130.5" width="40" height="119.5" rx="2"/>
+    <rect x="624" y="175.5" width="40" height="74.5" rx="2"/>
+    <rect x="678" y="247.5" width="40" height="2.5"/>
+  </g>
+  <rect x="570" y="119" width="40" height="131" rx="2" fill="#1f4e8c"/>
+  <g font-size="10.5" fill="#141414" text-anchor="middle">
+    <text x="158" y="203">81</text><text x="212" y="154">180</text><text x="266" y="157">173</text><text x="320" y="172">144</text>
+    <text x="374" y="187">114</text><text x="428" y="182">124</text><text x="482" y="164">160</text><text x="536" y="124">239</text>
+    <text x="590" y="112" font-weight="600">262</text><text x="644" y="169">149</text>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="middle">
+    <text x="104" y="268">11</text><text x="158" y="268">12</text><text x="212" y="268">13</text><text x="266" y="268">14</text><text x="320" y="268">15</text><text x="374" y="268">16</text>
+    <text x="428" y="268">17</text><text x="482" y="268">18</text><text x="536" y="268">19</text><text x="590" y="268">20</text><text x="644" y="268">21</text><text x="698" y="268">22</text>
+  </g>
+  <text x="403" y="288" font-size="10.5" fill="#5a5a5a" text-anchor="middle">Hour of payment (Thailand time)</text>
+</svg>
+<div class="cap">Figure 2. Average hourly bill volume, September 2026.</div>
+</div>
+<p><b>Implication for polling.</b> At the busiest hour, a 5-minute poll of <code>/v1/bills/changes</code> returns about 40 new or changed bills. Oshinei's feed reads only changed rows from HQ_Oshinei, so the extra load on the database is small.</p>
+
+<h3>3.2 No loyalty data exists today</h3>
+<p>No bill in 2026 carries points (<code>Sale.EarnPoint</code> and <code>Sale.RedeemedPoint</code> are zero on all 500,905 bills and on all bills of 1–26 October). The Easy membership tables (<code>MemberCard</code>, <code>CustPoint</code>, <code>CustomerLoyalty</code>, <code>LoyaltyRank</code> and others) are empty. The <code>Customer</code> table (7,128 rows) holds tax-invoice records, not members. The member base therefore starts in CRM PLUS with no migration.</p>
+
+<div class="keep">
+<h3>3.3 How a bill is identified</h3>
+<p>In September 2026 the 49,665 finalised bills had 49,665 unique branch + <code>SaleNum</code> pairs but only 33,542 distinct <code>SaleId</code> values. The bill key in this proposal is therefore <b>branch code + SaleNum</b>. <code>SaleNum</code> is printed on the receipt, contains the business date and a daily sequence, and is predictable; section 6 explains why a claim must also match the amount.</p>
+<div class="fig">
+<svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">Branch code + SaleNum identifies one bill; SaleId alone does not</text>
+  <rect x="24" y="44" width="150" height="56" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="99" y="68" text-anchor="middle" font-weight="600" fill="#141414">Branch code</text>
+  <text x="99" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Easy BranchCode</text>
+  <text x="190" y="78" font-size="18" fill="#5a5a5a">+</text>
+  <rect x="210" y="44" width="300" height="56" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="360" y="68" text-anchor="middle" font-weight="600" fill="#141414">SaleNum  69 09 30 115</text>
+  <text x="360" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Thai year 2569 · month 09 · day 30 · sequence 115</text>
+  <text x="526" y="78" font-size="18" fill="#5a5a5a">=</text>
+  <rect x="548" y="44" width="188" height="56" rx="6" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="642" y="68" text-anchor="middle" font-weight="600" fill="#141414">Bill key</text>
+  <text x="642" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">unique: 49,665 of 49,665</text>
+  <rect x="24" y="116" width="712" height="40" rx="6" fill="none" stroke="#b42318" stroke-width="1.25" stroke-dasharray="4 3"/>
+  <text x="40" y="141" font-size="12" fill="#141414">Not unique: SaleId — 33,542 distinct values for 49,665 bills (Sep 2026). Return bills carry SaleNum with prefix "RE".</text>
+</svg>
+<div class="cap">Figure 3. Bill identifier in Easy POS, used as the claim and credit key in this proposal.</div>
+</div>
+</div>
+
+<div class="keep">
+<h3>3.4 Voids happen up to 19 days after the sale</h3>
+<p>Of 2,482 voided bills, 2,446 (98.5%) were voided on the day of sale and <b>36 on a later day, up to 19 days after</b>. Every voided bill updates <code>Sale.UpdateDate</code> to the void time or later (2,481 of 2,482), so Oshinei's feed finds voids by reading changed rows and publishes the bill again with status <code>voided</code>. A credit given on day 0 can therefore always be reversed, unlike the same-day limit of <code>/earn/cancel</code>.</p>
+<div class="fig">
+<svg viewBox="0 0 760 270" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">36 voids came after the day of sale — this model reverses every one</text>
+  <text x="24" y="42" font-size="11" fill="#5a5a5a">Voided bills by days between sale and void, Jan–Sep 2026 (same-day voids, 2,446, not drawn)</text>
+  <g stroke="#e3e3e3"><line x1="60" x2="736" y1="220" y2="220" stroke="#8a8a8a"/><line x1="60" x2="736" y1="185" y2="185"/><line x1="60" x2="736" y1="150" y2="150"/><line x1="60" x2="736" y1="115" y2="115"/><line x1="60" x2="736" y1="80" y2="80"/></g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="end"><text x="52" y="224">0</text><text x="52" y="189">5</text><text x="52" y="154">10</text><text x="52" y="119">15</text><text x="52" y="84">20</text></g>
+  <g fill="#b42318">
+    <rect x="70" y="80" width="26" height="140" rx="2"/>
+    <rect x="105" y="199" width="26" height="21" rx="2"/>
+    <rect x="140" y="213" width="26" height="7" rx="2"/><rect x="175" y="213" width="26" height="7" rx="2"/><rect x="210" y="213" width="26" height="7" rx="2"/><rect x="245" y="213" width="26" height="7" rx="2"/>
+    <rect x="350" y="213" width="26" height="7" rx="2"/><rect x="385" y="213" width="26" height="7" rx="2"/>
+    <rect x="525" y="199" width="26" height="21" rx="2"/><rect x="560" y="199" width="26" height="21" rx="2"/>
+    <rect x="700" y="213" width="26" height="7" rx="2"/>
+  </g>
+  <g font-size="10.5" fill="#141414" text-anchor="middle">
+    <text x="83" y="74" font-weight="600">20</text><text x="118" y="193">3</text><text x="153" y="207">1</text><text x="188" y="207">1</text><text x="223" y="207">1</text><text x="258" y="207">1</text>
+    <text x="363" y="207">1</text><text x="398" y="207">1</text><text x="538" y="193">3</text><text x="573" y="193">3</text><text x="713" y="207">1</text>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="middle">
+    <text x="83" y="236">1</text><text x="118" y="236">2</text><text x="153" y="236">3</text><text x="188" y="236">4</text><text x="223" y="236">5</text><text x="258" y="236">6</text>
+    <text x="293" y="236">7</text><text x="328" y="236">8</text><text x="363" y="236">9</text><text x="398" y="236">10</text><text x="433" y="236">11</text><text x="468" y="236">12</text>
+    <text x="503" y="236">13</text><text x="538" y="236">14</text><text x="573" y="236">15</text><text x="608" y="236">16</text><text x="643" y="236">17</text><text x="678" y="236">18</text><text x="713" y="236">19</text>
+  </g>
+  <text x="398" y="256" font-size="10.5" fill="#5a5a5a" text-anchor="middle">Days after the day of sale</text>
+</svg>
+<div class="cap">Figure 4. Voids made after the day of sale, by delay in days. Total 36; the longest delay was 19 days.</div>
+</div>
+</div>
+
+<div class="keep">
+<h3>3.5 Data reaches the head office during the day</h3>
+<p>Easy records each branch's last upload in <code>Branch.LastSync</code>. On 27 October 2026 at 11:17, 16 of 31 active branches had uploaded within the previous 30 minutes, 14 within the previous 24 hours, and 1 had not uploaded for more than a day. A bill closed at 10:38 was already readable at 11:13. Upload timing differs by branch, so we will measure it for one week during the pilot and agree a target with Easy (E3). <code>/v1/branches</code> gives each branch's last upload time, and both parties alert when a branch has not uploaded for 3 hours during trading (R7).</p>
+<div class="kpi">
+  <div><b>16 / 31</b><span>branches uploaded in the last 30 minutes (27 Oct, 11:17)</span></div>
+  <div><b>14 / 31</b><span>uploaded within the last 24 hours</span></div>
+  <div><b>1 / 31</b><span>no upload for more than 24 hours</span></div>
+  <div><b>35 min</b><span>bill 10:38 readable at HQ by 11:13</span></div>
+</div>
+</div>
+
+<div class="keep">
+<h3>3.6 External coupons are already used at the counter</h3>
+<p>Cashiers already enter external coupon numbers into Easy. They are stored in <code>CouponCardOutsideSystemUsed</code> with the coupon series, coupon number, bill, branch, discount and time. From January to September 2026 there were <b>38,156 uses of 20,459 distinct coupon numbers</b>. <b>280 numbers were used on more than one bill</b> (4,506 uses in total), because only 3 of Easy's 136 coupon series enforce unique numbers (<code>IsUniqueCouponNumber</code>). On 26 October 2026, coupon number 2499 of one series was used on two bills in the same branch 77 minutes apart. Buzzebees codes must therefore be unique and checked after use (R4).</p>
+</div>
+
+
+
+<!-- ===================== 4. API ===================== -->
+<h2 id="s4">4. Oshinei CRM API specification</h2>
+<p class="lead">Version 1, proposed for the pilot. Field names and paths are final unless Buzzebees asks for a change in its reply. Oshinei builds the source of every field from HQ_Oshinei with its existing read-only account.</p>
+
+<h3>4.1 Conventions</h3>
+<table>
+  <tr><th style="width:22%">Item</th><th>Rule</th></tr>
+  <tr><td>Host</td><td>A dedicated HTTPS host, separate from the Oshinei analytics application. The address is sent with the credentials. Paths start with <code>/v1</code></td></tr>
+  <tr><td>Transport</td><td>TLS 1.2 or later. Requests are accepted only from the Buzzebees IP addresses on the allow-list</td></tr>
+  <tr><td>Authentication</td><td>Header <code>Authorization: Bearer &lt;token&gt;</code>. Two tokens: one with read scope and one with write scope. Tokens never appear in URLs or logs and are rotated every 90 days</td></tr>
+  <tr><td>Format</td><td>JSON in UTF-8. Times in ISO 8601 with the Thailand offset (<code>2026-09-30T19:05:12+07:00</code>). Dates as <code>YYYY-MM-DD</code>. Money as strings with two decimals (<code>"1999.00"</code>) in Thai baht</td></tr>
+  <tr><td>Paging</td><td>Cursor-based. <code>limit</code> up to 500. The response gives <code>next_cursor</code> and <code>has_more</code></td></tr>
+  <tr><td>Idempotency</td><td>Every write carries a unique <code>event_id</code>. Sending the same <code>event_id</code> again stores nothing new and returns it as a duplicate</td></tr>
+  <tr><td>Rate limit</td><td>120 requests per minute per token. Above that the API returns <code>429</code> with <code>Retry-After</code></td></tr>
+  <tr><td>Changes</td><td>New fields may be added at any time; clients ignore fields they do not know. Changes that break clients come as <code>/v2</code> with 60 days' notice</td></tr>
+  <tr><td>Environments</td><td>A sandbox with test data from the start of the build; production from the pilot</td></tr>
+</table>
+
+<h3>4.2 Endpoints</h3>
+<table>
+  <tr><th style="width:9%">Method</th><th style="width:32%">Path</th><th style="width:9%">Scope</th><th>Purpose</th></tr>
+  <tr><td><span class="m get">GET</span></td><td><code>/v1/bills/changes</code></td><td>read</td><td>Bills that are new or changed since a cursor: paid, voided and returned</td></tr>
+  <tr><td><span class="m get">GET</span></td><td><code>/v1/bills/{bill_key}</code></td><td>read</td><td>One bill, to check a claim at once</td></tr>
+  <tr><td><span class="m get">GET</span></td><td><code>/v1/branches</code></td><td>read</td><td>Branch list with the last upload time of each branch</td></tr>
+  <tr><td><span class="m get">GET</span></td><td><code>/v1/status</code></td><td>read</td><td>Freshness of the bill feed and state of the service</td></tr>
+  <tr><td><span class="m post">POST</span></td><td><code>/v1/events</code></td><td>write</td><td>Results: claims, credits, reversals and coupons, up to 200 per request</td></tr>
+  <tr><td><span class="m put">PUT</span></td><td><code>/v1/daily-summary/{date}</code></td><td>write</td><td>Totals for one business date</td></tr>
+  <tr><td><span class="m get">GET</span></td><td><code>/v1/reconciliation/{date}</code></td><td>read</td><td>Oshinei's comparison of the events and summary with sales for that date</td></tr>
+</table>
+
+<h3>4.3 The bill object</h3>
+<table>
+  <tr><th style="width:21%">Field</th><th style="width:15%">Type</th><th>Meaning</th></tr>
+  <tr><td class="k">bill_key</td><td>string</td><td>Branch code + "-" + <code>SaleNum</code>. Unique bill identifier; the key for claims, credits and coupons (section 3.3)</td></tr>
+  <tr><td class="k">branch_code</td><td>string</td><td>Easy branch code, as in <code>/v1/branches</code></td></tr>
+  <tr><td class="k">sale_num</td><td>string</td><td>Number printed on the receipt</td></tr>
+  <tr><td class="k">business_date</td><td>date</td><td>Date of the sale</td></tr>
+  <tr><td class="k">closed_at</td><td>datetime</td><td>Time the bill was paid</td></tr>
+  <tr><td class="k">guests</td><td>integer</td><td>Number of guests</td></tr>
+  <tr><td class="k">sales_channel</td><td>string</td><td><code>dine_in</code>, <code>takeaway</code>, <code>grab</code>, <code>lineman</code> or <code>other</code>. Needed for decision D2</td></tr>
+  <tr><td class="k">subtotal</td><td>money</td><td>Amount before discount and VAT</td></tr>
+  <tr><td class="k">discount</td><td>money</td><td>Bill discount</td></tr>
+  <tr><td class="k">service_charge</td><td>money</td><td>Service charge</td></tr>
+  <tr><td class="k">vat</td><td>money</td><td>VAT</td></tr>
+  <tr><td class="k">total</td><td>money</td><td>Amount paid, including VAT. The amount a member enters when claiming</td></tr>
+  <tr><td class="k">status</td><td>string</td><td><code>paid</code>, <code>voided</code> or <code>returned</code></td></tr>
+  <tr><td class="k">voided_at</td><td>datetime or null</td><td>Time of the void, if any</td></tr>
+  <tr><td class="k">payments</td><td>list</td><td><code>method</code> (<code>cash</code>, <code>card</code>, <code>qr</code>, <code>transfer</code>, <code>platform</code>, <code>other</code>) and <code>amount</code>. No card number or holder name</td></tr>
+  <tr><td class="k">coupons</td><td>list</td><td>External coupons of the Buzzebees series entered on the bill: <code>series_code</code>, <code>number</code>, <code>discount</code></td></tr>
+  <tr><td class="k">member_phone</td><td>string or null</td><td>Phone typed by the cashier. Present only if R9 is adopted</td></tr>
+  <tr><td class="k">changed_at</td><td>datetime</td><td>When Oshinei last saw a change to the bill</td></tr>
+</table>
+<p class="note">Not in the API: the <code>Customer</code> table (tax-invoice records), cashier names, card numbers, holder names and bill notes.</p>
+
+<div class="keep">
+<h3>4.4 <span class="m get">GET</span> /v1/bills/changes</h3>
+<p>Returns bills in the order Oshinei saw them change. A bill appears again each time it changes, for example when it is voided days later. The connector always applies the latest state of each <code>bill_key</code>.</p>
+<table>
+  <tr><th style="width:22%">Parameter</th><th>Meaning</th></tr>
+  <tr><td class="k">cursor</td><td>The <code>next_cursor</code> from the previous response. Omit it on the first call</td></tr>
+  <tr><td class="k">from_date</td><td>First call only, or to replay after an incident: start from this business date</td></tr>
+  <tr><td class="k">limit</td><td>1–500, default 500</td></tr>
+</table>
+<pre>GET /v1/bills/changes?cursor=c_000184120&amp;limit=500
+
+200 OK
+{
+  "items": [
+    {
+      "bill_key": "0001-690930115",
+      "branch_code": "0001",
+      "sale_num": "690930115",
+      "business_date": "2026-09-30",
+      "closed_at": "2026-09-30T19:05:12+07:00",
+      "guests": 4,
+      "sales_channel": "dine_in",
+      "subtotal": "1868.22", "discount": "0.00", "service_charge": "0.00",
+      "vat": "130.78", "total": "1999.00",
+      "status": "paid", "voided_at": null,
+      "payments": [ { "method": "qr", "amount": "1999.00" } ],
+      "coupons": [],
+      "member_phone": null,
+      "changed_at": "2026-09-30T19:21:40+07:00"
+    }
+  ],
+  "next_cursor": "c_000184233",
+  "has_more": false
+}</pre>
+<p>The cursor never skips a change, so the connector needs no time overlap and no nightly re-scan. It stores <code>next_cursor</code> only after it has processed the page, and calls again at once while <code>has_more</code> is true.</p>
+</div>
+
+<div class="keep">
+<h3>4.5 <span class="m get">GET</span> /v1/bills/{bill_key}, /v1/branches and /v1/status</h3>
+<table>
+  <tr><th style="width:26%">Endpoint</th><th>Response</th></tr>
+  <tr><td><code>/v1/bills/{bill_key}</code></td><td>The bill object, or <code>404 bill_not_found</code> if the bill has not reached the head office yet or does not exist. For checking a claim at once; if not found, the claim is held (R2). A token that receives more than 300 not-found responses in an hour is suspended, to stop receipt numbers being guessed</td></tr>
+  <tr><td><code>/v1/branches</code></td><td><code>branch_code</code>, <code>name</code>, <code>active</code>, <code>last_upload_at</code> (when the branch last sent data to the head office), <code>last_bill_at</code></td></tr>
+  <tr><td><code>/v1/status</code></td><td><code>state</code> (<code>ok</code>, <code>degraded</code>, <code>maintenance</code>), <code>feed_read_at</code> (last successful read of HQ_Oshinei), <code>feed_lag_seconds</code></td></tr>
+</table>
+</div>
+
+<h3>4.6 <span class="m post">POST</span> /v1/events</h3>
+<p>Buzzebees reports every result through this endpoint (R6). Oshinei keeps events as they are received and never changes them; a correction is sent as a new event.</p>
+<table>
+  <tr><th style="width:21%">Field</th><th style="width:15%">Type</th><th>Meaning</th></tr>
+  <tr><td class="k">event_id</td><td>string, ≤ 64</td><td>Unique for ever. The idempotency key</td></tr>
+  <tr><td class="k">type</td><td>string</td><td>One of the types in the next table</td></tr>
+  <tr><td class="k">occurred_at</td><td>datetime</td><td>When it happened in CRM PLUS</td></tr>
+  <tr><td class="k">bill_key</td><td>string</td><td>The bill concerned, where there is one</td></tr>
+  <tr><td class="k">member_id</td><td>string</td><td>CRM PLUS internal member identifier. No phone, name or LINE identifier</td></tr>
+  <tr><td class="k">points</td><td>integer</td><td>Positive for a credit, negative for a reversal</td></tr>
+  <tr><td class="k">coupon_code, coupon_value</td><td>string, money</td><td>For coupon events</td></tr>
+  <tr><td class="k">reason</td><td>string</td><td>For rejections and reversals (codes below)</td></tr>
+</table>
+<table>
+  <tr><th style="width:27%">Type</th><th style="width:30%">Required fields</th><th>When</th></tr>
+  <tr><td><code>claim.accepted</code></td><td>bill_key, member_id</td><td>A claim passed all checks</td></tr>
+  <tr><td><code>claim.held</code></td><td>bill_key, member_id</td><td>The bill is not in the API yet; re-checked for up to 48 hours</td></tr>
+  <tr><td><code>claim.rejected</code></td><td>bill_key, member_id, reason</td><td><code>not_found</code>, <code>amount_mismatch</code>, <code>already_claimed</code>, <code>too_old</code>, <code>voided</code>, <code>daily_limit</code></td></tr>
+  <tr><td><code>points.credited</code></td><td>bill_key, member_id, points</td><td>Points given for a bill</td></tr>
+  <tr><td><code>points.reversed</code></td><td>bill_key, member_id, points, reason</td><td>Bill <code>voided</code> or <code>returned</code></td></tr>
+  <tr><td><code>coupon.issued</code></td><td>member_id, coupon_code, coupon_value</td><td>From a campaign or in exchange for points</td></tr>
+  <tr><td><code>coupon.used</code></td><td>coupon_code, bill_key</td><td>First use seen on a bill</td></tr>
+  <tr><td><code>coupon.restored</code></td><td>coupon_code, bill_key</td><td>The bill was voided; the coupon is unused again</td></tr>
+  <tr><td><code>coupon.duplicate_use</code></td><td>coupon_code, bill_key</td><td>The same code seen on a second bill</td></tr>
+</table>
+<div class="keep">
+<pre>POST /v1/events
+{
+  "events": [
+    { "event_id": "bzb-7f3a91c2", "type": "claim.accepted",
+      "occurred_at": "2026-09-30T20:30:02+07:00",
+      "bill_key": "0001-690930115", "member_id": "M0004821" },
+    { "event_id": "bzb-7f3a91c3", "type": "points.credited",
+      "occurred_at": "2026-09-30T20:30:02+07:00",
+      "bill_key": "0001-690930115", "member_id": "M0004821", "points": 199 }
+  ]
+}
+
+200 OK
+{ "accepted": 2, "duplicates": 0, "rejected": [] }</pre>
+<p>Items in <code>rejected</code> carry the <code>event_id</code> and an error code, for example <code>unknown_bill_key</code>. The rest of the batch is stored.</p>
+</div>
+
+<div class="keep">
+<h3>4.7 <span class="m put">PUT</span> /v1/daily-summary/{date} and <span class="m get">GET</span> /v1/reconciliation/{date}</h3>
+<p>By 06:00 each day Buzzebees sends the totals for the previous business date: claims accepted, held and rejected; points credited and reversed; coupons issued, used, restored and used twice; new members and total members. Sending the summary again replaces it, and Oshinei keeps every version.</p>
+<p>Oshinei then compares the summary with the events received and with sales in the bill feed. <code>/v1/reconciliation/{date}</code> returns <code>matched</code> or <code>mismatch</code> with a list of differences (item, Buzzebees value, Oshinei value). Differences are resolved within 3 business days (R7).</p>
+</div>
+
+<div class="keep">
+<h3>4.8 Errors</h3>
+<table>
+  <tr><th style="width:12%">HTTP</th><th style="width:28%">Code</th><th>Meaning and action</th></tr>
+  <tr><td>400</td><td><code>invalid_request</code></td><td>Malformed request. Fix it; do not retry as it is</td></tr>
+  <tr><td>401</td><td><code>unauthorized</code></td><td>Missing, expired or revoked token</td></tr>
+  <tr><td>403</td><td><code>forbidden</code></td><td>Wrong scope, or an IP address not on the allow-list</td></tr>
+  <tr><td>404</td><td><code>bill_not_found</code></td><td>Bill not in the API yet. Hold the claim</td></tr>
+  <tr><td>409</td><td><code>event_conflict</code></td><td>An <code>event_id</code> already stored with different content. Investigate; never reuse identifiers</td></tr>
+  <tr><td>429</td><td><code>rate_limited</code></td><td>Wait for <code>Retry-After</code></td></tr>
+  <tr><td>503</td><td><code>maintenance</code></td><td>Retry with back-off. Events are kept by Buzzebees and resent</td></tr>
+</table>
+<p class="note">Error body: <code>{ "error": "bill_not_found", "message": "..." }</code>.</p>
+</div>
+
+<div class="keep">
+<h3>4.9 Service levels from Oshinei (proposed)</h3>
+<table>
+  <tr><th style="width:26%">Item</th><th>Commitment</th></tr>
+  <tr><td>Freshness</td><td>A bill appears in the API within 10 minutes of reaching HQ_Oshinei. How fast it reaches HQ depends on the branch upload (section 3.5, E3)</td></tr>
+  <tr><td>Availability</td><td>99.5% a month, measured 09:00–24:00. Planned maintenance 02:00–05:00 with 2 days' notice</td></tr>
+  <tr><td>Outage</td><td>Nothing is lost: the feed resumes from the cursor, and Buzzebees resends unsent events with the same <code>event_id</code></td></tr>
+  <tr><td>Events kept</td><td>Stored in a database separate from the sales data, backed up daily to separate storage, kept 5 years</td></tr>
+  <tr><td>Support</td><td>A named technical contact; incidents acknowledged within 1 hour between 09:00 and 22:00</td></tr>
+</table>
+</div>
+
+<!-- ===================== 5. FLOWS ===================== -->
+<h2 id="s5">5. Process flows</h2>
+
+<h3>5.1 Earning by receipt claim</h3>
+<div class="fig">
+<svg viewBox="0 0 760 340" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <defs><marker id="f1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">A claim earns points only when it matches a paid bill that has not been claimed before</text>
+  <g font-size="12" font-weight="600" fill="#141414" text-anchor="middle"><text x="90" y="56">Customer</text><text x="260" y="56">POS → Oshinei API</text><text x="460" y="56">Buzzebees</text><text x="660" y="56">LINE OA</text></g>
+  <g stroke="#cfcfcf"><line x1="90" x2="90" y1="64" y2="330"/><line x1="260" x2="260" y1="64" y2="330"/><line x1="460" x2="460" y1="64" y2="214"/><line x1="460" x2="460" y1="264" y2="330"/><line x1="660" x2="660" y1="64" y2="330"/></g>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M90 86H258" marker-end="url(#f1)"/>
+    <path d="M260 124H458" marker-end="url(#f1)"/>
+    <path d="M90 166H658" marker-end="url(#f1)"/>
+    <path d="M660 196H462" marker-end="url(#f1)"/>
+    <path d="M460 286H658" marker-end="url(#f1)"/>
+    <path d="M460 306H262" marker-end="url(#f1)"/>
+    <path d="M660 324H92" marker-end="url(#f1)"/>
+  </g>
+  <rect x="380" y="214" width="160" height="50" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="460" y="234" text-anchor="middle" font-size="11" fill="#141414">checks bill key, amount,</text>
+  <text x="460" y="250" text-anchor="middle" font-size="11" fill="#141414">status, age, first claim</text>
+  <g font-size="11" fill="#141414">
+    <text x="100" y="80">1. pays at the POS</text>
+    <text x="270" y="118">2. connector reads the bill</text>
+    <text x="100" y="160">3. claims: branch, receipt number, amount (or photo)</text>
+    <text x="470" y="190">4. claim sent to CRM PLUS</text>
+    <text x="470" y="280">5. points credited</text>
+    <text x="276" y="300">6. events written back</text>
+    <text x="480" y="318">7. confirmation in LINE</text>
+  </g>
+</svg>
+<div class="cap">Figure 5. Receipt claim. If the bill has not reached the API yet, the claim is held and re-checked automatically for up to 48 hours.</div>
+</div>
+<ol>
+  <li>The customer pays as today. The receipt shows the branch and receipt number (<code>SaleNum</code>).</li>
+  <li>The bill reaches HQ_Oshinei through Easy's existing branch upload, Oshinei's feed reads it, and it appears in <code>/v1/bills/changes</code>.</li>
+  <li>In the LINE Official Account the member enters the branch, receipt number and amount paid, or uploads a photo of the receipt.</li>
+  <li>Buzzebees checks that the bill exists, is <code>paid</code>, matches the amount, is within the claim window and has not been claimed. It may call <code>/v1/bills/{bill_key}</code> to check at once. If the bill is not there yet, the claim is held and re-checked for up to 48 hours.</li>
+  <li>CRM PLUS credits the points according to the earn rules (D2).</li>
+  <li>The connector writes <code>claim.accepted</code> and <code>points.credited</code> to <code>/v1/events</code>.</li>
+  <li>The member receives a confirmation in LINE.</li>
+</ol>
+
+<div class="keep">
+<h3>5.2 Reversal when a bill is voided</h3>
+<div class="fig">
+<svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">A void on any later day removes the points credited for that bill</text>
+  <line x1="40" x2="736" y1="96" y2="96" stroke="#8a8a8a" stroke-width="1.25"/>
+  <g fill="#1f4e8c"><circle cx="80" cy="96" r="6"/><circle cx="240" cy="96" r="6"/></g>
+  <circle cx="440" cy="96" r="6" fill="#b42318"/>
+  <circle cx="640" cy="96" r="6" fill="#b42318"/>
+  <g font-size="11" text-anchor="middle" fill="#141414">
+    <text x="80" y="76">Day 0, 19:05</text><text x="80" y="122">bill paid</text>
+    <text x="240" y="76">Day 0, 20:30</text><text x="240" y="122">member claims;</text><text x="240" y="138">+199 points</text>
+    <text x="440" y="76">Day 3</text><text x="440" y="122">bill voided; appears</text><text x="440" y="138">again as voided</text>
+    <text x="640" y="76">≤ 5 minutes later</text><text x="640" y="122">−199 points, member told;</text><text x="640" y="138">points.reversed written back</text>
+  </g>
+</svg>
+<div class="cap">Figure 6. Reversal timeline. In 2026 the latest void was 19 days after the sale; the change feed delivers it whenever it happens.</div>
+</div>
+<p>If the member has already spent the points, CRM PLUS applies the rule chosen by Oshinei (D4): a negative balance, or deduction from the next credit. A bill that becomes <code>returned</code> is treated the same way.</p>
+</div>
+
+<h3>5.3 Coupon lifecycle</h3>
+<div class="fig">
+<svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <defs><marker id="c1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">A coupon is issued in LINE, used at the counter, and marked used from the API</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M168 86H190" marker-end="url(#c1)"/><path d="M334 86H356" marker-end="url(#c1)"/><path d="M500 86H522" marker-end="url(#c1)"/>
+    <path d="M594 114V132H510V150" marker-end="url(#c1)"/><path d="M594 132H666V150" marker-end="url(#c1)"/>
+  </g>
+  <rect x="24" y="58" width="144" height="56" rx="6" fill="none" stroke="#8a8a8a"/><text x="96" y="82" text-anchor="middle" font-weight="600" fill="#141414">Issued</text><text x="96" y="100" text-anchor="middle" font-size="10.5" fill="#5a5a5a">coupon.issued</text>
+  <rect x="190" y="58" width="144" height="56" rx="6" fill="none" stroke="#8a8a8a"/><text x="262" y="82" text-anchor="middle" font-weight="600" fill="#141414">Shown in LINE</text><text x="262" y="100" text-anchor="middle" font-size="10.5" fill="#5a5a5a">unique code</text>
+  <rect x="356" y="58" width="144" height="56" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/><text x="428" y="82" text-anchor="middle" font-weight="600" fill="#141414">Used at counter</text><text x="428" y="100" text-anchor="middle" font-size="10.5" fill="#141414">external coupon in Easy</text>
+  <rect x="522" y="58" width="144" height="56" rx="6" fill="none" stroke="#8a8a8a"/><text x="594" y="82" text-anchor="middle" font-weight="600" fill="#141414">Seen in the API</text><text x="594" y="100" text-anchor="middle" font-size="10.5" fill="#5a5a5a">bill.coupons</text>
+  <rect x="440" y="150" width="140" height="56" rx="6" fill="none" stroke="#8a8a8a"/><text x="510" y="174" text-anchor="middle" font-weight="600" fill="#141414">First use</text><text x="510" y="192" text-anchor="middle" font-size="10.5" fill="#5a5a5a">coupon.used</text>
+  <rect x="596" y="150" width="140" height="56" rx="6" fill="#b42318" fill-opacity="0.08" stroke="#b42318"/><text x="666" y="174" text-anchor="middle" font-weight="600" fill="#141414">Second use</text><text x="666" y="192" text-anchor="middle" font-size="10.5" fill="#5a5a5a">coupon.duplicate_use</text>
+  <text x="24" y="236" font-size="11" fill="#5a5a5a">If the bill is voided, the coupon is restored to unused and coupon.restored is written back.</text>
+</svg>
+<div class="cap">Figure 7. Coupon lifecycle. Each step is reported to Oshinei as an event.</div>
+</div>
+<ol>
+  <li>CRM PLUS issues a coupon with a unique number, from a campaign or in exchange for points (R5).</li>
+  <li>The member shows the coupon in LINE. The cashier applies it in Easy as an external coupon of the Buzzebees series and types the number.</li>
+  <li>The bill reaches the API with the coupon in <code>coupons</code>. The connector marks the coupon used in CRM PLUS and writes <code>coupon.used</code>.</li>
+  <li>A second use of the same number is not blocked at the counter. The connector writes <code>coupon.duplicate_use</code>; the Oshinei CRM module shows it to head office the same day with the branch and bill.</li>
+  <li>If the bill is voided, the connector restores the coupon and writes <code>coupon.restored</code>.</li>
+</ol>
+<p>Because use is checked after the event, we will limit Buzzebees coupons to modest values during the pilot (D5) and ask Easy whether the coupon series can block reuse at the counter (E1).</p>
+
+<!-- ===================== 6. REQUESTS ===================== -->
+<h2 id="s6">6. Requests to Buzzebees (R1–R10)</h2>
+
+<div class="req">
+<h3>R1 — Build and operate the connector to the Oshinei CRM API <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Confirm that Buzzebees will build, host and operate the connector that reads <code>/v1/bills/changes</code> every 5 minutes and credits, reverses and marks coupons in CRM PLUS, following section 4 (rate limit, fixed IP addresses, no guessing of bill keys). Please state the CRM PLUS functions it will use (Appendix A), the effort, whether it is within the standard fee or charged separately, and the delivery date.</td></tr>
+  <tr><td class="k">Why</td><td>This makes Buzzebees the single lead party, removes POS development by Easy, and keeps our POS database closed to third parties.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R2 — Receipt claim in the LINE Official Account <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>A claim screen that accepts branch, receipt number and amount paid, or a receipt photo. A claim succeeds only if all of the following hold:
+  <br>• the bill key exists in the API with status <code>paid</code>;
+  <br>• the amount matches <code>total</code> within 1 THB;
+  <br>• the business date is within the claim window (7 days proposed, D3);
+  <br>• the bill key has not been claimed before;
+  <br>• the member has made no more than 5 claims that day (proposed).
+  <br>Claims for bills not yet in the API are held and re-checked for up to 48 hours.</td></tr>
+  <tr><td class="k">Why</td><td><code>SaleNum</code> is sequential within a day (section 3.3), so a receipt number alone could be guessed. The amount match and daily limit prevent claiming other customers' bills.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R3 — Automatic reversal on void <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>When a claimed bill appears again with status <code>voided</code> or <code>returned</code>, reverse the credit within one polling cycle, on any day, notify the member and write <code>points.reversed</code>. Receiving the same change twice must not reverse twice.</td></tr>
+  <tr><td class="k">Why</td><td>36 bills in 2026 were voided after the day of sale, up to 19 days later (section 3.4). <code>/earn/cancel</code> in your specification allows same-day reversal only.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R4 — Coupon codes for Easy external coupons <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Issue coupons with unique numeric codes of a fixed length that a cashier can type into Easy (length to be confirmed by Easy, E1). Mark a coupon used when it appears in a bill's <code>coupons</code>; restore it when the bill is voided; report every second use of a code. If Easy requires codes to be loaded in advance, provide them as a file in the format Easy specifies.</td></tr>
+  <tr><td class="k">Why</td><td>280 external coupon numbers were used on more than one bill in 2026, because Easy enforces unique numbers in only 3 of 136 series (section 3.6).</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R5 — Exchanging points for coupons in LINE <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Members burn points only in LINE, by exchanging them for a coupon (R4). No point burning at the counter. Please confirm the exchange catalogue is configurable by Oshinei.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R6 — Write every result back <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Send each claim, credit, reversal and coupon result to <code>/v1/events</code> within 5 minutes (section 4.6), with a unique <code>event_id</code> and the CRM PLUS member identifier only. On any failure, resend with the same <code>event_id</code> until it is accepted.</td></tr>
+  <tr><td class="k">Why</td><td>CRM PLUS keeps the member balances. Oshinei needs each result next to its sales to see the cost of the programme by branch, follow up duplicate coupons the same day, and reconcile.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R7 — Daily summary and reconciliation <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Send <code>/v1/daily-summary/{date}</code> by 06:00 for the previous business date (section 4.7). Read <code>/v1/reconciliation/{date}</code> and resolve differences within 3 business days. Alert Oshinei when <code>/v1/status</code> shows the feed more than 30 minutes behind during trading, or a branch with no upload for 3 hours.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R8 — Data processing agreement <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>Sign a data processing agreement with Oshinei as controller. Store from the API only bill keys, amounts, dates, branch codes, sales channel, payment methods, coupon uses and, if R9 is adopted, the member phone. Delete or anonymise sales data older than 24 months (proposed). State where data is hosted.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R9 — Optional: earning from a phone recorded on the bill <span class="pri n">Optional</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>If Easy confirms the cashier can type the member's phone into an existing field (<code>CustRefNum</code>, empty on all 2026 bills; E4), credit points automatically for a registered member whose phone matches <code>member_phone</code>, without a claim.</td></tr>
+  <tr><td class="k">Note</td><td>This adds counter work and needs the member's consent in LINE. Oshinei will decide after the pilot (D1).</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R10 — Credentials in the specification file <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Request</td><td>The specification file contains merchant tokens in clear text, including tokens labelled "TMN only" and "All Except TMN". Please confirm whether they are valid in any environment, revoke them if so, and send any credentials Oshinei needs through a separate secure channel.</td></tr>
+</table>
+</div>
+
+<!-- ===================== 7. EASY ===================== -->
+<h2 id="s7">7. Requests to Easy POS (E1–E4)</h2>
+<p class="lead">Confirmations only. Easy POS is not asked to develop anything, create views or logins, or open network access. Oshinei sends these questions to Easy separately.</p>
+<table>
+  <tr><th style="width:7%">Ref.</th><th>Request</th><th style="width:30%">Why</th></tr>
+  <tr><td>E1</td><td>Set up a coupon series for Buzzebees codes as external coupons. Confirm the code length accepted, whether codes must be loaded in advance and, if so, whether they can be imported in bulk, and whether <code>IsUniqueCouponNumber</code> blocks reuse at the counter</td><td>R4; duplicate use today (section 3.6)</td></tr>
+  <tr><td>E2</td><td>Confirm that the receipt prints the branch name and <code>SaleNum</code> legibly; optionally enable the receipt QR feature already assigned to 35 branches</td><td>Members claim from the receipt</td></tr>
+  <tr><td>E3</td><td>Confirm how often each branch uploads to the head office and whether the interval can be shortened to 15 minutes</td><td>Points arrive only after upload (section 3.5)</td></tr>
+  <tr><td>E4</td><td>Confirm whether the cashier screen allows entering a value into <code>CustRefNum</code> without development</td><td>Input to R9</td></tr>
+</table>
+
+<!-- ===================== 8. OSHINEI ===================== -->
+<h2 id="s8">8. Items Oshinei will confirm (D1–D6)</h2>
+<table>
+  <tr><th style="width:7%">Ref.</th><th>Decision</th><th style="width:38%">Current preference</th></tr>
+  <tr><td>D1</td><td>Member identification</td><td>Receipt claim first; phone on bill (R9) after the pilot</td></tr>
+  <tr><td>D2</td><td>Earn base and rate: <code>total</code> including VAT and service charge, or amount before VAT; whether Grab and LINE MAN bills earn</td><td>To be confirmed</td></tr>
+  <tr><td>D3</td><td>Claim window</td><td>7 days from the business date</td></tr>
+  <tr><td>D4</td><td>Reversal after points are spent: negative balance or deduction from the next credit</td><td>To be confirmed</td></tr>
+  <tr><td>D5</td><td>Maximum coupon value during the pilot</td><td>To be confirmed</td></tr>
+  <tr><td>D6</td><td>Whether item-level campaigns are needed (adds bill items to the API)</td><td>Not in the pilot</td></tr>
+</table>
+
+<!-- ===================== 9. SECURITY ===================== -->
+<h2 id="s9">9. Security and data protection</h2>
+<table>
+  <tr><th style="width:26%">Area</th><th>Rule</th></tr>
+  <tr><td>POS database</td><td>Closed to third parties. Only Oshinei's existing read-only account reads HQ_Oshinei; the API never writes to it</td></tr>
+  <tr><td>Least privilege</td><td>Separate read and write tokens; the API exposes only the fields in section 4.3</td></tr>
+  <tr><td>Data excluded</td><td><code>Customer</code> table, cashier names, card number, holder name, CVV and expiry, bill notes</td></tr>
+  <tr><td>Network</td><td>HTTPS with TLS 1.2 or later; Buzzebees IP addresses on an allow-list; Oshinei can suspend access at any time</td></tr>
+  <tr><td>Credentials</td><td>Exchanged through a separate secure channel; rotated every 90 days; never in documents, URLs or logs</td></tr>
+  <tr><td>Guessing receipts</td><td>Not-found lookups limited per token (section 4.5); claims need the amount as well as the receipt number (R2)</td></tr>
+  <tr><td>Personal data</td><td>Member identity stays in CRM PLUS. Events carry only the CRM PLUS member identifier. The phone is in the API only if R9 is adopted with member consent. Buzzebees acts as processor under the Personal Data Protection Act B.E. 2562 (R8)</td></tr>
+  <tr><td>Audit</td><td>Oshinei logs every request (time, token, path, result) for 12 months; Buzzebees logs its calls and provides the log on request. Events are kept unchanged</td></tr>
+</table>
+
+<!-- ===================== 10. PILOT ===================== -->
+<h2 id="s10">10. Pilot, acceptance tests and next steps</h2>
+<h3>10.1 Acceptance tests (pilot branch)</h3>
+<ul class="check">
+  <li>A paid bill claimed with the correct amount earns points once; a second claim of the same bill is rejected.</li>
+  <li>A claim with a wrong amount, an expired date or an unknown receipt is rejected with a clear reason.</li>
+  <li>A claim made before the bill reaches the API is held and credited automatically once the bill arrives.</li>
+  <li>A claimed bill voided on day 0 and another voided on day 3 are both reversed within one polling cycle.</li>
+  <li>A coupon used once is marked used; a second use of the same code is reported the same day; a coupon on a voided bill is restored.</li>
+  <li>Reading the change feed from a saved cursor twice causes no duplicate credit or reversal.</li>
+  <li>Sending the same events twice stores them once.</li>
+  <li>After a planned API outage of one hour, the connector catches up from its cursor and resends its events with nothing lost.</li>
+  <li>The reconciliation for each day of the test week shows <code>matched</code>.</li>
+</ul>
+<h3>10.2 Next steps</h3>
+<table>
+  <tr><th style="width:6%">No.</th><th>Step</th><th style="width:24%">Owner</th><th style="width:22%">Timing (proposed)</th></tr>
+  <tr><td>1</td><td>Written reply to R1–R10 with effort, cost, date and any change to the API</td><td>Buzzebees</td><td>Within 10 business days</td></tr>
+  <tr><td>2</td><td>Written reply to E1–E4</td><td>Easy POS</td><td>Within 10 business days</td></tr>
+  <tr><td>3</td><td>Joint meeting; approve the API and business rules</td><td>Oshinei (convenor)</td><td>After steps 1–2</td></tr>
+  <tr><td>4</td><td>Sandbox API with test data and credentials issued</td><td>Oshinei</td><td>3 weeks after the meeting</td></tr>
+  <tr><td>5</td><td>Connector build and tests against the sandbox</td><td>Buzzebees</td><td>To be agreed</td></tr>
+  <tr><td>6</td><td>Pilot in one branch for 4 weeks, upload timing measured in week 1, go/no-go</td><td>Oshinei</td><td>To be agreed</td></tr>
+</table>
+
+<div class="sign">
+<p>Yours faithfully,</p>
+<table>
+  <tr><th style="width:50%">For Oshinei</th><th>Acknowledged by Buzzebees</th></tr>
+  <tr><td>Name:</td><td>Name:</td></tr>
+  <tr><td>Position: Project owner, CRM integration</td><td>Position:</td></tr>
+  <tr><td>Date:</td><td>Date:</td></tr>
+</table>
+</div>
+
+<!-- ===================== APPENDIX A ===================== -->
+<h2 id="s11">Appendix A — Use of the CRM PLUS API in this model</h2>
+<p class="lead">The endpoints in your specification are not called by the POS in this model. Buzzebees may use them internally from the connector; that choice is Buzzebees'.</p>
+<table>
+  <tr><th style="width:26%">Endpoint (your sheet)</th><th style="width:20%">Use in this model</th><th>Note</th></tr>
+  <tr><td><code>GET /pos/profile</code> (Profile)</td><td>Not used</td><td>Members are identified in LINE, not at the counter</td></tr>
+  <tr><td><code>POST /pos/earn_direct</code> (Earn via user id)</td><td>Possible, by connector</td><td>Credit a known member after a successful claim; needs a reference to prevent double credit</td></tr>
+  <tr><td><code>POST /pos/earn</code> (Earn)</td><td>Possible, by connector</td><td>For R9 only (credit by phone)</td></tr>
+  <tr><td><code>POST /earn/cancel</code> (Refund point)</td><td>Not sufficient</td><td>Same-day limit; R3 needs reversal on any day</td></tr>
+  <tr><td><code>POST /wallet/pay</code> (Redeem, Check code)</td><td>Possible, by connector</td><td>Mark a coupon used after it appears in a bill's <code>coupons</code></td></tr>
+  <tr><td>Error Code, url</td><td>For Buzzebees</td><td>Internal to the connector</td></tr>
+</table>
+<p class="note">Observations on the specification file (for example the <code>points</code> field missing from the Earn-via-user-id table but present in its sample, and the Earn-direct-point sample calling <code>/earn_direct</code>) are not repeated here because the POS no longer calls these endpoints.</p>
+
+<!-- ===================== APPENDIX B ===================== -->
+<h2 id="s12">Appendix B — Data sources and method</h2>
+<table>
+  <tr><th style="width:28%">Item</th><th>Detail</th></tr>
+  <tr><td>Source</td><td>Easy POS head-office database HQ_Oshinei (Microsoft SQL Server), Oshinei read-only account — the same account the bill feed will use — queried 14 and 27 October 2026</td></tr>
+  <tr><td>Period</td><td>1 January – 30 September 2026 unless stated; points checked to 26 October 2026; upload status at 11:17 on 27 October 2026</td></tr>
+  <tr><td>Finalised bill</td><td><code>IsFinalize = 1 AND Active = 1 AND ISNULL(IsReturn,0) = 0</code></td></tr>
+  <tr><td>Voided bill</td><td><code>IsFinalize = 1 AND Active = 0</code>; delay = calendar days from <code>SaleDate</code> to <code>DeleteDate</code>; <code>UpdateDate ≥ DeleteDate</code> on 2,481 of 2,482</td></tr>
+  <tr><td>Hourly load</td><td>Hour of <code>SaleDate</code> (payment time), September 2026 average; busiest hour over July–September</td></tr>
+  <tr><td>Bill identifier</td><td>Distinct (BranchId, SaleNum) and distinct SaleId over finalised bills, September 2026</td></tr>
+  <tr><td>Upload status</td><td><code>Branch.LastSync</code> for active branches with sales since 20 October 2026</td></tr>
+  <tr><td>External coupons</td><td><code>CouponCardOutsideSystemUsed</code>, <code>UsedDate</code> in January–September 2026; reuse = same series and number on more than one bill; <code>CouponSeries.IsUniqueCouponNumber</code></td></tr>
+  <tr><td>Bill example</td><td>The bill in section 4.4 is illustrative; its amounts are not a real bill</td></tr>
+</table>
+<p class="note">Prepared by Oshinei. This revision (Rev. 2) replaces Rev. 1 dated 27 October 2026, which proposed a direct read of the database, and the original letter, which proposed the real-time model.</p>
+
+</body>
+</html>

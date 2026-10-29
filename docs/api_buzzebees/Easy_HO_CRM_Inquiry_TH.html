@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สอบถามความสามารถของตัวเชื่อม HO_CRM — Oshinei</title>
+<style>
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Regular.woff2') format('woff2');font-weight:400;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Medium.woff2') format('woff2');font-weight:500;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-SemiBold.woff2') format('woff2');font-weight:600;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Bold.woff2') format('woff2');font-weight:700;font-style:normal}
+
+:root{
+  --ink:#141414; --muted:#5a5a5a; --rule:#cfcfcf; --soft:#f3f4f6;
+  --accent:#1f4e8c; --accent-soft:#e7eef8;
+}
+@page{ size:A4; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:'KIRA UI',sans-serif; font-synthesis:none;
+  color:var(--ink); font-size:10.5pt; line-height:1.55;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+h1{ font-size:22pt; font-weight:700; line-height:1.3; margin:0 0 6pt; }
+h2{ font-size:15pt; font-weight:600; color:var(--accent); margin:0 0 4pt; padding-bottom:4pt; border-bottom:1.5px solid var(--accent); break-before:page; break-after:avoid; }
+h2.first{ break-before:auto; }
+h3{ font-size:12pt; font-weight:600; margin:14pt 0 4pt; break-after:avoid; }
+h4{ font-size:10.5pt; font-weight:600; margin:10pt 0 3pt; break-after:avoid; }
+p{ margin:0 0 6pt; orphans:3; widows:3; }
+p.lead{ margin:4pt 0 8pt; }
+p.owner{ color:var(--accent); font-weight:500; font-size:9.5pt; margin:0 0 8pt; }
+p.note{ font-size:9.5pt; color:var(--muted); margin:3pt 0 8pt; }
+code{ font-family:'KIRA UI',monospace; font-size:9.5pt; background:var(--soft); padding:0 3px; border-radius:3px; }
+pre{ font-family:'KIRA UI',monospace; font-size:9.5pt; line-height:1.45; background:var(--soft); border:1px solid var(--rule); border-radius:4px; padding:8pt 10pt; margin:4pt 0 8pt; white-space:pre; break-inside:avoid; }
+table{ width:100%; border-collapse:collapse; font-size:9.5pt; line-height:1.45; margin:4pt 0 10pt; break-inside:avoid; }
+th,td{ border:1px solid var(--rule); padding:3.5pt 5pt; vertical-align:top; text-align:left; }
+th{ background:var(--soft); font-weight:600; }
+th.own{ white-space:nowrap; }
+td.own{ color:var(--accent); font-weight:500; }
+td.k{ white-space:nowrap; }
+ul,ol{ margin:0 0 8pt 18pt; padding:0; }
+li{ margin:0 0 3pt; break-inside:avoid; }
+ul.check{ list-style:none; margin-left:0; }
+ul.check li{ padding-left:18pt; position:relative; }
+ul.check li::before{ content:""; position:absolute; left:0; top:3.5pt; width:9pt; height:9pt; border:1.2px solid var(--muted); border-radius:2px; }
+.api{ break-inside:avoid; margin-bottom:6pt; }
+.api h3{ margin-top:12pt; }
+.api .path{ font-weight:400; font-size:10pt; color:var(--muted); margin-left:6pt; }
+.grp{ break-inside:avoid; }
+.keep{ break-inside:avoid; }
+.fig{ break-inside:avoid; margin:6pt 0 10pt; }
+.fig svg{ width:100%; height:auto; display:block; }
+.fig .cap{ font-size:9pt; color:var(--muted); margin-top:2pt; }
+hr.sp{ border:0; border-top:1px solid var(--rule); margin:10pt 0; }
+
+/* cover */
+.cover{ break-after:page; padding-top:70pt; }
+.cover .kicker{ color:var(--accent); font-weight:600; font-size:11pt; letter-spacing:.3px; margin-bottom:10pt; }
+.cover h1{ font-size:26pt; }
+.cover .sub{ font-size:12.5pt; color:var(--muted); margin:0 0 26pt; }
+.cover table{ font-size:10.5pt; }
+.cover .status{ margin-top:22pt; border-left:3px solid var(--accent); padding:6pt 10pt; background:var(--accent-soft); }
+.cover .meta{ margin-top:30pt; font-size:9.5pt; color:var(--muted); }
+/* toc */
+.toc{ break-after:page; }
+.toc ol{ list-style:none; margin:8pt 0 0; }
+.toc li{ display:flex; justify-content:space-between; border-bottom:1px dotted var(--rule); padding:3pt 0; }
+.toc li span.n{ color:var(--muted); width:22pt; flex:none; }
+.toc li span.t{ flex:1; }
+.toc li span.pg{ width:30pt; text-align:right; flex:none; color:var(--muted); }
+
+body{ font-size:11pt; line-height:1.7; }
+.lh{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--accent); padding-bottom:8pt; margin-bottom:16pt; }
+.lh .org{ font-size:16pt; font-weight:700; color:var(--accent); }
+.lh .meta{ text-align:right; font-size:9.5pt; color:var(--muted); line-height:1.5; }
+table.addr{ border:0; margin:0 0 14pt; font-size:11pt; }
+table.addr td{ border:0; padding:2pt 10pt 2pt 0; vertical-align:top; }
+table.addr td.k{ font-weight:600; width:13%; white-space:nowrap; }
+p{ margin:0 0 8pt; text-align:left; }
+ul{ margin:0 0 10pt 18pt; }
+li{ margin:0 0 2pt; }
+.q{ border:1px solid var(--rule); border-left:3px solid var(--accent); border-radius:4px; padding:8pt 12pt; margin:0 0 10pt; break-inside:avoid; }
+.q h3{ margin:0 0 4pt; font-size:11.5pt; }
+.q p:last-child{ margin-bottom:0; }
+</style>
+</head>
+<body>
+
+<div class="lh">
+  <div class="org">Oshinei</div>
+  <div class="meta">เลขที่ OSH-CRM-2026-003<br>27 ตุลาคม 2569</div>
+</div>
+
+<table class="addr">
+  <tr><td class="k">เรื่อง</td><td>สอบถามความสามารถของตัวเชื่อม HO_CRM สำหรับการเชื่อมต่อระบบสมาชิก Buzzebees CRM PLUS</td></tr>
+  <tr><td class="k">เรียน</td><td>ฝ่ายดูแลลูกค้า และทีมเทคนิค Easy POS</td></tr>
+  <tr><td class="k">อ้างถึง</td><td>ข้อกำหนด API CRM PLUS ของ Buzzebees (API CRM PLUS_full – 2026)</td></tr>
+</table>
+
+<p>ด้วย Oshinei มีแผนเปิดใช้ระบบสมาชิกและสะสมคะแนนของ Buzzebees (CRM PLUS ผ่าน LINE Official Account) ในทุกสาขาที่ใช้ระบบ Easy POS (ปัจจุบัน 33 สาขา) โดย Buzzebees ได้เสนอ API มาตรฐานที่ระบบ POS จะต้องเรียกใช้ขณะชำระเงิน ได้แก่ การค้นหาสมาชิก การสะสมคะแนน การตรวจสอบและใช้สิทธิ์คูปอง และการยกเลิกคะแนน</p>
+
+<p>จากการตรวจสอบฐานข้อมูล HQ_Oshinei พบว่าระบบ Easy POS มีโครงสร้างรองรับการเชื่อมต่อระบบ CRM ภายนอกอยู่แล้ว แต่ยังไม่เคยมีการใช้งาน ได้แก่</p>
+<ul>
+  <li>ตัวเชื่อม HO_CRM ในตาราง <code>ThirdParty</code> (สถานะเปิดใช้งาน)</li>
+  <li>ตาราง <code>PromotionByCRM</code> และ <code>CallAPILog</code></li>
+  <li>ช่อง <code>EarnPoint</code>, <code>RedeemedPoint</code> และ <code>BalancePoint</code> ในตาราง <code>Sale</code></li>
+  <li>ช่อง <code>IsSucceedSendHOCRM</code> ในตาราง <code>SaleSync</code></li>
+  <li>ช่อง <code>IsCRMCoupon</code> ในตาราง <code>CouponSeries</code></li>
+</ul>
+
+<p>Oshinei จึงขอสอบถามข้อมูล 3 ข้อ เพื่อประกอบการพิจารณาเลือกรูปแบบการเชื่อมต่อ ดังนี้</p>
+
+<div class="q">
+  <h3>1. การเชื่อมต่อกับ Buzzebees ผ่าน HO_CRM</h3>
+  <p>ตัวเชื่อม HO_CRM สามารถเชื่อมต่อกับ API ของ Buzzebees ได้ด้วยการตั้งค่าเท่านั้น หรือจะต้องพัฒนาเพิ่มเติม และ Easy POS เคยเชื่อมต่อ HO_CRM กับ Buzzebees หรือผู้ให้บริการ CRM รายอื่นมาก่อนหรือไม่ หากเคย ขอทราบชื่อผู้ให้บริการและรูปแบบการเชื่อมต่อที่ใช้</p>
+</div>
+
+<div class="q">
+  <h3>2. หน้าจอสมาชิกและคะแนนบนเครื่อง POS</h3>
+  <p>ระบบ POS มีหน้าจอให้พนักงานแคชเชียร์สแกน QR สมาชิกหรือระบุหมายเลขโทรศัพท์ แสดงคะแนนคงเหลือและคูปองที่ใช้ได้ บันทึกการใช้คูปอง และพิมพ์คะแนนที่ได้รับบนใบเสร็จรับเงินอยู่แล้วหรือไม่ และในกรณีที่ระบบสมาชิกไม่ตอบกลับ ระบบ POS ยังสามารถปิดรายการขายได้ตามปกติ และส่งข้อมูลซ้ำภายหลังได้หรือไม่</p>
+</div>
+
+<div class="q">
+  <h3>3. ระยะเวลาและค่าใช้จ่าย</h3>
+  <p>หากจำเป็นต้องพัฒนาเพิ่มเติม ขอทราบขอบเขตงาน ระยะเวลาดำเนินการ และค่าใช้จ่ายโดยประมาณ ทั้งในส่วนการพัฒนาและการติดตั้งในทุกสาขา</p>
+</div>
+
+<p>ทั้งนี้ Oshinei กำลังพิจารณาอีกทางเลือกหนึ่ง คือให้ Buzzebees อ่านข้อมูลการขายจากฐานข้อมูล HQ_Oshinei ผ่าน view แบบอ่านอย่างเดียว ซึ่งไม่ต้องแก้ไขระบบ POS คำตอบของ Easy POS จะใช้ประกอบการตัดสินใจระหว่างสองทางเลือกนี้</p>
+
+</body>
+</html>
