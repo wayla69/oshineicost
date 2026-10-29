@@ -1573,6 +1573,20 @@ body.dark #tab-menuimpact .mi-flag.warn { color: #fcd34d; }
 .ms-kpi .lbl { font-size: 13px; color: var(--text-muted,#64748b); }
 .ms-kpi .val { font-size: 26px; font-weight: 800; line-height: 1.1; margin-top: 2px; }
 .ms-kpi .sub { font-size: 13px; margin-top: 3px; }
+/* 2026-10-29 phone summary tiles: one language with the white cards - a flat card, the department hue as a 3 px top bar, the number
+   the boldest thing; theme-vivid.css leaves #mobileSummary .ms-kpi out of its gradient rules */
+body #mobileSummary .ms-kpi { background: var(--bg-card,#fff); color: var(--text-primary); border: 1px solid var(--border,#e2e8f0);
+  border-top: 3px solid var(--kpi-f, var(--accent)); border-radius: var(--r-card, 16px); box-shadow: var(--shadow-card); }
+body #mobileSummary .ms-kpi .lbl { font-weight: 600; color: var(--text-secondary,#475569); }
+body #mobileSummary .ms-kpi .val { font-size: 30px; font-weight: 800; letter-spacing: -.02em; font-variant-numeric: tabular-nums; }
+/* the two comparison chips of a tile: each chip + its word is one unit that never breaks (the word used to hang at a line end) */
+.ms-cmp { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; margin-top: 2px; }
+.ms-cmp > span { display: inline-flex; align-items: center; gap: 5px; white-space: nowrap; font-size: 13px; color: var(--text-muted,#64748b); }
+/* the cause word of a cost riser (เมนู tab) */
+.ms-why { display: inline-block; padding: 1px 7px; border-radius: 6px; font-size: 12px; font-weight: 700; margin-right: 4px; background: var(--neu-t,#e3e7f6); color: var(--neu-i,#333a63); }
+.ms-why-price { background: var(--fix-t,#ffdcdc); color: var(--fix-i,#9b1414); }
+.ms-why-use { background: var(--watch-t,#fde9c4); color: var(--watch-i,#7a4500); }
+.ms-menu-name { font-size: 13px; color: var(--text-primary,#1e293b); display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; line-height: 1.3; }
 /* PR-PD (owner 2026-10-29, phone decisions) · the run-rate line of the target card, the food-cost tile's tag, the weak weekday line */
 .ms-runrate { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin: 2px 0 8px; padding: 10px 12px; border-radius: var(--r-md); background: var(--bg-input); border-left: 4px solid var(--text-muted); font-size: 13px; }
 .ms-runrate b { font-size: 17px; }

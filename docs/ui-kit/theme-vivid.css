@@ -34,30 +34,32 @@ body .card:hover, body .cmp-card:hover { box-shadow: var(--shadow-card); }
 body .card[data-k], body .ms-card[data-k], body .ph-card[data-k] { box-shadow: inset 6px 0 0 var(--k-f), var(--shadow-card); }
 body .skeleton-kpi { border: 0; border-radius: var(--r-card); box-shadow: var(--shadow-card); }
 
-/* ── KPI tiles: the department-hue gradient, white text, the number is the boldest thing ── */
-body .kpi-card.card, body .ms-kpi, body #tab-menuimpact .mi-kpi, body #home-decision-tiles > .card {
+/* ── KPI tiles: the department-hue gradient, white text, the number is the boldest thing ──
+   2026-10-29 (owner: the purple tiles beside white cards "look like two apps"): the phone summary's tiles (#mobileSummary) are
+   left out - they are flat white cards with the hue as a top bar (index.html, .ms-kpi phone block) ── */
+body .kpi-card.card, body .ms-kpi:not(#mobileSummary .ms-kpi), body #tab-menuimpact .mi-kpi, body #home-decision-tiles > .card {
   background: linear-gradient(135deg, var(--kpi-f), var(--kpi-f2)); color: var(--on-fill);
   border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-tile); position: relative; overflow: hidden;
 }
-body .kpi-card.card::after, body .ms-kpi::after, body #home-decision-tiles > .card::after {
+body .kpi-card.card::after, body .ms-kpi:not(#mobileSummary .ms-kpi)::after, body #home-decision-tiles > .card::after {
   content: ''; position: absolute; right: -36px; top: -36px; width: 130px; height: 130px; border-radius: 50%;
   background: rgba(255,255,255,.10); pointer-events: none;
 }
 body .kpi-card.card { container-type: inline-size; }
 body .kpi-card.card :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .pcmp, .pcmp *),
-body .ms-kpi :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *, .pcmp, .pcmp *),
+body .ms-kpi:not(#mobileSummary .ms-kpi) :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *, .pcmp, .pcmp *),
 body #tab-menuimpact .mi-kpi :is(p, span, div, b, strong, small):not(.pill, .pill *),
 body #home-decision-tiles > .card :is(p, span, div, b, strong, small):not(.pill, .pill *, .pcmp, .pcmp *) { color: inherit !important; }
 /* PR-PP2: the comparison chips (periodCmpHtml) on a gradient tile sit on the card colour, so their good / bad inks keep their contrast */
 body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp { background: var(--bg-card); border-color: transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.6); }
 body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp-q { background: rgba(255,255,255,.95); }
 body #home-decision-tiles > .card p.text-2xl { font-size: var(--kfs); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
-body .kpi-card.card .kpi-label, body .ms-kpi .lbl { font-weight: 700; opacity: .96; }
+body .kpi-card.card .kpi-label, body .ms-kpi:not(#mobileSummary .ms-kpi) .lbl { font-weight: 700; opacity: .96; }
 body .kpi-card.card .kpi-value { font-size: clamp(26px, 15cqw, var(--kfs)); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
-body .ms-kpi .val { font-size: var(--kfs); font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
-body .kpi-card.card .kpi-sub, body .ms-kpi .sub { opacity: .96; }
+body .ms-kpi:not(#mobileSummary .ms-kpi) .val { font-size: var(--kfs); font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
+body .kpi-card.card .kpi-sub, body .ms-kpi:not(#mobileSummary .ms-kpi) .sub { opacity: .96; }
 body .kpi-card.card svg:not(.ui-icon) { background: rgba(255,255,255,.92); border-radius: 8px; padding: 2px 4px; }
-body .kpi-card.card .pill, body .ms-kpi .pill, body .ms-kpi .ms-chip { box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
+body .kpi-card.card .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .ms-chip { box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
 body .kpi-card.kpi-up    { box-shadow: inset 0 -5px 0 var(--good-f2), var(--shadow-tile); }
 body .kpi-card.kpi-down  { box-shadow: inset 0 -5px 0 var(--fix-f2), var(--shadow-tile); }
 body .kpi-card.card .ui-q { background: rgba(255,255,255,.95); }

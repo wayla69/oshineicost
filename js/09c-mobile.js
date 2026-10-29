@@ -1957,7 +1957,12 @@ function msColumns(vals, o) {
   if (last >= 0) g += lab(last);
   if (P >= 0 && vals[P] != null) g += lab(P, o.grain === 'day' ? 'วันนี้' : 'เดือนนี้');
   if (hi >= 0 && hi !== last) g += lab(hi);
-  if (avg != null) g += `<text x="2" y="${(yOf(avg) - 3).toFixed(1)}" font-size="12" font-weight="700" style="fill:var(--text-secondary,#475569);${HALO}">เฉลี่ย ${esc(o.fmt(avg))}</text>`;
+  if (avg != null) {   // 2026-10-29: the average label used to sit on the first column's value - it now yields: above the line, else below it
+    const t = `เฉลี่ย ${o.fmt(avg)}`, w = t.length * 12 * 0.56, ax = w / 2 + 2, ya = yOf(avg);
+    const free = yy => !placed.find(p => Math.abs(p.x - ax) < (p.w + w) / 2 + 3 && Math.abs(p.y - yy) < 12 * LINE);
+    const yy = free(ya - 3) ? ya - 3 : free(ya + 13) ? ya + 13 : null;
+    if (yy != null) { placed.push({ x: ax, y: yy, w }); g += `<text x="2" y="${yy.toFixed(1)}" font-size="12" font-weight="700" style="fill:var(--text-secondary,#475569);${HALO}">${esc(t)}</text>`; }
+  }
   if (o.labels) {
     const ly = under ? H - 17 : H - 2;
     if (o.allLabels) o.labels.forEach((t, i) => { g += txt(t, cx(i), ly, 12, i === last ? 700 : 600, i === last ? 'var(--text-primary,#1e293b)' : 'var(--text-muted,#94a3b8)'); });
@@ -2165,7 +2170,10 @@ function msKpiTile(l, v, c, sub, span) {
 // headline KPIs: revenue (+8-period columns), covers, spend/head, GP, discounts — MoM and YoY chips
 function msKpisHtml(j) {
   const H = j.headline || {}, G = j.gp || {}, yoy = _msYoyOk(j);
-  const chips = (m, y, vs) => msPchip(m) + (vs ? ` <span style="${_msMuted};font-size:13px">เทียบเดือนก่อน</span>` : '') + (yoy && y != null ? ` <span style="font-size:13px;${_msMuted}">· เทียบปีก่อน</span> ${msPchip(y)}` : '');
+  // 2026-10-29: chip + word = one unit (the word "เทียบปีก่อน" used to hang at a line end in a half-width tile); the full-width
+  // revenue tile keeps the long words, the half tiles say เดือนก่อน / ปีก่อน
+  const chips = (m, y, vs) => `<span class="ms-cmp"><span>${msPchip(m)} ${vs ? 'เทียบเดือนก่อน' : 'เดือนก่อน'}</span>`
+    + (yoy && y != null ? `<span>${msPchip(y)} ${vs ? 'เทียบปีก่อน' : 'ปีก่อน'}</span>` : '') + '</span>';
   const tr = j.trend || [];
   const cols = tr.length >= 3 ? `<div style="margin-top:10px">${msColumns(tr.map(x => x.revenue ?? null), { partial: j.partial ? tr.length - 1 : -1, labels: tr.map(x => x.label), fmt, grain: 'month', height: 92, aria: 'รายได้รายเดือน' })}</div>` : '';
   // PR-PD (owner 2026-10-29, no. 16) · colour means one thing: a figure is neutral, the pill beside it carries the direction;
@@ -2176,8 +2184,8 @@ function msKpisHtml(j) {
     + msKpiTile('ลูกค้า', fmtN(H.customers || 0), N, chips(H.cust_wow_pct, H.cust_yoy_pct))
     + msKpiTile('รายได้/หัว', H.rev_per_head != null ? fmt(H.rev_per_head) : '—', N, chips(H.rph_wow_pct, H.rph_yoy_pct))
     + (canSeeCost() ? msKpiTile('กำไรขั้นต้น (GP)', G.gp != null ? fmt(G.gp) : '—', N, G.gp_pct != null ? `<b>${G.gp_pct.toFixed(0)}%</b> ${G.gp_pct_delta_pp != null ? msPchip(G.gp_pct_delta_pp, true, 'pp') : ''}` : `<span style="${_msMuted}">ไม่มีข้อมูลต้นทุน</span>`) : '')   // PL3: no gross profit for a role without a cost or profit module (the server drops it too)
-    + (canSeeCost() ? msFoodCostTile(j) : '')
-    + msKpiTile('ส่วนลด', fmt(H.discount || 0), discOver ? 'var(--bad-ink)' : N, H.discount_pct != null ? `<b style="color:${discOver ? 'var(--bad-ink)' : N}">${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:13px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน ${H.discount_policy_pct}%${discOver ? ' · เกินเพดาน' : ''}` : ''}</span>` : '', !canSeeCost())
+    + msKpiTile('ส่วนลด', fmt(H.discount || 0), discOver ? 'var(--bad-ink)' : N, H.discount_pct != null ? `<b style="color:${discOver ? 'var(--bad-ink)' : N}">${H.discount_pct.toFixed(1)}%</b> <span style="${_msMuted};font-size:13px">ของยอด${H.discount_policy_pct != null ? ` · เพดาน&nbsp;${H.discount_policy_pct}%${discOver ? ' · เกินเพดาน' : ''}` : ''}</span>` : '', !canSeeCost())
+    + (canSeeCost() ? msFoodCostTile(j) : '')   // after ส่วนลด so GP + ส่วนลด share a row (2026-10-29)
     + msWeakDayLine(j)
     + (H.mom_basis === 'to_date' ? `<p class="ms-dow-note" style="grid-column:1/-1;font-size:13px;${_msMuted};margin:0">${_msDowNote}</p>` : '');
 }
@@ -2661,6 +2669,15 @@ async function msLoadMenu() {
 }
 // the dishes whose food cost per head rose, by the baht it added (cost per head change x the customers of the period): the context
 // line first (the whole cost per head, gp.cost_per_head - the bridge's), then the rows with their share of the rise and why it rose
+// the cause word of a cost riser: which of the two parts of its change carries more - the cost per plate (price_delta) or the plates
+// per head (usage_delta); both when neither is under 60 % of the rise
+function _msRiserCause(m) {
+  const p = +m.price_delta || 0, u = +m.usage_delta || 0, tot = Math.max(p, 0) + Math.max(u, 0);
+  if (!tot || m.price_delta == null || m.usage_delta == null) return '';
+  const chip = (cls, t) => `<span class="ms-why ${cls}">${t}</span>`;
+  if (p > 0 && u > 0 && p / tot < 0.6 && u / tot < 0.6) return chip('', 'ทั้งราคาและปริมาณ');
+  return p >= u ? chip('ms-why-price', 'ราคาวัตถุดิบขึ้น') : chip('ms-why-use', 'ลูกค้าตักมากขึ้น');
+}
 function msCostRisersHtml(j, key, top) {
   const M = j.menu || {}, G = j.gp || {}, cov = M.covers || 0;
   const rows = (M.risers || []).filter(m => (m.delta || 0) > 0);
@@ -2678,10 +2695,12 @@ function msCostRisersHtml(j, key, top) {
     cum += share;
     // PR-PD no. 18: the dish's COST per plate (never a selling price); an unchanged one is said in words
     const why = m.price_delta != null && m.usage_delta != null ? ` · ${Math.abs(m.price_delta) < 0.005 ? 'ต้นทุนต่อจานเท่าเดิม' : 'ต้นทุนต่อจาน ' + sg(m.price_delta)} · กินต่อหัว ${sg(m.usage_delta)}` : '';
+    // 2026-10-29 (owner): the cause in one word before the three figures - the dish costs more per plate, or guests take more of it
+    const cause = _msRiserCause(m);
     return `<div class="ms-row"${dvMoreAttr(key, i, rows.length, top)} style="align-items:flex-start">
       <span style="width:18px;font-size:13px;${_msMuted};margin-top:1px">${i + 1}</span>
-      <span style="flex:1;min-width:0"><span style="font-size:13px;color:var(--text-primary,#1e293b);display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.menu)}</span>
-      <span style="font-size:13px;${_msMuted};display:block;line-height:1.35">${sg(m.delta)}/หัว${why}</span></span>
+      <span style="flex:1;min-width:0"><span class="ms-menu-name" title="${esc(m.menu)}">${esc(_msShortMenu(m.menu))}</span>
+      <span style="font-size:13px;${_msMuted};display:block;line-height:1.35;margin-top:2px">${cause}${sg(m.delta)}/หัว${why}</span></span>
       <span style="flex-shrink:0;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;color:var(--bad-ink)">+฿${fmt(b)}</b><br><span style="font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${share.toFixed(0)}% · สะสม ${Math.min(100, cum).toFixed(0)}%</span></span>
     </div>`;
   }).join('');
