@@ -386,6 +386,97 @@
    "start": "2025-10-01"
   }
  ],
+ "watch": {
+  "fix": 0,
+  "items": [
+   {
+    "available": false,
+    "key": "forced",
+    "level": "none",
+    "line": "no forced-order list",
+    "rows": [],
+    "title": "Monitored ingredients"
+   },
+   {
+    "available": false,
+    "key": "portion",
+    "level": "none",
+    "line": "no confirmed issue slips this month",
+    "rows": [],
+    "title": "Portioning"
+   },
+   {
+    "available": false,
+    "key": "purchases",
+    "level": "none",
+    "line": "no purchase file for this month",
+    "rows": [],
+    "title": "Purchases vs sales"
+   },
+   {
+    "available": false,
+    "key": "recon",
+    "level": "none",
+    "line": "recon tables absent",
+    "rows": [],
+    "title": "Bank vs POS"
+   },
+   {
+    "available": false,
+    "key": "tiermix",
+    "level": "none",
+    "line": "no comparison period",
+    "rows": [],
+    "title": "Buffet tier mix"
+   },
+   {
+    "available": false,
+    "key": "voids",
+    "level": "none",
+    "line": "no cancel data this month",
+    "rows": [],
+    "title": "Voids / reprints"
+   },
+   {
+    "available": true,
+    "count": 2,
+    "falling": 2,
+    "key": "newmenu",
+    "level": "watch",
+    "line": "2 dishes at the keep / drop decision: สเต๊ก 0.0/day (-100%) · แซลมอน 0.0/day (-100%) - 2 fell over 30% since their first week",
+    "rows": [
+     {
+      "age_days": 30,
+      "branches": 1,
+      "first_per_day": 2.1,
+      "first_sold": "2026-05-01",
+      "kind": "alc",
+      "menu": "สเต๊ก",
+      "per_day": 0.0,
+      "plates": 15,
+      "trend_pct": -100
+     },
+     {
+      "age_days": 30,
+      "branches": 1,
+      "first_per_day": 21.4,
+      "first_sold": "2026-05-01",
+      "kind": "buffet",
+      "menu": "แซลมอน",
+      "per_day": 0.0,
+      "plates": 150,
+      "trend_pct": -100
+     }
+    ],
+    "title": "New dishes at day 28"
+   }
+  ],
+  "range": [
+   "2026-05-01",
+   "2026-05-31"
+  ],
+  "watch": 1
+ },
  "weeks": [],
  "years": [],
  "yoy_range": null

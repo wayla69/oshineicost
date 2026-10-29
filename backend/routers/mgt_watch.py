@@ -126,7 +126,7 @@ def purchases(con, ids, cs, ce, branch, group, th=True) -> dict:
     if not over:
         return {"key": "purchases", "title": t, "available": True, "level": "ok", "chain_pct": round(chain, 1), "rows": [],
                 "line": (f"ทุกสาขาซื้อใกล้ค่าเครือ ({chain:.1f}% ของยอดขาย)" if th else f"every branch near the chain's {chain:.1f}% of sales")}
-    names = " · ".join(f"{r['branch']} {r['pct']}% (+{r['vs_chain_pp']} จุด ฿{r['baht']:,.0f})" for r in over[:3])
+    names = " · ".join(f"{r['branch']} {r['pct']}% (+{r['vs_chain_pp']} {'จุด' if th else 'pts'} ฿{r['baht']:,.0f})" for r in over[:3])
     return {"key": "purchases", "title": t, "available": True, "level": "fix" if over[0]["vs_chain_pp"] >= 2 * T_PURCHASE_OVER_PP else "watch",
             "chain_pct": round(chain, 1), "rows": over[:3], "over_count": len(over),
             "line": (f"ซื้อเกินค่าเครือ ({chain:.1f}% ของยอดขาย) {len(over)} สาขา: {names} — นับสต็อก / ทบทวนการสั่ง" if th
@@ -161,7 +161,7 @@ def forced_gaps(con, ids, ce, th=True) -> dict:
     if not out:
         return {"key": "forced", "title": t, "available": True, "level": "ok", "rows": [],
                 "line": (f"ทุกสาขาสั่งวัตถุดิบบังคับสั่งครบใน {T_FORCED_GAP_DAYS} วันล่าสุด" if th else f"every branch ordered its monitored items in the last {T_FORCED_GAP_DAYS} days")}
-    names = " · ".join(f"{r['branch']} {r['count']} รายการ ({', '.join(x['name'] for x in r['items'][:2])}{' …' if r['count'] > 2 else ''})" for r in out[:3])
+    names = " · ".join(f"{r['branch']} {r['count']} {'รายการ' if th else 'items'} ({', '.join(x['name'] for x in r['items'][:2])}{' …' if r['count'] > 2 else ''})" for r in out[:3])
     return {"key": "forced", "title": t, "available": True, "level": "watch", "rows": out[:3], "over_count": len(out),
             "line": (f"ไม่ได้สั่งมา {T_FORCED_GAP_DAYS} วัน ทั้งที่เคยสั่ง: {names} — ถามสาขาก่อนสุดสัปดาห์" if th
                      else f"not ordered for {T_FORCED_GAP_DAYS} days though usual: {names} - ask before the weekend")}
@@ -221,7 +221,7 @@ def new_menus(con, ids, ce, th=True) -> dict:
     if not out:
         return {"key": "newmenu", "title": t, "available": True, "level": "none", "rows": [], "line": ("ไม่มีเมนูใหม่ที่ถึงกำหนด 28 วันในช่วงนี้" if th else "no new dish at its 28-day mark")}
     falling = [r for r in out if r["trend_pct"] is not None and r["trend_pct"] <= -30]
-    names = " · ".join(f"{r['menu']} {r['per_day']}/วัน" + (f" ({'+' if r['trend_pct'] > 0 else ''}{r['trend_pct']}%)" if r["trend_pct"] is not None else "") for r in out[:3])
+    names = " · ".join(f"{r['menu']} {r['per_day']}/{'วัน' if th else 'day'}" + (f" ({'+' if r['trend_pct'] > 0 else ''}{r['trend_pct']}%)" if r["trend_pct"] is not None else "") for r in out[:3])
     return {"key": "newmenu", "title": t, "available": True, "level": "watch" if falling else "ok", "rows": out[:5], "count": len(out),
             "falling": len(falling),
             "line": (f"{len(out)} เมนูถึงกำหนดตัดสินใจ (เก็บ / เลิก): {names}" + (f" — {len(falling)} เมนูขายตกเกิน 30% จากสัปดาห์แรก" if falling else "") if th
@@ -256,9 +256,9 @@ def voids(con, ids, cs, ce, where, params, th=True) -> dict:
     level = bad[0]["level"] if bad else ("watch" if rep else "ok")
     parts = []
     if bad:
-        parts.append(("ยกเลิกบิล: " if th else "voids: ") + " · ".join(f"{r['branch']} {r['rate_pct']}% ({r['bills']} บิล ฿{r['amount']:,.0f})" for r in bad[:3]))
+        parts.append(("ยกเลิกบิล: " if th else "voids: ") + " · ".join(f"{r['branch']} {r['rate_pct']}% ({r['bills']} {'บิล' if th else 'bills'} ฿{r['amount']:,.0f})" for r in bad[:3]))
     if rep:
-        parts.append(("พิมพ์ซ้ำ: " if th else "reprints: ") + " · ".join(f"{r['branch']} {r['bills']} บิล" for r in rep[:3]))
+        parts.append(("พิมพ์ซ้ำ: " if th else "reprints: ") + " · ".join(f"{r['branch']} {r['bills']} {'บิล' if th else 'bills'}" for r in rep[:3]))
     line = " | ".join(parts) if parts else ("ทุกสาขาต่ำกว่า 0.5% และไม่มีบิลพิมพ์ซ้ำ" if th else "every branch under 0.5% and no reprints")
     if bad or rep:
         line += (" — ตรวจที่สาขา" if th else " - audit at the branch")
@@ -351,7 +351,7 @@ def tier_mix(con, ids, cs, ce, ps, pe, has_prev, th=True) -> dict:
     if not drop:
         return {"key": "tiermix", "title": t, "available": True, "level": "ok", "tier": prem, "tier_label": lbl, "rows": [],
                 "line": (f"สัดส่วน {lbl} ไม่ลดเกิน {T_TIER_DROP_PP:g} จุดที่สาขาใด" if th else f"{lbl} share down {T_TIER_DROP_PP:g} points at no branch")}
-    names = " · ".join(f"{r['branch']} {r['share_prev_pct']:.0f}%→{r['share_pct']:.0f}% (−{abs(r['delta_pp']):.0f} จุด)" for r in drop[:3])
+    names = " · ".join(f"{r['branch']} {r['share_prev_pct']:.0f}%→{r['share_pct']:.0f}% (−{abs(r['delta_pp']):.0f} {'จุด' if th else 'pts'})" for r in drop[:3])
     return {"key": "tiermix", "title": t, "available": True, "level": "watch", "tier": prem, "tier_label": lbl, "rows": drop[:3], "over_count": len(drop),
             "line": (f"สัดส่วนลูกค้า {lbl} ลด {len(drop)} สาขา: {names} — ดันการเสนอขายที่สาขา" if th
                      else f"{lbl} share of guests down at {len(drop)} branches: {names} - push upselling")}
