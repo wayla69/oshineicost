@@ -345,7 +345,7 @@ def test_search_finds_pages_by_label_synonym_department_and_cluster(tmp_path):
 @needs_node
 def test_search_lists_only_what_the_role_may_open_and_each_page_once(tmp_path):
     full = _harness(tmp_path, "management", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
-    assert len(full) == len(set(full)) == 82 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone; PR-F4: + fmsg; + hvmonitor)
+    assert len(full) == len(set(full)) == 83 and "franchise|" not in full                              # every page of the registry, once (ร้านของฉัน is the franchise's alone; PR-F4: + fmsg; + hvmonitor)
     assert "hvmonitor|" in full                                                                      # High Value Product Monitor (cost roles: TAB_MODULE)
     assert "franchise|" in _harness(tmp_path, "franchise", "pgIndex().map(e => e.tab + '|' + (e.pane || ''))")
     only = _json.dumps(["branchstock", "manual"])

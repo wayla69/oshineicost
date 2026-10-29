@@ -1721,7 +1721,6 @@ async function miFillTiers(df, dt2) {
 }
 
 async function loadMenuImpact(force) {
-  loadPriceTier(force);   // tier section shares the same range/scope pickers
   const body = document.getElementById('miBody');
   if (!_miEnts) {
     try { _miEnts = await api(`${API}/api/reports/menu-impact/entities`); }
@@ -1904,8 +1903,22 @@ let _ptQtyPer100 = false;
 async function loadPriceTier(force) {
   const body = document.getElementById('ptBody');
   if (!body) return;
-  const df = document.getElementById('miFrom').value, dt2 = document.getElementById('miTo').value;
-  const scope = document.getElementById('miScope').value;
+  // PR-AT: its own page (tabs/61-pricetier.html) with its own range and scope. It opens on the live menu (the Grand Menu month to the
+  // latest day with bill data, /api/reports/menu-impact/entities' coverage) - a range across 1 Sep blends two price lists
+  const fEl = document.getElementById('ptFrom'), tEl = document.getElementById('ptTo');
+  if (fEl && tEl && (!fEl.value || !tEl.value)) {
+    try {
+      const e = await api(`${API}/api/reports/menu-impact/entities`);
+      const [lo, hi] = (e && e.coverage) || [null, null], d0 = (e && e.default_from) || lo;
+      if (lo) { fEl.min = lo; tEl.min = lo; } if (hi) { fEl.max = hi; tEl.max = hi; }
+      if (d0 && !fEl.value) fEl.value = d0;
+      if (hi && !tEl.value) tEl.value = hi;
+      const cov = document.getElementById('ptCoverage');
+      if (cov && lo && hi) cov.textContent = `ข้อมูล ${lo} → ${hi}` + (d0 && d0 !== lo ? ` · เริ่มที่ ${d0} (เมนูใหม่)` : '');
+    } catch (e) { /* the server picks its own default range */ }
+  }
+  const df = fEl ? fEl.value : '', dt2 = tEl ? tEl.value : '';
+  const scope = (document.getElementById('ptScope') || {}).value || 'all';
   const key = `${df}|${dt2}|${scope}`;
   if (!force && _tabLastKey.pricetier === key) return;
   const seq = ++_ptSeq;   // drop stale responses when loads overlap

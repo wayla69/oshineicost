@@ -563,6 +563,10 @@
       <span id="bmcDcSummary" class="text-xs" style="color:var(--text-muted)"></span>
     </div>
     <div class="card p-3 mb-3 flex flex-wrap items-center gap-2">
+      <!-- PR-AT (owner 2026-10-29): the month this list belongs to, chosen here - the Grand Menu month (ก.ย. 2569) through next month;
+           the page's shared month strip is hidden on this pane so there is one picker -->
+      <label class="text-xs font-semibold" style="color:var(--text-secondary)" for="bmcDcMonth">ต้นทุนของเดือน</label>
+      <select id="bmcDcMonth" onchange="bmcDcMonthChanged()" aria-label="เดือนของต้นทุนต่อจาน" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-weight:600;background:var(--bg-input);color:var(--text-primary)"></select>
       <label class="bc-write" style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:7px 16px;font-size:13px;cursor:pointer">
         นำเข้าไฟล์
         <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcDcImport(this)">
