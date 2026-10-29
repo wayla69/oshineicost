@@ -48,14 +48,15 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
         days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
         rows = con.execute(f"""
             SELECT b.name branch, date(t.sold_at) d,
-                   ROUND({net_revenue_sum('t')},2) rev, SUM(t.customer_count) cust, COUNT(*) bills
+                   ROUND({net_revenue_sum('t')},2) rev, SUM(t.customer_count) cust, COUNT(*) bills,
+                   ROUND(COALESCE(SUM(t.discount),0),2) disc
             FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
             WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
             GROUP BY b.name, date(t.sold_at)""",
             {**params, "s": start.isoformat(), "e": focus}).fetchall()
         bm: dict = {}
         for r in rows:
-            bm.setdefault(r["branch"], {})[r["d"]] = {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"]}
+            bm.setdefault(r["branch"], {})[r["d"]] = {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"], "disc": r["disc"] or 0}
         out = []
         for nm, dm in bm.items():
             spark = [round(dm.get(d, {}).get("rev", 0), 0) for d in days]
@@ -65,6 +66,17 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
             prior = [x for x in prior if x > 0]
             avg7 = sum(prior) / len(prior) if prior else 0
             wow = dm.get(days[0], {}).get("rev")        # same weekday last week
+            # PR-PD (owner 2026-10-29, no. 1) · the cause behind a day below normal, so the call is about the right thing:
+            # the customers against their 7-day normal, the spend per head against its normal, the day's discount share
+            pdays = [dm[d] for d in days[:-1] if dm.get(d, {}).get("rev", 0) > 0]
+            cust7 = sum(x["cust"] for x in pdays) / len(pdays) if pdays else 0
+            rph7 = (sum(x["rev"] for x in pdays) / sum(x["cust"] for x in pdays)) if pdays and sum(x["cust"] for x in pdays) else 0
+            tdisc = today.get("disc", 0)
+            cause = {"cust_vs_avg_pct": round((tcust - cust7) / cust7 * 100, 1) if cust7 else None,
+                     "rph_vs_avg_pct": round((trev / tcust - rph7) / rph7 * 100, 1) if (tcust and rph7) else None,
+                     "discount_pct": round(tdisc / (trev + tdisc) * 100, 1) if (trev + tdisc) > 0 else None,
+                     "discount_pct_avg7": (round(sum(x["disc"] for x in pdays) / (sum(x["rev"] for x in pdays) + sum(x["disc"] for x in pdays)) * 100, 1)
+                                           if pdays and (sum(x["rev"] for x in pdays) + sum(x["disc"] for x in pdays)) > 0 else None)}
             vs_avg = round((trev - avg7) / avg7 * 100, 1) if avg7 else None
             vs_wow = round((trev - wow) / wow * 100, 1) if wow else None
             status = "up" if (vs_avg is not None and vs_avg >= 10) else \
@@ -73,11 +85,15 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
                         "rev_per_head": round(trev / tcust, 1) if tcust else None,
                         "spark": spark, "avg7": round(avg7, 0),
                         "vs_avg_baht": round(trev - avg7, 0) if avg7 else None,
-                        "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status})
+                        "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status,
+                        # PR-PD no. 4: a branch with sales in the window but none on the focus day = its data has not
+                        # arrived (or it was shut that day); never a "−100 %" to call about
+                        "reported": trev > 0, **cause})
         out.sort(key=lambda r: (r["vs_avg_baht"] is None, r["vs_avg_baht"] if r["vs_avg_baht"] is not None else 0, -r["revenue"]))
         # owner 2026-10-26: a closed branch is not a row (rules.closed_branches: the focus day and the 7 days before it)
         out = drop_closed(out, closed_branches(con, [(start.isoformat(), focus)], keep=branch))
     return {"date": focus, "days": days, "branches": out,
+            "reported": sum(1 for r in out if r["reported"]), "missing": [r["branch"] for r in out if not r["reported"]],
             "skipped_day": None if date else settled["skipped_day"], "skipped_bills": None if date else settled["skipped_bills"]}
 
 

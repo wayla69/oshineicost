@@ -53,7 +53,8 @@ def test_cost_per_head_change_splits_into_price_and_plates():
     assert s["usage_delta"] == pytest.approx(cur_c / cov_c - prv_q * (cur_c / cur_q) / cov_p, abs=0.01)
     m0 = {"menu": "แซลมอนดองซีอิ๊ว", "delta": round(delta, 2), "cost_per_head": round(cur_c / cov_c, 2), **s}
     t = _cost_riser_action(m0, "เดือน", True)
-    assert "ราคาต่อจาน +฿" in t and "กินต่อหัว" in t and t.endswith("ตรวจสอบราคาต่อจาน / ราคาวัตถุดิบ")
+    # PR-PD no. 18: the split names the dish's COST per plate (ต้นทุนต่อจาน), never a selling price
+    assert "ต้นทุนต่อจาน +฿" in t and "กินต่อหัว" in t and t.endswith("ตรวจสอบราคาต่อจาน / ราคาวัตถุดิบ")
     # plates per head up, cost per plate flat: portioning
     s2 = _cph_split(120, 120 * 30.0, 100, 100 * 30.0, 100, 100)
     assert s2 == {"usage_delta": 6.0, "price_delta": 0.0}

@@ -4,9 +4,14 @@
    "avg7": 950.0,
    "bills": 1,
    "branch": "BranchA",
+   "cust_vs_avg_pct": 0.0,
    "customers": 4,
+   "discount_pct": 2.1,
+   "discount_pct_avg7": 2.1,
+   "reported": true,
    "rev_per_head": 237.5,
    "revenue": 950.0,
+   "rph_vs_avg_pct": 0.0,
    "spark": [
     0,
     0,
@@ -27,9 +32,14 @@
    "avg7": 950.0,
    "bills": 1,
    "branch": "BranchB",
+   "cust_vs_avg_pct": 0.0,
    "customers": 4,
+   "discount_pct": 2.1,
+   "discount_pct_avg7": 2.1,
+   "reported": true,
    "rev_per_head": 237.5,
    "revenue": 950.0,
+   "rph_vs_avg_pct": 0.0,
    "spark": [
     0,
     0,
@@ -58,6 +68,8 @@
   "2026-06-02",
   "2026-06-03"
  ],
+ "missing": [],
+ "reported": 2,
  "skipped_bills": null,
  "skipped_day": null
 }

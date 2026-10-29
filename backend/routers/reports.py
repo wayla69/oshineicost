@@ -1978,8 +1978,10 @@ def _cost_riser_action(m0: dict, pword: str, th: bool) -> str:
 
         def sg(v):
             return ("+" if v > 0 else "−" if v < 0 else "") + f"฿{abs(v):.2f}"
-        split_th = f": ราคาต่อจาน {sg(pdl)} · กินต่อหัว {sg(udl)}"
-        split_en = f": cost per plate {sg(pdl)} · plates per head {sg(udl)}"
+        # PR-PD (owner 2026-10-29, no. 18): "ราคาต่อจาน ฿0.00" read as a selling price of zero - the figure is the dish's
+        # cost per plate; an unchanged one is said in words, so the line names the one cause that moved
+        split_th = (f": ต้นทุนต่อจานเท่าเดิม · กินต่อหัว {sg(udl)}" if abs(pdl) < 0.005 else f": ต้นทุนต่อจาน {sg(pdl)} · กินต่อหัว {sg(udl)}")
+        split_en = (f": cost per plate unchanged · plates per head {sg(udl)}" if abs(pdl) < 0.005 else f": cost per plate {sg(pdl)} · plates per head {sg(udl)}")
         act_th = "ตรวจสอบราคาต่อจาน / ราคาวัตถุดิบ" if by_price else "ตรวจสอบการตักเสิร์ฟ"
         act_en = "check the dish cost / ingredient prices" if by_price else "check portioning"
     else:
@@ -2023,6 +2025,16 @@ def _mgt_target_scope(con, ctx) -> None:
     pace["target_scope"] = att
     ctx["target"] = att["target"]
     ctx["target_projected"] = att["projected"]
+    # PR-PD (owner 2026-10-29, phone decisions no. 2) · the instruction behind the gap: with N days left, the branches that
+    # have a target must sell ฿X a day to reach it, against the ฿Y a day they have been selling - the same like-for-like
+    # scope as pace.target (the branches with a target), so the two figures and the % of target agree.
+    de, dt = pace.get("days_elapsed") or 0, pace.get("days_total") or 0
+    left = max(0, dt - de)
+    mtd_t = sum((b.get("revenue") or 0) for b in branches if b.get("target"))
+    if live and att.get("target") and left > 0 and de > 0:
+        pace["run_rate"] = {"days_left": left, "need_per_day": round((att["target"] - mtd_t) / left),
+                            "normal_per_day": round(mtd_t / de), "mtd": round(mtd_t),
+                            "branches": sum(1 for b in branches if b.get("target"))}
 
 
 def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
@@ -2061,7 +2073,8 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
             dom_code = ("(SELECT CASE WHEN UPPER(sp.payment_code)='CASH' THEN 'Cash' ELSE sp.payment_code END "
                         "FROM sale_payment sp WHERE sp.branch_id=h.branch_id AND sp.receipt_no=h.receipt_no "
                         "ORDER BY sp.amount DESC LIMIT 1)")
-            heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch "
+            heavy_sub = (f"SELECT st.branch_id, st.receipt_no, st.discount, b.name AS branch, "
+                         f"CAST(strftime('%H', st.sold_at) AS INTEGER) AS hr "
                          f"FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id "
                          f"WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e "
                          f"AND st.discount>0 AND {lk}>0 AND st.discount*1.0/{lk} >= 0.30")
@@ -2077,6 +2090,16 @@ def _mgt_leak(con, *, ce, cs, has_prev, params, pct, pe, ps, where):
                     FROM (SELECT branch, discount, {dom_code} dc FROM ({heavy_sub}) h)
                     WHERE dc='Cash' GROUP BY branch ORDER BY baht DESC LIMIT 3""", lpe).fetchall()
                 out["by_branch"] = [dict(r) for r in cb]
+                # PR-PD (owner 2026-10-29, no. 11) · where to audit today: the branch x shift (กลางวัน before 15:00, เย็น from
+                # 15:00 - the shared cashier login allows no finer cut) that holds the most of this baht, with its share
+                ts = con.execute(f"""
+                    SELECT branch, CASE WHEN hr < 15 THEN 'กลางวัน' ELSE 'เย็น' END shift,
+                           COUNT(*) bills, ROUND(COALESCE(SUM(discount),0)) baht
+                    FROM (SELECT branch, discount, hr, {dom_code} dc FROM ({heavy_sub}) h)
+                    WHERE dc='Cash' GROUP BY branch, shift ORDER BY baht DESC LIMIT 1""", lpe).fetchone()
+                if ts and out["baht"]:
+                    out["top"] = {"branch": ts["branch"], "shift": ts["shift"], "bills": ts["bills"] or 0, "baht": ts["baht"] or 0,
+                                  "share_pct": round((ts["baht"] or 0) / out["baht"] * 100)}
             return out
         except Exception:
             return {"bills": 0, "baht": 0, "by_branch": [], "unavailable": True}
@@ -3052,6 +3075,27 @@ def _mgt_table(con, *, _daypart, branch, ce, cs, group, has_prev, params, pe, pe
         bd = max(by_day, key=lambda d: d["avg_revenue"], default=None)
         peak["by_day"] = by_day
         peak["best_day"] = bd["dow"] if bd and bd["avg_revenue"] else None
+        # PR-PD (owner 2026-10-29, no. 5) · the weekday that fell: each weekday's revenue per trading day against the same
+        # weekday of the comparison period; weak_day = the largest fall of 10 % or more (two or more such days each side),
+        # the one a weekday promotion or a roster change answers - not the weakest weekday, which is always a Monday
+        if has_prev:
+            pdw = con.execute(f"""
+                SELECT CAST(strftime('%w', st.sold_at) AS INT) w, ROUND({net_revenue_sum('st')},2) rev,
+                       COUNT(DISTINCT date(st.sold_at)) days
+                FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+                WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e
+                GROUP BY w""", {**params, "s": ps.isoformat(), "e": pe.isoformat()}).fetchall()
+            pm = {r["w"]: r for r in pdw}
+            weak = None
+            for i, d in enumerate(by_day):
+                r = pm.get((i + 1) % 7)
+                pdays = (r["days"] or 0) if r else 0
+                d["prev_avg_revenue"] = round((r["rev"] or 0) / pdays) if pdays else None
+                d["delta_pct"] = (round((d["avg_revenue"] / d["prev_avg_revenue"] - 1) * 100, 1)
+                                  if d["prev_avg_revenue"] and d["days"] >= 2 and pdays >= 2 else None)
+                if d["delta_pct"] is not None and d["delta_pct"] <= -10 and (weak is None or d["delta_pct"] < weak["delta_pct"]):
+                    weak = {"dow": d["dow"], "delta_pct": d["delta_pct"], "avg_revenue": d["avg_revenue"], "prev_avg_revenue": d["prev_avg_revenue"]}
+            peak["weak_day"] = weak
 
     # ---- table turnover & occupancy (pos_table_turn_day, day-grain) ----
     table = {"available": False}
@@ -3305,10 +3349,13 @@ def report_management(
                          if th else
                          f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% vs last {pword} (฿{r['revenue']:,.0f}).")})
     if cash_heavy.get("bills"):
+        _top = cash_heavy.get("top") or {}
+        _where_th = (f" · ส่วนใหญ่ {_top['branch']} กะ{_top['shift']} ({_top['share_pct']}%)" if _top.get("branch") else "")
+        _where_en = (f" · mostly {_top['branch']}, {_top['shift']} shift ({_top['share_pct']}%)" if _top.get("branch") else "")
         actions.append({"sev": "high", "baht": -round(cash_heavy.get("baht") or 0), "baht_label": _disc_l,
-            "text": (f"{cash_heavy['bills']} บิลส่วนลดที่จ่ายด้วยเงินสดเป็นหลัก (฿{cash_heavy['baht']:,.0f}) — ตรวจสอบความเสี่ยงเงินขาด"
+            "text": (f"{cash_heavy['bills']} บิลส่วนลดที่จ่ายด้วยเงินสดเป็นหลัก (฿{cash_heavy['baht']:,.0f}){_where_th} — ตรวจสอบความเสี่ยงเงินขาด"
                      if th else
-                     f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}) — review for skim risk.")})
+                     f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}){_where_en} — review for skim risk.")})
     if heavy["bills"]:
         actions.append({"sev": "med", "baht": -round(heavy.get("baht") or 0), "baht_label": _disc_l,
             "text": (f"{heavy['bills']} บิลให้ส่วนลด ≥30% (฿{heavy['baht']:,.0f}) ใน{pword}นี้"
