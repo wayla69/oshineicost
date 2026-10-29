@@ -713,7 +713,29 @@ def overview(*, now: Optional[datetime] = None, env=None, db=None) -> dict:
         if n in SPECS:
             r["running"] = r["running"] or get(n).running
         jobs.append(r)
-    return {"jobs": jobs, "now": _iso(now)}
+    return {"jobs": jobs, "now": _iso(now), "plan_precompute": plan_precompute_view(db)}
+
+
+PLAN_LABEL_TH = "คำนวณแผนสั่งวัตถุดิบล่วงหน้า"
+
+
+def plan_precompute_view(db=None) -> dict:
+    """The precomputed order plans (bom_center/precompute.py): the pass running or last finished in THIS process (with the store and
+    what is pending), else the last finished full pass saved in app_settings. Not a scheduled job: it runs after every data swap
+    and every write that changes a plan."""
+    try:
+        from bom_center import precompute as _pre
+        live = _pre.status()
+    except Exception:  # noqa: BLE001
+        live = {}
+    out = {"label": PLAN_LABEL_TH}
+    if live.get("last_start"):
+        out.update(live)
+    else:
+        out.update(read_status("plan_precompute", db))
+        if live:
+            out.update(enabled=live.get("enabled"), pending=live.get("pending"), store=live.get("store"))
+    return out
 
 
 # ── the watchdog ────────────────────────────────────────────────────────────
@@ -736,7 +758,7 @@ KIND_LEVEL = {"failed": "fail", "creds_missing": "fail", "no_space": "fail", "mi
 
 
 def _finding(job: str, kind: str, meaning: str, last_run: Optional[str], days: Optional[int] = None) -> dict:
-    f = {"job": job, "name": {**LABEL_TH, "data": "ข้อมูลขาย"}.get(job, job), "kind": kind, "level": KIND_LEVEL[kind],
+    f = {"job": job, "name": {**LABEL_TH, "data": "ข้อมูลขาย", "plan": PLAN_LABEL_TH}.get(job, job), "kind": kind, "level": KIND_LEVEL[kind],
          "meaning": f"{TH_KIND[kind]} — {meaning}" if meaning else TH_KIND[kind], "last_run": last_run}
     if days:
         f["days"] = days
@@ -880,6 +902,11 @@ def run_watchdog_check(job: Job, *, client_factory=None, usage_path=None) -> dic
         f = None
     if f:
         findings.append(f)
+    pre = read_status("plan_precompute", job._db)          # the precomputed order plans: a pass that failed for some branch
+    if pre.get("result") == "failed":
+        fl = (pre.get("failures") or [{}])[0]
+        findings.append(_finding("plan", "failed", f"{len(pre.get('failures') or [])} แผน · {fl.get('error') or ''}"[:160],
+                                 pre.get("last_start")))
     if enabled_job("backup", env):
         f = backup_freshness(env, now, client_factory)
         if f:

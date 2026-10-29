@@ -483,6 +483,8 @@ def _bump_gens(branch_id=None) -> None:
         else:
             for k in [k for k in _memo if k[1] == int(branch_id)]:
                 _memo.pop(k, None)
+    from . import precompute as _pc                        # the precomputed plans: drop what can no longer be reached, recompute
+    _pc.gens_moved(branch_id)
 
 
 def plan_cache_ttl() -> float:
@@ -554,11 +556,13 @@ def _orders_sig(con, branch_id: int) -> tuple:
 
 
 def suggest_cached(con, branch_id: int, rnd: str, order_day: date, **kw) -> dict:
-    """forecast.suggest behind the plan cache (see above), inside the plan slots on a miss. The caller gets its own copy."""
+    """forecast.suggest behind the plan cache (see above) and the precomputed-plan store (precompute.py), inside the plan slots on a
+    miss. The caller gets its own copy."""
     import pickle
+    from . import precompute as _pc
     ttl = plan_cache_ttl()
     base = _gen_base(con) if ttl else None
-    key = None
+    key = dkey = None
     if base is not None:
         try:
             sig = json.dumps(kw.get("stock"), sort_keys=True, default=str)
@@ -566,24 +570,50 @@ def suggest_cached(con, branch_id: int, rnd: str, order_day: date, **kw) -> dict
             sig = None
         if sig is not None:
             company = tuple(_slip_gens[int(i)] for i in company_branch_ids(con))
-            key = ("plan", int(branch_id), rnd, order_day.isoformat(), kw.get("weeks"), kw.get("season"),
+            req = (int(branch_id), rnd, order_day.isoformat(), kw.get("weeks"), kw.get("season"),
                    (kw.get("as_of") or date.min).isoformat(), round(float(kw.get("uplift_pct") or 0.0), 6),
-                   (kw.get("delivery") or date.min).isoformat(), kw.get("ref_branch"), kw.get("expected_sales"),
-                   hash(sig), base, _slip_gens[int(branch_id)], company, _orders_sig(con, branch_id))
+                   (kw.get("delivery") or date.min).isoformat(), kw.get("ref_branch"), kw.get("expected_sales"), hash(sig))
+            osig = _orders_sig(con, branch_id)
+            key = ("plan",) + req + (base, _slip_gens[int(branch_id)], company, osig)
             with _plan_lock:
                 hit = _plan_cache.get(key)
             if hit and _time.monotonic() - hit[0] < ttl:
                 return pickle.loads(hit[1])                  # plain dicts / lists / numbers: a pickle is a faster deep copy
-    with _plan_slots:                  # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
-        out = suggest(con, branch_id, rnd, order_day, **kw)
-    if key is not None:
-        stored = pickle.dumps(out, protocol=pickle.HIGHEST_PROTOCOL)
-        with _plan_lock:
-            if len(_plan_cache) >= _PLAN_CACHE_MAX:
-                for k in sorted(_plan_cache, key=lambda k: _plan_cache[k][0])[:_PLAN_CACHE_MAX // 4]:
-                    _plan_cache.pop(k, None)
-            _plan_cache[key] = (_time.monotonic(), stored)
+            # the durable key: as `key`, without core._cache_gen (any prefixed flush in the app) and without the company slip
+            # generations (checked per entry, only for a suggestion that read them); with precompute's own input generations
+            _pc.install(_loaded("core"))               # core's flushes move those generations (idempotent)
+            pgens = _pc.gens(branch_id)
+            dkey = ("pre",) + req + (base[0], base[1], base[2], base[4]) + pgens + (_slip_gens[int(branch_id)], osig)
+            stored = _pc.get(dkey, branch_id, _slip_gens)
+            if stored is not None:
+                return pickle.loads(stored)
+    with _plan_flight(dkey):           # the worker and a request asking for the same plan compute it once
+        if dkey is not None:
+            stored = _pc.get(dkey, branch_id, _slip_gens)
+            if stored is not None:
+                return pickle.loads(stored)
+            snap = _pc.company_snapshot(_slip_gens)
+        with _pc.live_computation():
+            with _plan_slots:          # only the CPU-bound part: a few plans at a time, so a writer keeps the GIL
+                out = suggest(con, branch_id, rnd, order_day, **kw)
+        if key is not None:
+            stored = pickle.dumps(out, protocol=pickle.HIGHEST_PROTOCOL)
+            with _plan_lock:
+                if len(_plan_cache) >= _PLAN_CACHE_MAX:
+                    for k in sorted(_plan_cache, key=lambda k: _plan_cache[k][0])[:_PLAN_CACHE_MAX // 4]:
+                        _plan_cache.pop(k, None)
+                _plan_cache[key] = (_time.monotonic(), stored)
+            _pc.put(dkey, stored, branch_id, pgens, snap if _pc.uses_company(out) else None)
     return out
+
+
+_plan_flight_locks = [threading.Lock() for _ in range(16)]
+
+
+def _plan_flight(key):
+    """Like _flight, on locks of its own: suggest() takes _flight stripes inside (usage_history), so sharing them could deadlock."""
+    import contextlib
+    return contextlib.nullcontext() if key is None else _plan_flight_locks[hash(key) % len(_plan_flight_locks)]
 
 
 def _slip_days(con, branch_id: int, start: date, end: date) -> list:

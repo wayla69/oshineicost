@@ -107,6 +107,7 @@ _data_gen = 0                   # bumped ONLY by a full flush (invalidate_cache(
                                 # changed) — what forecast.usage_history's per-process cache keys on, so the prefixed
                                 # flushes every order / slip / claim save makes do not empty it
 _cache_bytes = 0
+_flush_hooks: list = []         # fn(prefixes) called after every invalidate_cache() (bom_center.precompute: the precomputed plans)
 
 
 def _cache_key(fn_name: str, kwargs: dict) -> str:
@@ -337,6 +338,11 @@ def invalidate_cache(*prefixes: str, rebuild_cost: bool = True):
             _data_gen += 1
             _resp_cache.clear()
             _cache_bytes = 0
+    for hook in list(_flush_hooks):
+        try:
+            hook(prefixes)
+        except Exception as e:   # a hook never breaks the write that flushed
+            print(f"[cache] flush hook failed: {e}")
 
 
 # ---------------------------------------------------------------------------
