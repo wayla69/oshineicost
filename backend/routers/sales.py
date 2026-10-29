@@ -2329,7 +2329,8 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
                threshold: float = Query(1.5, ge=1.0), period: str = Query("day"),
                date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
                top: int = Query(_SPIKE_TOP, ge=1, le=1000),
-               base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None)):
+               base_from: Optional[str] = Query(None), base_to: Optional[str] = Query(None),
+               slim: int = Query(0, ge=0, le=1)):
     """Menus whose plates PER HEAD rose, per branch (answers '#5: which menu was abnormally high').
 
     PR-RK (owner 2026-10-25): `spikes` = every existing menu above its normal ranked by extra_cost (cost roles) or by excess
@@ -2368,7 +2369,10 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
     minus decreases; a branch that sold none in the period counts its normal as a decrease), with cost_share, cum_pct and `material`
     (dish_floor: >= ฿1,000 or >= 0.1 % of the food cost; 20 net plates without cost); dish_totals = up / down / net over every dish;
     `new_dishes` = the new menus per dish (new_dish_floor: >= 20 plates a day or >= ฿1,000). `spikes`, `new_menus` and
-    `spikes_plates` stay as they were (the CSV)."""
+    `spikes_plates` stay as they were (the CSV).
+
+    slim=1 (phone food-cost tile, 2026-10-29): only `dishes` as {menu, concentration} - the full answer is ~750 KB and the
+    phone needs one dish's กระจุก / ทั้งเครือ tag."""
     from fastapi import HTTPException
     if period not in _SPIKE_PERIODS:
         raise HTTPException(400, "period ต้องเป็น day, week, mtd หรือ range")
@@ -2386,8 +2390,12 @@ def menu_spike(request: Request = None, date: Optional[str] = Query(None), branc
             with_cost = bool(_auth.request_modules(request) & _SPIKE_COST_MODULES)
         bf = base_from if isinstance(base_from, str) else None          # a direct call leaves the Query default
         bt = base_to if isinstance(base_to, str) else None
-        return _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
-                                  with_cost=with_cost, top=top, base_from=bf, base_to=bt)
+        out = _menu_spike_period(con, period, date, date_from, date_to, pfilt, pparams, limit, threshold,
+                                 with_cost=with_cost, top=top, base_from=bf, base_to=bt)
+        if slim == 1 and isinstance(out, dict):
+            return {"slim": True, "dishes": [{"menu": d.get("menu"), "concentration": d.get("concentration")}
+                                             for d in (out.get("dishes") or [])]}
+        return out
 
 
 @router.get("/api/sales/cost-per-head")
