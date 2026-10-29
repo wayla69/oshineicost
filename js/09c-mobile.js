@@ -136,7 +136,7 @@ async function phOpenPage(fn) {
 }
 async function phShowSummary() {
   _phSetView('summary');
-  document.body.dataset.group = _MS_GROUP[_msView] || 'home';
+  msShowView(_msView);   // the view on screen is the one the report will draw into
   if (!window.__dataLastDate) { try { await initDataCoverageNote(); } catch (e) { /* the note is non-critical */ } }
   loadMobileSummary(true);
 }
@@ -196,7 +196,9 @@ function phHomeTap() {
 }
 function phBarGo(fn) { _deptCur = null; _deptFocus = null; phOpenPage(fn); }
 // PR-PD no. 15 · a bottom-bar entry that is one of the summary's tabs: open the summary on that tab
-async function phSummaryGo(v) { _deptCur = null; _deptFocus = null; _msView = v; await phShowSummary(); if (_msRpt) msSwitchView(v); }
+// 2026-10-29: the asked view is shown at once - before, a first open (no report yet) left the สรุป view on screen while the
+// report drew into the hidden ยอดขาย / กำไร / สาขา view, so the owner saw an empty summary
+async function phSummaryGo(v) { _deptCur = null; _deptFocus = null; _msView = v; msShowView(v); await phShowSummary(); if (_msRpt) msSwitchView(v); }
 function _phNavOn(it) {
   if (_phView === 'search' || _phView === 'me') return it.id === _phView;
   if (_phView !== 'page') return it.id === 'home';
@@ -1986,13 +1988,16 @@ const _MS_GROUP = { summary: 'home', sales: 'sales', branches: 'buffet', menu: '
 const _MS_VIEWS = ['summary', 'sales', 'branches', 'menu', 'profit', 'discounts'];
 // a phone reader sees only what their role may open on the desktop (same module names as auth.py)
 const _msMod = m => !(window.AUTH && window.AUTH.enabled) || (window.AUTH.modules || []).includes(m);
-function msSwitchView(v) {
-  _msView = v;
+function msShowView(v) {
   document.body.dataset.group = _MS_GROUP[v] || 'home';
   _MS_VIEWS.forEach(x => {
     const el = document.getElementById('msv-' + x); if (el) el.style.display = x === v ? '' : 'none';
     document.getElementById('msnav-' + x)?.classList.toggle('active', x === v);
   });
+}
+function msSwitchView(v) {
+  _msView = v;
+  msShowView(v);
   window.scrollTo(0, 0);
   msRenderActive();
 }
@@ -2124,7 +2129,7 @@ async function msLoadVoice() {
   try { const r = await fetch(`${API}/api/feedback/items?${p}`); if (!r.ok) { wrap.style.display = 'none'; return; } d = await r.json(); }
   catch (e) { wrap.style.display = 'none'; return; }
   const items = d.items || [];
-  wrap.style.display = '';
+  wrap.style.display = items.length ? '' : 'none';   // nothing waiting = no section (owner 2026-10-29)
   document.getElementById('msVoiceCount').textContent = items.length ? `(${items.length}${items.length >= 5 ? '+' : ''})` : '';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
@@ -2330,10 +2335,19 @@ function msLeakCards(L) {
 // ── VIEW: สรุป ──
 function msRenderSummary() {
   const j = _msRpt; if (!j) return;
-  document.getElementById('msKpis').innerHTML = msKpisHtml(j);
-  const tEl = document.getElementById('msTarget'); if (tEl) tEl.innerHTML = msTargetHtml(j);
-  const aEl = document.getElementById('msActions'); if (aEl) aEl.innerHTML = msActionsHtml(j);
-  msRenderWatch(j);
+  // 2026-10-29 (owner: "ถ้าอะไรยังไม่ได้ทำก็ไม่เอาขึ้น"): a section with nothing to show is left out - no target set, no to-do -
+  // and one section that fails to draw never blanks the ones after it
+  const sect = (id, fn) => {
+    const el = document.getElementById(id), wrap = el && el.closest('.ms-section'); if (!el) return;
+    let h = '';
+    try { h = fn(); } catch (e) { console.error('summary ' + id, e); }
+    el.innerHTML = h || '';
+    if (wrap) wrap.style.display = h ? '' : 'none';
+  };
+  sect('msKpis', () => msKpisHtml(j));
+  sect('msTarget', () => (j.pace || {}).target ? msTargetHtml(j) : '');
+  sect('msActions', () => (j.actions || []).length ? msActionsHtml(j) : '');
+  try { msRenderWatch(j); } catch (e) { console.error('summary msWatch', e); }
   // DV6 (review §3.3): โตสุด / ตกสุด by the baht against last month (rev_delta), not the % - a small branch's −25 % is not the
   // branch that lost the most money; the % stays beside the baht
   const brs = j.branches || [], withMom = brs.filter(b => b.rev_delta != null);
@@ -2344,7 +2358,7 @@ function msRenderSummary() {
       <p class="val" style="font-size:17px;color:var(--text-primary,#1e293b)">${esc(b.branch)} <span style="font-size:13px;${_msMuted}">›</span></p>
       <p class="sub"><b style="color:${b.rev_delta < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'};font-variant-numeric:tabular-nums">${dvBaht(b.rev_delta)}</b> ${msPchip(b.wow_pct)}</p></div>`;
   const bw = document.getElementById('msBestWorst');
-  if (bw) { bw.innerHTML = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.parentElement.style.display = brs.length > 1 ? '' : 'none'; }
+  if (bw) { const h = brs.length > 1 ? bwCard(best, true) + bwCard(worst, false) : ''; bw.innerHTML = h; bw.parentElement.style.display = h ? '' : 'none'; }
   msLoadYesterday();
   msPushInit();
 }
@@ -2625,7 +2639,7 @@ function msRenderPeakPay() {
 // ── VIEW: เมนู ──
 // DV6 (phone table review 2026-10-25, §3.4 เมนู + top-10 #9): the tab answers "which dishes push the food cost per head up, in baht"
 // - the management payload's own list (menu.risers: each dish's cost per head now vs last month, the to-do line's figure; DV1 split it
-// into the cost per plate and the plates per head) x the period's customers. Top 5, the rest behind ดูทั้งหมด. The old มาแรง (% of
+// into the cost per plate and the plates per head) x the period's customers. Top 15 (owner 2026-10-29), the rest behind ดูทั้งหมด. The old มาแรง (% of
 // pieces) and ขายดี (pieces) lists are gone; a role without a cost module (the server strips menu.risers, PL3) keeps ขายดี in plates.
 async function msLoadMenu() {
   const j = _msRpt, wrap = document.getElementById('msMenuRisers'), title = document.getElementById('msMenuTitle');
@@ -2633,7 +2647,7 @@ async function msLoadMenu() {
   const M = j.menu || {};
   if (canSeeCost() && !M.hidden) {
     if (title) title.textContent = 'เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)';
-    wrap.innerHTML = msCostRisersHtml(j, 'msmenu', 5);
+    wrap.innerHTML = msCostRisersHtml(j, 'msmenu', 15);
     return;
   }
   if (title) title.textContent = 'เมนูขายดี (จำนวนจาน)';

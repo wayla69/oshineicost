@@ -188,7 +188,7 @@ def test_the_summary_tabs_answer_in_baht():
     m = _js("js/09c-mobile.js")
     html = _js("index.html")
     assert "function msRisersHtml" not in m and "มาแรงเดือนนี้" not in html     # the % of pieces list is gone
-    assert "function msCostRisersHtml(j, key, top)" in m and "msCostRisersHtml(j, 'msmenu', 5)" in m
+    assert "function msCostRisersHtml(j, key, top)" in m and "msCostRisersHtml(j, 'msmenu', 15)" in m
     assert "_msBranchSort = 'chg'" in m and 'id="msSortChg"' in html and "msSortMom" not in html
     assert re.search(r"function msActionsHtml\(j\)[\s\S]*?a\.baht[\s\S]*?a\.baht_label", m)
     assert "b.rev_delta - a.rev_delta" in m                                         # เพิ่ม / ลด มากสุด by baht
