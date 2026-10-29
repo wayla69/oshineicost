@@ -1,0 +1,48 @@
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="28" font-size="15" font-weight="600" fill="#141414">Every call goes to Buzzebees: Easy POS 8 APIs, Easy HQ 1, Oshinei 1</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M284 112H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 232H340V144H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 320H356V288H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 408H340V372H396" marker-end="url(#map-arrow)"/>
+  </g>
+  <rect x="380" y="60" width="356" height="364" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="84" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees</text>
+  <rect x="396" y="100" width="324" height="56" rx="8" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="558" y="124" text-anchor="middle" font-weight="600" fill="#141414">POS API (/pos/v1)</text>
+  <text x="558" y="144" text-anchor="middle" font-size="11.5" fill="#141414">Receives B0–B9 · validates API keys · blocks duplicates</text>
+  <rect x="396" y="176" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="200" text-anchor="middle" font-weight="600" fill="#141414">Members, points and coupons</text>
+  <text x="558" y="220" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Earn rules · coupons · transaction history</text>
+  <rect x="396" y="252" width="324" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="276" text-anchor="middle" font-weight="600" fill="#141414">LINE OA (CRM PLUS)</text>
+  <text x="558" y="296" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Member sign-up · PDPA consent</text>
+  <text x="558" y="312" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Member QR · receipt QR scanning</text>
+  <rect x="396" y="344" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="368" text-anchor="middle" font-weight="600" fill="#141414">Reporting and reconciliation</text>
+  <text x="558" y="388" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Daily earn / burn / coupon / void records</text>
+
+  <rect x="24" y="60" width="260" height="120" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="84" font-weight="600" fill="#141414">Easy POS · terminals in ~35 branches</text>
+  <text x="36" y="104" font-size="11.5" fill="#5a5a5a">B0 health check · B1 member lookup</text>
+  <text x="36" y="120" font-size="11.5" fill="#5a5a5a">B2 validate coupon · B3 redeem coupon</text>
+  <text x="36" y="136" font-size="11.5" fill="#5a5a5a">B4 burn points · B5 earn points</text>
+  <text x="36" y="152" font-size="11.5" fill="#5a5a5a">B6 void · B8 transaction status</text>
+  <text x="36" y="168" font-size="11.5" fill="#5a5a5a">Prints the receipt QR</text>
+  <rect x="24" y="204" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="228" font-weight="600" fill="#141414">Easy HQ · head office</text>
+  <text x="36" y="248" font-size="11.5" fill="#5a5a5a">B7 branch and menu master data, daily</text>
+  <rect x="24" y="284" width="260" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="308" font-weight="600" fill="#141414">Customer (via LINE)</text>
+  <text x="36" y="328" font-size="11.5" fill="#5a5a5a">Signs up and gets a member QR</text>
+  <text x="36" y="344" font-size="11.5" fill="#5a5a5a">Scans the receipt QR to earn points</text>
+  <rect x="24" y="380" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="404" font-weight="600" fill="#141414">Oshinei reporting system</text>
+  <text x="36" y="424" font-size="11.5" fill="#5a5a5a">B9 pulls the reconciliation, daily 06:00</text>
+
+  <text x="340" y="104" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B0–B6, B8</text>
+  <text x="346" y="194" font-size="11.5" fill="#5a5a5a">B7</text>
+  <text x="362" y="306" font-size="11.5" fill="#5a5a5a">LINE</text>
+  <text x="346" y="370" font-size="11.5" fill="#5a5a5a">B9</text>
+</svg>

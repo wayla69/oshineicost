@@ -1,0 +1,556 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Response to the Buzzebees CRM PLUS POS API Proposal — Oshinei</title>
+<style>
+{{CSS}}
+/* letter additions */
+.lh{ display:flex; justify-content:space-between; align-items:flex-end; border-bottom:2px solid var(--accent); padding-bottom:8pt; margin-bottom:14pt; }
+.lh .org{ font-size:16pt; font-weight:700; color:var(--accent); }
+.lh .meta{ text-align:right; font-size:9pt; color:var(--muted); line-height:1.5; }
+table.addr{ border:0; margin:0 0 12pt; font-size:10pt; }
+table.addr td{ border:0; padding:1.5pt 8pt 1.5pt 0; }
+table.addr td.k{ color:var(--muted); width:16%; }
+.subject{ font-size:13pt; font-weight:600; margin:4pt 0 10pt; }
+.box{ border:1px solid var(--rule); border-left:3px solid var(--accent); background:var(--accent-soft); padding:8pt 10pt; margin:6pt 0 10pt; break-inside:avoid; }
+.box p:last-child{ margin-bottom:0; }
+.pri{ display:inline-block; font-size:8.5pt; font-weight:600; padding:0 5pt; border-radius:3px; border:1px solid currentColor; white-space:nowrap; }
+.pri.b{ color:#b42318; } .pri.p{ color:#9a5b00; } .pri.n{ color:#5a5a5a; }
+.req{ break-inside:avoid; border:1px solid var(--rule); border-radius:4px; padding:8pt 10pt; margin:0 0 10pt; }
+.req h3{ margin:0 0 4pt; }
+.req table{ margin:4pt 0 0; }
+.req td.k{ width:22%; color:var(--muted); white-space:normal; }
+.kpi{ display:flex; gap:8pt; margin:6pt 0 10pt; break-inside:avoid; }
+.kpi div{ flex:1; border:1px solid var(--rule); border-radius:4px; padding:6pt 8pt; }
+.kpi b{ display:block; font-size:15pt; font-weight:700; color:var(--ink); }
+.kpi span{ font-size:8.5pt; color:var(--muted); line-height:1.3; display:block; }
+.sign{ margin-top:20pt; break-inside:avoid; }
+.sign table td{ height:34pt; vertical-align:bottom; }
+</style>
+</head>
+<body>
+
+<!-- ===================== PAGE 1: LETTERHEAD + SUMMARY ===================== -->
+<div class="lh">
+  <div class="org">Oshinei</div>
+  <div class="meta">Ref. OSH-CRM-2026-002<br>27 October 2026</div>
+</div>
+
+<table class="addr">
+  <tr><td class="k">To</td><td>Buzzebees Co., Ltd. — CRM PLUS project team</td></tr>
+  <tr><td class="k">Cc</td><td>Easy POS — account manager and HO_CRM technical team</td></tr>
+  <tr><td class="k">From</td><td>Oshinei — project owner, CRM integration</td></tr>
+  <tr><td class="k">Re</td><td>Your document "API CRM PLUS_full - 2026.xlsx" (10 sheets, specification versions 1–3, 2022–2025)</td></tr>
+</table>
+
+<div class="subject">Response to the CRM PLUS POS API proposal and requests required before development</div>
+
+<p>Thank you for sending the CRM PLUS POS API specification. We have reviewed every sheet against our requirements and against live data from our Easy POS head-office database (HQ_Oshinei, read-only access, January–October 2026). This letter sets out our position, the evidence behind it, and the changes we need before development starts.</p>
+
+<h2 class="first" id="s1">1. Summary</h2>
+<div class="box">
+<p><b>Position.</b> Oshinei accepts the CRM PLUS POS API as the baseline for the integration. Member lookup (<code>/pos/profile</code>), point earning (<code>/pos/earn</code>) and coupon check/redeem (<code>/wallet/pay</code>) cover the core checkout flow.</p>
+<p><b>Conditions.</b> Four gaps would cause lost or duplicated customer value in normal operation and must be closed before development (requests R1–R4). Six further items are required before the pilot (R5–R10).</p>
+<p><b>Change of roles.</b> Your document describes a standard API that the POS must call. This means the POS-side development falls to Easy POS, not to Buzzebees as previously discussed. We ask Easy POS to confirm scope, effort and cost (section 7).</p>
+</div>
+
+<table>
+  <tr><th style="width:8%">Ref.</th><th>Request to Buzzebees</th><th style="width:17%">Priority</th></tr>
+  <tr><td>R1</td><td>Add a unique reference (<code>refId</code>) and the receipt number to the earn APIs, and reject duplicates</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R2</td><td>Allow point reversal (<code>/earn/cancel</code>) after the day of sale, at least 30 days</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R3</td><td>Provide an API to reverse a redeemed coupon</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R4</td><td>Provide a minimal profile response for the POS (data minimisation under the PDPA)</td><td><span class="pri b">Blocking</span></td></tr>
+  <tr><td>R5</td><td>Document the transaction status API (<code>/api/wallet/query</code>) and extend it to earn</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R6</td><td>Provide a daily reconciliation report by branch, date and receipt</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R7</td><td>Confirm which API burns points as a bill discount</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R8</td><td>Confirm support for earning through a QR code printed on the receipt</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R9</td><td>Issue Oshinei-specific credentials per branch and confirm production URLs</td><td><span class="pri p">Before pilot</span></td></tr>
+  <tr><td>R10</td><td>Correct the inconsistencies in the specification (Appendix A)</td><td><span class="pri n">Before development</span></td></tr>
+</table>
+<p>We request a written reply to R1–R10 within 10 business days (proposed), followed by a joint meeting of Oshinei, Easy POS and Buzzebees.</p>
+
+<!-- ===================== CONTENTS ===================== -->
+<section class="toc">
+  <h2 class="first" style="break-before:page">Contents</h2>
+  <ol>
+    <li><span class="n">1</span><span class="t">Summary</span><span class="pg" data-key="s1">–</span></li>
+    <li><span class="n">2</span><span class="t">Our current POS data (evidence from MSSQL)</span><span class="pg" data-key="s2">–</span></li>
+    <li><span class="n">3</span><span class="t">Proposed integration architecture</span><span class="pg" data-key="s3">–</span></li>
+    <li><span class="n">4</span><span class="t">Requirement coverage by the CRM PLUS API</span><span class="pg" data-key="s4">–</span></li>
+    <li><span class="n">5</span><span class="t">Checkout sequence on the CRM PLUS API</span><span class="pg" data-key="s5">–</span></li>
+    <li><span class="n">6</span><span class="t">Requests to Buzzebees (R1–R10)</span><span class="pg" data-key="s6">–</span></li>
+    <li><span class="n">7</span><span class="t">Requests to Easy POS (E1–E5)</span><span class="pg" data-key="s7">–</span></li>
+    <li><span class="n">8</span><span class="t">Items Oshinei will confirm (D1–D5)</span><span class="pg" data-key="s8">–</span></li>
+    <li><span class="n">9</span><span class="t">Credential handling</span><span class="pg" data-key="s9">–</span></li>
+    <li><span class="n">10</span><span class="t">Next steps</span><span class="pg" data-key="s10">–</span></li>
+    <li><span class="n">A</span><span class="t">Appendix A — Specification review, sheet by sheet</span><span class="pg" data-key="s11">–</span></li>
+    <li><span class="n">B</span><span class="t">Appendix B — Data sources and method</span><span class="pg" data-key="s12">–</span></li>
+  </ol>
+</section>
+
+<!-- ===================== 2. EVIDENCE ===================== -->
+<h2 id="s2">2. Our current POS data (evidence from MSSQL)</h2>
+<p class="lead">The figures below come from the Easy POS head-office database. They set the volume Buzzebees must support, show that no loyalty data exists today, and explain why several of our requests are necessary.</p>
+
+<h3>2.1 Volume and estate</h3>
+<div class="kpi">
+  <div><b>500,905</b><span>finalised bills, Jan–Sep 2026</span></div>
+  <div><b>≈55,700</b><span>bills per month on average (47,754–69,475)</span></div>
+  <div><b>33</b><span>trading branches in Sep 2026 (27 in Jan)</span></div>
+  <div><b>33–35</b><span>POS terminals in use, about one per branch</span></div>
+</div>
+<table>
+  <tr><th>Month 2026</th><th>Jan</th><th>Feb</th><th>Mar</th><th>Apr</th><th>May</th><th>Jun</th><th>Jul</th><th>Aug</th><th>Sep</th></tr>
+  <tr><td>Finalised bills</td><td>69,475</td><td>63,003</td><td>50,381</td><td>54,507</td><td>61,337</td><td>47,754</td><td>50,806</td><td>54,314</td><td>49,328</td></tr>
+  <tr><td>Trading branches</td><td>27</td><td>27</td><td>27</td><td>29</td><td>30</td><td>31</td><td>32</td><td>33</td><td>33</td></tr>
+  <tr><td>Voided bills</td><td>295</td><td>233</td><td>263</td><td>254</td><td>258</td><td>275</td><td>251</td><td>317</td><td>337</td></tr>
+</table>
+
+<h3>2.2 Load profile</h3>
+<p>Payments concentrate in two peaks: lunch (13:00–14:00) and dinner (19:00–21:00). The busiest single hour in July–September 2026 closed <b>452 bills chain-wide</b> (12 August 2026, 13:00–14:00). The busiest single minute closed <b>15 bills</b>.</p>
+<div class="fig">
+<svg viewBox="0 0 760 300" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">Dinner is the peak: 262 bills an hour on an average day at 20:00</text>
+  <text x="24" y="42" font-size="11" fill="#5a5a5a">Average bills closed per hour, all branches, September 2026 (hour of payment)</text>
+  <g stroke="#e3e3e3" stroke-width="1">
+    <line x1="70" x2="736" y1="250" y2="250" stroke="#8a8a8a"/>
+    <line x1="70" x2="736" y1="200" y2="200"/><line x1="70" x2="736" y1="150" y2="150"/><line x1="70" x2="736" y1="100" y2="100"/>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="end">
+    <text x="62" y="254">0</text><text x="62" y="204">100</text><text x="62" y="154">200</text><text x="62" y="104">300</text>
+  </g>
+  <!-- bars: hours 11..22, x step 54, width 40; scale 0.5 px per bill -->
+  <g fill="#8fa9cc">
+    <rect x="84" y="247.5" width="40" height="2.5"/>
+    <rect x="138" y="209.5" width="40" height="40.5" rx="2"/>
+    <rect x="192" y="160" width="40" height="90" rx="2"/>
+    <rect x="246" y="163.5" width="40" height="86.5" rx="2"/>
+    <rect x="300" y="178" width="40" height="72" rx="2"/>
+    <rect x="354" y="193" width="40" height="57" rx="2"/>
+    <rect x="408" y="188" width="40" height="62" rx="2"/>
+    <rect x="462" y="170" width="40" height="80" rx="2"/>
+    <rect x="516" y="130.5" width="40" height="119.5" rx="2"/>
+    <rect x="624" y="175.5" width="40" height="74.5" rx="2"/>
+    <rect x="678" y="247.5" width="40" height="2.5"/>
+  </g>
+  <rect x="570" y="119" width="40" height="131" rx="2" fill="#1f4e8c"/>
+  <g font-size="10.5" fill="#141414" text-anchor="middle">
+    <text x="158" y="203">81</text><text x="212" y="154">180</text><text x="266" y="157">173</text><text x="320" y="172">144</text>
+    <text x="374" y="187">114</text><text x="428" y="182">124</text><text x="482" y="164">160</text><text x="536" y="124">239</text>
+    <text x="590" y="112" font-weight="600">262</text><text x="644" y="169">149</text>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="middle">
+    <text x="104" y="268">11</text><text x="158" y="268">12</text><text x="212" y="268">13</text><text x="266" y="268">14</text><text x="320" y="268">15</text><text x="374" y="268">16</text>
+    <text x="428" y="268">17</text><text x="482" y="268">18</text><text x="536" y="268">19</text><text x="590" y="268">20</text><text x="644" y="268">21</text><text x="698" y="268">22</text>
+  </g>
+  <text x="403" y="288" font-size="10.5" fill="#5a5a5a" text-anchor="middle">Hour of payment (Thailand time)</text>
+</svg>
+<div class="cap">Figure 1. Average hourly bill volume, September 2026. Each paid bill triggers up to five API calls (section 5).</div>
+</div>
+<p><b>Implication for capacity.</b> With up to five calls per bill, the busiest hour observed (452 bills) generates up to about 2,300 requests in one hour, and the busiest minute (15 bills) up to 75 requests. We ask Buzzebees to confirm the rate limit applied to an Oshinei token and that it covers at least 10 requests per second with headroom for branch growth.</p>
+
+<h3>2.3 No loyalty data exists today</h3>
+<table>
+  <tr><th style="width:42%">Item in HQ_Oshinei</th><th style="width:22%">Value</th><th>Meaning</th></tr>
+  <tr><td>Bills with points earned or redeemed (<code>Sale.EarnPoint</code>, <code>Sale.RedeemedPoint</code>)</td><td>0 of 500,905 (Jan–Sep); 0 in Oct 1–26</td><td>No point scheme has ever run on this POS</td></tr>
+  <tr><td>Bills linked to a customer (<code>Sale.CustomerId</code>)</td><td>30,481 (6.1%), only 5–15 distinct customers a month</td><td>House and corporate accounts, not members</td></tr>
+  <tr><td><code>Customer</code> table</td><td>7,128 rows; 1,938 phones, 53 e-mails, 18 birthdays</td><td>Tax-invoice records; not usable as a member base</td></tr>
+  <tr><td>Loyalty tables (<code>MemberCard</code>, <code>CustPoint</code>, <code>CustPointBalance</code>, <code>CustomerLoyalty</code>, <code>LoyaltyRank</code>, <code>LoyaltyPointDetail</code>, <code>MemberPrivilege</code>)</td><td>0 rows each</td><td>Easy's built-in membership module is unused</td></tr>
+</table>
+<p>Consequence: the member base starts empty and every member will register through the Buzzebees LINE Official Account. There is no existing data to migrate.</p>
+
+<h3>2.4 Integration hooks already present in Easy POS</h3>
+<table>
+  <tr><th style="width:36%">Object</th><th style="width:28%">Current state</th><th>Use in this integration</th></tr>
+  <tr><td><code>ThirdParty</code> = <code>HO_CRM</code> (IsCRM = 1)</td><td>Active, last updated 21 Aug 2026</td><td>The connector through which the POS calls an external CRM</td></tr>
+  <tr><td><code>PromotionByCRM</code></td><td>0 rows; has CouponNumber, DiscountAmount, TransactionRef, IsSuccess, DiscountStatus, CouponSeriesCode</td><td>Where Easy records each coupon used and the Buzzebees transaction id</td></tr>
+  <tr><td><code>CallAPILog</code></td><td>0 rows; logs URL, method, body, response, status, response time, branch</td><td>Audit trail of every call to Buzzebees</td></tr>
+  <tr><td><code>AssignThirdPartyToBranch</code> = <code>QrDataReceipt</code></td><td>Assigned to 35 branches, all inactive</td><td>Receipt QR for self-service earning (R8)</td></tr>
+  <tr><td><code>QRDataReceiptSetting</code></td><td>0 rows (has QRPattern, public and secret key fields)</td><td>Receipt QR format to be agreed with Buzzebees</td></tr>
+  <tr><td><code>ApiKey</code> for system "Easy"</td><td>Expired 8 Jul 2026</td><td>Easy to confirm whether it is needed (E4)</td></tr>
+</table>
+
+<div class="keep">
+<h3>2.5 How a bill is identified</h3>
+<p>In September 2026 the 49,665 finalised bills had 49,665 unique branch + <code>SaleNum</code> pairs, but only 33,542 distinct <code>SaleId</code> values. <code>SaleId</code> therefore repeats across branches and cannot identify a bill on its own. <code>SaleNum</code> embeds the business date and a daily sequence, and return documents carry an <code>RE</code> prefix.</p>
+<div class="fig">
+<svg viewBox="0 0 760 170" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">Branch code + SaleNum identifies one bill; SaleId alone does not</text>
+  <rect x="24" y="44" width="150" height="56" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="99" y="68" text-anchor="middle" font-weight="600" fill="#141414">Branch code</text>
+  <text x="99" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Easy BranchCode</text>
+  <text x="190" y="78" font-size="18" fill="#5a5a5a">+</text>
+  <rect x="210" y="44" width="300" height="56" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="360" y="68" text-anchor="middle" font-weight="600" fill="#141414">SaleNum  69 09 30 115</text>
+  <text x="360" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">Thai year 2569 · month 09 · day 30 · sequence 115</text>
+  <text x="526" y="78" font-size="18" fill="#5a5a5a">=</text>
+  <rect x="548" y="44" width="188" height="56" rx="6" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="642" y="68" text-anchor="middle" font-weight="600" fill="#141414">Bill key</text>
+  <text x="642" y="88" text-anchor="middle" font-size="11.5" fill="#5a5a5a">unique: 49,665 of 49,665</text>
+  <rect x="24" y="116" width="712" height="40" rx="6" fill="none" stroke="#b42318" stroke-width="1.25" stroke-dasharray="4 3"/>
+  <text x="40" y="141" font-size="12" fill="#141414">Not unique: SaleId — 33,542 distinct values for 49,665 bills (Sep 2026). Return bills carry SaleNum with prefix "RE".</text>
+</svg>
+<div class="cap">Figure 2. Bill identifier in Easy POS. We propose that the bill key is sent in every earn and redeem call (R1).</div>
+</div>
+
+</div>
+<div class="keep">
+<h3>2.6 When bills are voided</h3>
+<p>Between January and September 2026, 2,482 finalised bills were voided. 2,446 (98.5%) were voided on the day of sale, but <b>36 were voided on a later day, up to 19 days after the sale</b>. Under the current rule that points can be reversed only within the day (sheet "Refund point"), every one of these 36 bills would leave points on a member account for a sale that no longer exists.</p>
+<div class="fig">
+<svg viewBox="0 0 760 270" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">36 voids came after the day of sale — none can be reversed under the same-day rule</text>
+  <text x="24" y="42" font-size="11" fill="#5a5a5a">Voided bills by days between sale and void, Jan–Sep 2026 (same-day voids, 2,446, not drawn)</text>
+  <g stroke="#e3e3e3"><line x1="60" x2="736" y1="220" y2="220" stroke="#8a8a8a"/><line x1="60" x2="736" y1="185" y2="185"/><line x1="60" x2="736" y1="150" y2="150"/><line x1="60" x2="736" y1="115" y2="115"/><line x1="60" x2="736" y1="80" y2="80"/></g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="end"><text x="52" y="224">0</text><text x="52" y="189">5</text><text x="52" y="154">10</text><text x="52" y="119">15</text><text x="52" y="84">20</text></g>
+  <g fill="#b42318">
+    <rect x="70" y="80" width="26" height="140" rx="2"/>
+    <rect x="105" y="199" width="26" height="21" rx="2"/>
+    <rect x="140" y="213" width="26" height="7" rx="2"/><rect x="175" y="213" width="26" height="7" rx="2"/><rect x="210" y="213" width="26" height="7" rx="2"/><rect x="245" y="213" width="26" height="7" rx="2"/>
+    <rect x="350" y="213" width="26" height="7" rx="2"/><rect x="385" y="213" width="26" height="7" rx="2"/>
+    <rect x="525" y="199" width="26" height="21" rx="2"/><rect x="560" y="199" width="26" height="21" rx="2"/>
+    <rect x="700" y="213" width="26" height="7" rx="2"/>
+  </g>
+  <g font-size="10.5" fill="#141414" text-anchor="middle">
+    <text x="83" y="74" font-weight="600">20</text><text x="118" y="193">3</text><text x="153" y="207">1</text><text x="188" y="207">1</text><text x="223" y="207">1</text><text x="258" y="207">1</text>
+    <text x="363" y="207">1</text><text x="398" y="207">1</text><text x="538" y="193">3</text><text x="573" y="193">3</text><text x="713" y="207">1</text>
+  </g>
+  <g font-size="10.5" fill="#5a5a5a" text-anchor="middle">
+    <text x="83" y="236">1</text><text x="118" y="236">2</text><text x="153" y="236">3</text><text x="188" y="236">4</text><text x="223" y="236">5</text><text x="258" y="236">6</text>
+    <text x="293" y="236">7</text><text x="328" y="236">8</text><text x="363" y="236">9</text><text x="398" y="236">10</text><text x="433" y="236">11</text><text x="468" y="236">12</text>
+    <text x="503" y="236">13</text><text x="538" y="236">14</text><text x="573" y="236">15</text><text x="608" y="236">16</text><text x="643" y="236">17</text><text x="678" y="236">18</text><text x="713" y="236">19</text>
+  </g>
+  <text x="398" y="256" font-size="10.5" fill="#5a5a5a" text-anchor="middle">Days after the day of sale</text>
+</svg>
+<div class="cap">Figure 3. Voids made after the day of sale, by delay in days. Total 36; the longest delay was 19 days.</div>
+</div>
+</div>
+<p>No return documents (<code>IsReturn</code>) were recorded in the period, so all reversals today are voids. If points are introduced, partial returns may appear; the cancel API must then support reversing a bill and earning again on the reduced amount (R2).</p>
+
+<!-- ===================== 3. ARCHITECTURE ===================== -->
+<h2 id="s3">3. Proposed integration architecture</h2>
+<p class="lead">All calls originate from Oshinei systems and go to Buzzebees. POS terminals sit behind branch networks and cannot accept inbound calls. Solid lines are endpoints in your specification; dashed lines are items we request.</p>
+<div class="fig">
+<svg viewBox="0 0 760 470" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12.5">
+  <defs>
+    <marker id="a1" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker>
+    <marker id="a2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#b42318"/></marker>
+  </defs>
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">The POS calls five Buzzebees endpoints; three capabilities are still missing</text>
+  <!-- left: oshinei side -->
+  <rect x="24" y="48" width="250" height="300" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="149" y="70" text-anchor="middle" font-weight="600" fill="#141414">Oshinei / Easy POS</text>
+  <rect x="40" y="84" width="218" height="96" rx="6" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="52" y="106" font-weight="600" fill="#141414">Easy POS terminal</text>
+  <text x="52" y="124" font-size="11" fill="#5a5a5a">33 branches · 33–35 terminals</text>
+  <text x="52" y="140" font-size="11" fill="#5a5a5a">via HO_CRM connector</text>
+  <text x="52" y="156" font-size="11" fill="#5a5a5a">logs: CallAPILog</text>
+  <text x="52" y="172" font-size="11" fill="#5a5a5a">coupons: PromotionByCRM</text>
+  <rect x="40" y="196" width="218" height="56" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="52" y="218" font-weight="600" fill="#141414">Receipt printer</text>
+  <text x="52" y="238" font-size="11" fill="#5a5a5a">receipt QR (QrDataReceipt)</text>
+  <rect x="40" y="268" width="218" height="64" rx="6" fill="none" stroke="#8a8a8a"/>
+  <text x="52" y="290" font-weight="600" fill="#141414">Oshinei reporting system</text>
+  <text x="52" y="308" font-size="11" fill="#5a5a5a">daily reconciliation with</text>
+  <text x="52" y="324" font-size="11" fill="#5a5a5a">Easy sales data</text>
+  <!-- customer -->
+  <rect x="24" y="372" width="250" height="72" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="40" y="396" font-weight="600" fill="#141414">Customer (LINE)</text>
+  <text x="40" y="414" font-size="11" fill="#5a5a5a">registers, shows member QR,</text>
+  <text x="40" y="430" font-size="11" fill="#5a5a5a">scans receipt QR</text>
+  <!-- right: buzzebees -->
+  <rect x="420" y="48" width="316" height="396" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="578" y="70" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees CRM PLUS</text>
+  <rect x="436" y="84" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="107" fill="#141414">GET /pos/profile — member lookup</text>
+  <rect x="436" y="128" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="151" fill="#141414">POST /pos/earn — earn points</text>
+  <rect x="436" y="172" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="195" fill="#141414">POST /wallet/pay — check / redeem coupon</text>
+  <rect x="436" y="216" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="239" fill="#141414">POST /earn/cancel — same-day reversal</text>
+  <rect x="436" y="260" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="283" fill="#141414">/api/wallet/query — status (undocumented)</text>
+  <rect x="436" y="304" width="284" height="36" rx="6" fill="none" stroke="#b42318" stroke-dasharray="4 3"/><text x="448" y="327" fill="#b42318">Coupon reversal — requested (R3)</text>
+  <rect x="436" y="348" width="284" height="36" rx="6" fill="none" stroke="#b42318" stroke-dasharray="4 3"/><text x="448" y="371" fill="#b42318">Daily reconciliation report — requested (R6)</text>
+  <rect x="436" y="392" width="284" height="36" rx="6" fill="none" stroke="#8a8a8a"/><text x="448" y="415" fill="#141414">LINE OA — registration, receipt-QR earn (R8)</text>
+  <!-- connectors -->
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M258 102H436" marker-end="url(#a1)"/>
+    <path d="M258 132H360V146H436" marker-end="url(#a1)"/>
+    <path d="M258 150H372V190H436" marker-end="url(#a1)"/>
+    <path d="M258 164H384V234H436" marker-end="url(#a1)"/>
+    <path d="M258 172H396V278H436" marker-end="url(#a1)"/>
+    <path d="M274 408H436" marker-end="url(#a1)"/>
+  </g>
+  <g fill="none" stroke="#b42318" stroke-width="1.25" stroke-dasharray="4 3">
+    <path d="M258 176H408V322H436" marker-end="url(#a2)"/>
+    <path d="M258 300H344V366H436" marker-end="url(#a2)"/>
+  </g>
+  <text x="290" y="96" font-size="10.5" fill="#5a5a5a">at checkout</text>
+  <text x="290" y="296" font-size="10.5" fill="#5a5a5a">daily 06:00</text>
+</svg>
+<div class="cap">Figure 4. Proposed architecture. Red dashed items are not in the specification received and are requested in section 6.</div>
+</div>
+<p>Token model in your specification: one merchant token for all branches, with <code>branchId</code>, <code>brandId</code> and <code>terminalId</code> sent in each call. We request per-branch credentials (R9) so that a compromised branch can be revoked without stopping the chain.</p>
+
+<!-- ===================== 4. COVERAGE ===================== -->
+<h2 id="s4">4. Requirement coverage by the CRM PLUS API</h2>
+<p class="lead">Our specification (API Specification Draft 1.1, B0–B9) mapped to the endpoints in your document.</p>
+<table>
+  <tr><th style="width:7%">Ref.</th><th style="width:20%">Our requirement</th><th style="width:28%">CRM PLUS endpoint</th><th style="width:13%">Coverage</th><th>Gap</th></tr>
+  <tr><td>B0</td><td>Health check</td><td>—</td><td>Missing</td><td>POS cannot show "membership system unavailable" before a call fails. Acceptable if R5 exists; otherwise requested.</td></tr>
+  <tr><td>B1</td><td>Member lookup</td><td><code>GET /pos/profile</code> by <code>code</code> or <code>contactNumber</code></td><td>Partial</td><td>Returns full personal profile; no coupon list, point value or burn limits (R4).</td></tr>
+  <tr><td>B2</td><td>Validate coupon</td><td><code>POST /wallet/pay</code> with <code>to_use=false</code></td><td>Covered</td><td>Confirm returned discount type and value for bill- and item-level coupons.</td></tr>
+  <tr><td>B3</td><td>Redeem coupon</td><td><code>POST /wallet/pay</code> with <code>amount=0</code>, <code>refId</code></td><td>Covered</td><td>No reversal (R3).</td></tr>
+  <tr><td>B4</td><td>Burn points as discount</td><td><code>POST /wallet/pay</code> payment mode?</td><td>Unclear</td><td>Payment mode appears to debit a wallet balance, not points (R7).</td></tr>
+  <tr><td>B5</td><td>Earn points</td><td><code>/pos/earn</code>, <code>/pos/earn_direct</code>, <code>/pos/earn_direct_spending</code></td><td>Partial</td><td>No unique reference or receipt number; retries can double-earn (R1).</td></tr>
+  <tr><td>B6</td><td>Reverse transactions</td><td><code>POST /earn/cancel</code></td><td>Partial</td><td>Same-day only; points only, not coupons (R2, R3).</td></tr>
+  <tr><td>B7</td><td>Master data</td><td>— (set up in Buzzebees back office)</td><td>Accepted</td><td>Buzzebees to issue <code>branchId</code>/<code>terminalId</code> per branch (R9).</td></tr>
+  <tr><td>B8</td><td>Transaction status</td><td><code>/api/wallet/query</code> (mentioned, not specified)</td><td>Partial</td><td>No specification; no status for earn (R5).</td></tr>
+  <tr><td>B9</td><td>Reconciliation report</td><td>—</td><td>Missing</td><td>R6.</td></tr>
+  <tr><td>QR</td><td>Receipt-QR earning</td><td>—</td><td>Missing</td><td>R8.</td></tr>
+</table>
+<p>Of eleven requirements, two are covered, five partly covered, one unclear, one accepted as an alternative and two missing. The four blocking gaps (R1–R4) all sit on the earn, reversal and lookup paths used on every bill.</p>
+
+<!-- ===================== 5. SEQUENCE ===================== -->
+<h2 id="s5">5. Checkout sequence on the CRM PLUS API</h2>
+<p class="lead">How one bill would run on your endpoints. The POS calls at most five times; coupon redemption must succeed before the bill closes, and earning happens after payment so the receipt can print the points.</p>
+<div class="fig">
+<svg viewBox="0 0 760 360" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12.5">
+  <defs>
+    <marker id="s1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker>
+    <marker id="s2a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#b42318"/></marker>
+  </defs>
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">One bill, five calls; reversal is the weak point</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M232 92H250" marker-end="url(#s1a)"/><path d="M358 92H376" marker-end="url(#s1a)"/><path d="M484 92H502" marker-end="url(#s1a)"/><path d="M610 92H628" marker-end="url(#s1a)"/>
+    <path d="M178 128V196" marker-start="url(#s1a)" marker-end="url(#s1a)"/><path d="M304 128V196" marker-start="url(#s1a)" marker-end="url(#s1a)"/>
+    <path d="M430 128V196" marker-start="url(#s1a)" marker-end="url(#s1a)"/><path d="M556 128V196" marker-start="url(#s1a)" marker-end="url(#s1a)"/>
+    <path d="M600 272V236" marker-start="url(#s1a)" marker-end="url(#s1a)"/>
+  </g>
+  <path d="M332 272V236" fill="none" stroke="#b42318" stroke-width="1.25" stroke-dasharray="4 3" marker-start="url(#s2a)" marker-end="url(#s2a)"/>
+  <text x="24" y="96" font-weight="600" fill="#141414">Easy POS</text>
+  <rect x="124" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a"/><text x="178" y="80" text-anchor="middle" font-weight="600" fill="#141414">Scan member</text><text x="178" y="102" text-anchor="middle" font-size="10.5" fill="#5a5a5a">/pos/profile</text>
+  <rect x="250" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a"/><text x="304" y="80" text-anchor="middle" font-weight="600" fill="#141414">Pick coupon</text><text x="304" y="102" text-anchor="middle" font-size="10.5" fill="#5a5a5a">/wallet/pay</text><text x="304" y="117" text-anchor="middle" font-size="10.5" fill="#5a5a5a">to_use=false</text>
+  <rect x="376" y="56" width="108" height="72" rx="8" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/><text x="430" y="80" text-anchor="middle" font-weight="600" fill="#141414">Pay</text><text x="430" y="102" text-anchor="middle" font-size="10.5" fill="#141414">/wallet/pay</text><text x="430" y="117" text-anchor="middle" font-size="10.5" fill="#141414">amount=0, refId</text>
+  <rect x="502" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a"/><text x="556" y="80" text-anchor="middle" font-weight="600" fill="#141414">Paid</text><text x="556" y="102" text-anchor="middle" font-size="10.5" fill="#5a5a5a">/pos/earn</text><text x="556" y="117" text-anchor="middle" font-size="10.5" fill="#b42318">needs refId (R1)</text>
+  <rect x="628" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a"/><text x="682" y="80" text-anchor="middle" font-weight="600" fill="#141414">Print receipt</text><text x="682" y="102" text-anchor="middle" font-size="10.5" fill="#5a5a5a">points earned</text><text x="682" y="117" text-anchor="middle" font-size="10.5" fill="#5a5a5a">+ receipt QR</text>
+  <rect x="124" y="196" width="612" height="40" rx="8" fill="#f3f4f6" stroke="#8a8a8a"/><text x="430" y="221" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees CRM PLUS</text>
+  <text x="24" y="312" font-size="11" fill="#5a5a5a">Exceptions</text>
+  <rect x="232" y="272" width="200" height="72" rx="8" fill="none" stroke="#b42318" stroke-dasharray="4 3"/>
+  <text x="332" y="296" text-anchor="middle" font-weight="600" fill="#141414">Void or return</text>
+  <text x="332" y="316" text-anchor="middle" font-size="10.5" fill="#5a5a5a">/earn/cancel: same day only</text>
+  <text x="332" y="332" text-anchor="middle" font-size="10.5" fill="#b42318">no coupon reversal (R2, R3)</text>
+  <rect x="500" y="272" width="200" height="72" rx="8" fill="none" stroke="#8a8a8a"/>
+  <text x="600" y="296" text-anchor="middle" font-weight="600" fill="#141414">Call timed out</text>
+  <text x="600" y="316" text-anchor="middle" font-size="10.5" fill="#5a5a5a">/api/wallet/query every 5 s</text>
+  <text x="600" y="332" text-anchor="middle" font-size="10.5" fill="#5a5a5a">spec needed (R5)</text>
+</svg>
+<div class="cap">Figure 5. Checkout sequence mapped to CRM PLUS endpoints. Red marks show where the current API leaves customer value unprotected.</div>
+</div>
+<ol>
+  <li>The cashier scans the member QR or enters a phone number; the POS calls <code>/pos/profile</code> and shows the masked name, point balance and usable coupons.</li>
+  <li>The customer picks a coupon; the POS calls <code>/wallet/pay</code> with <code>to_use=false</code> to check it without using it.</li>
+  <li>On payment the POS calls <code>/wallet/pay</code> with <code>amount=0</code> and a unique <code>refId</code> to redeem the coupon, and records the result in <code>PromotionByCRM</code>.</li>
+  <li>After payment the POS calls <code>/pos/earn</code> with the paid amount and the bill key, then prints the points earned on the receipt.</li>
+  <li>If a call times out, the POS queries the status before deciding; if the bill is later voided, the POS reverses both the earn and the coupon.</li>
+</ol>
+
+<!-- ===================== 6. REQUESTS ===================== -->
+<h2 id="s6">6. Requests to Buzzebees (R1–R10)</h2>
+<p class="lead">Each request states the current behaviour in your specification, the problem it causes, our evidence, and the change we ask for.</p>
+
+<div class="req">
+<h3>R1 — Unique reference and receipt number on earn <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Sheets "Earn", "Earn via user id" and "Earn Direct point": fields are code / contactNumber or userId, terminalId, amount, remark, remark2 (or description). There is no unique request reference and no receipt number. <code>/wallet/pay</code> already has <code>refId</code>.</td></tr>
+  <tr><td class="k">Problem</td><td>When a call times out after Buzzebees has credited the points, the POS cannot tell success from failure. A retry credits the points a second time.</td></tr>
+  <tr><td class="k">Evidence</td><td>Up to 452 bills an hour in peak trading (section 2.2), mostly on branch internet links. Even a small timeout rate produces duplicate credits every week.</td></tr>
+  <tr><td class="k">Request</td><td>Add <code>refId</code> (unique per request, generated by the POS) and <code>receiptNo</code> (branch code + SaleNum, section 2.5) to all earn endpoints. A repeated <code>refId</code> must return the original result without crediting again; a repeated <code>receiptNo</code> must be rejected with a specific error id.</td></tr>
+</table>
+</div>
+<div class="fig">
+<svg viewBox="0 0 760 250" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="12">
+  <defs><marker id="r1a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="24" font-size="14" font-weight="600" fill="#141414">Without refId a timed-out earn is credited twice; with refId it is credited once</text>
+  <text x="24" y="52" font-weight="600" fill="#141414">Today</text>
+  <text x="380" y="52" font-weight="600" fill="#141414">With refId (R1)</text>
+  <g font-size="11" fill="#5a5a5a"><text x="24" y="76">POS</text><text x="250" y="76">Buzzebees</text><text x="380" y="76">POS</text><text x="606" y="76">Buzzebees</text></g>
+  <g stroke="#cfcfcf"><line x1="44" x2="44" y1="84" y2="236"/><line x1="276" x2="276" y1="84" y2="236"/><line x1="400" x2="400" y1="84" y2="236"/><line x1="632" x2="632" y1="84" y2="236"/></g>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M44 100H274" marker-end="url(#r1a)"/><path d="M274 128H60" stroke-dasharray="3 3"/><path d="M44 170H274" marker-end="url(#r1a)"/>
+    <path d="M400 100H630" marker-end="url(#r1a)"/><path d="M630 128H416" stroke-dasharray="3 3"/><path d="M400 170H630" marker-end="url(#r1a)"/><path d="M630 200H402" marker-end="url(#r1a)"/>
+  </g>
+  <g font-size="10.5" fill="#141414">
+    <text x="60" y="95">earn 1,000 THB</text><text x="148" y="123" fill="#5a5a5a">reply lost (timeout)</text><text x="60" y="165">retry: earn 1,000 THB</text>
+    <text x="416" y="95">earn 1,000 THB, refId A</text><text x="504" y="123" fill="#5a5a5a">reply lost (timeout)</text><text x="416" y="165">retry: refId A</text><text x="470" y="195">original result, no new credit</text>
+  </g>
+  <rect x="282" y="90" width="80" height="22" rx="4" fill="none" stroke="#8a8a8a"/><text x="322" y="105" text-anchor="middle" font-size="10.5" fill="#141414">+100 pts</text>
+  <rect x="282" y="160" width="80" height="22" rx="4" fill="#b42318" fill-opacity="0.10" stroke="#b42318"/><text x="322" y="175" text-anchor="middle" font-size="10.5" fill="#141414">+100 again</text>
+  <rect x="638" y="90" width="80" height="22" rx="4" fill="none" stroke="#8a8a8a"/><text x="678" y="105" text-anchor="middle" font-size="10.5" fill="#141414">+100 pts</text>
+  <rect x="638" y="160" width="80" height="22" rx="4" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c"/><text x="678" y="175" text-anchor="middle" font-size="10.5" fill="#141414">no change</text>
+  <text x="44" y="232" font-size="10.5" fill="#b42318">Member receives 200 points for one bill</text>
+  <text x="400" y="232" font-size="10.5" fill="#1f4e8c">Member receives 100 points</text>
+</svg>
+<div class="cap">Figure 6. Duplicate credit on retry, and the effect of an idempotency reference.</div>
+</div>
+
+<div class="req">
+<h3>R2 — Point reversal after the day of sale <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Sheet "Refund point": <code>/earn/cancel</code> with transactionId and terminalId; "Able to refund stamp only transaction within the day."</td></tr>
+  <tr><td class="k">Problem</td><td>Bills voided after the day of sale keep their points; partial returns cannot be corrected.</td></tr>
+  <tr><td class="k">Evidence</td><td>36 of 2,482 voids in Jan–Sep 2026 happened on a later day, up to 19 days after the sale (section 2.6, Figure 3).</td></tr>
+  <tr><td class="k">Request</td><td>Allow reversal for at least 30 days after the sale. Accept <code>refId</code> or <code>receiptNo</code> as well as <code>transactionId</code>. If the member has already spent the points, define whether the balance may go negative or the shortfall is deducted from the next earn (Oshinei to decide, D4). A repeated cancel must return "already reversed" (your error 4027) without side effects.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R3 — Reversal of a redeemed coupon <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Sheets "Redeem" and "Check code": <code>/wallet/pay</code> redeems a code; there is no endpoint to reverse a redemption.</td></tr>
+  <tr><td class="k">Problem</td><td>If a bill is cancelled after the coupon is used, for example when payment fails or the bill is voided, the customer loses the coupon although no discount was given.</td></tr>
+  <tr><td class="k">Evidence</td><td>Voids run at about 250–340 bills a month (section 2.1). Each void of a coupon bill would need a manual correction in your back office.</td></tr>
+  <tr><td class="k">Request</td><td>An endpoint that reverses a redemption by <code>transactionId</code> or <code>refId</code>, restores the code to unused, and is idempotent. The same 30-day window as R2.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R4 — Minimal profile for the POS <span class="pri b">Blocking</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Sheet "Profile": <code>/pos/profile</code> returns the full member record, including name, gender, birth date, age, contact number, e-mail, addresses, NationalIdCard, Passport, DriverLicenseNumber, credit-card fields, marketing consents and income.</td></tr>
+  <tr><td class="k">Problem</td><td>A cashier screen needs only enough to confirm the customer and apply benefits. Receiving the rest on 33–35 shop terminals conflicts with data minimisation under the Personal Data Protection Act B.E. 2562, and Easy would store it in <code>CallAPILog</code>.</td></tr>
+  <tr><td class="k">Request</td><td>A POS profile (or a field filter) that returns only: userId, masked display name (e.g. "Som***"), member level, point balance, points expiring within 30 days, and the list of coupons usable at the calling branch. No identity documents, address, birth date or payment data.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R5 — Transaction status API <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Sheet "Redeem": status "unknown" requires calling <code>{url}/api/wallet/query</code> every 5 seconds, but the endpoint is not specified.</td></tr>
+  <tr><td class="k">Request</td><td>Full specification (URL, parameters, response, terminal states) and coverage of earn and cancel as well as pay. The POS will query by <code>refId</code>. Please state the maximum time a transaction can stay "unknown".</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R6 — Daily reconciliation report <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>No report or export is specified.</td></tr>
+  <tr><td class="k">Request</td><td>A daily file or API, available by 06:00 for the previous day, one row per transaction: transactionId, refId, type (earn, cancel, redeem, coupon reversal), branchId, terminalId, receiptNo, userId, amount, points, coupon code, status, timestamp. Oshinei's accounting team will match it to Easy sales every day; mismatches to be corrected within 3 business days.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R7 — Burning points as a bill discount <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Current</td><td><code>/wallet/pay</code> with <code>amount</code> greater than 0 is described as "payment" and returns a <code>balance</code>. It is not clear whether this debits points or a stored-value wallet.</td></tr>
+  <tr><td class="k">Request</td><td>Confirm the endpoint and parameters for using points as a discount, the conversion rate, minimum and maximum per bill, and how the POS learns these values (ideally in the R4 profile).</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R8 — Earning through the receipt QR <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>Not covered. Easy POS already has a receipt-QR feature assigned to 35 branches (inactive) with fields for a pattern and public/secret keys (section 2.4).</td></tr>
+  <tr><td class="k">Request</td><td>Confirm whether the LINE Official Account can read a signed QR from the receipt (branch code, SaleNum, date, amount, signature) and credit points once per bill key. If yes, agree the format with Easy; if not, members must be identified at the counter on every bill.</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R9 — Credentials and environments <span class="pri p">Before pilot</span></h3>
+<table>
+  <tr><td class="k">Current</td><td>One merchant token per merchant; production URL "TBC" in every sheet; sheet "url" lists new staging and production hosts from June 2024.</td></tr>
+  <tr><td class="k">Request</td><td>Issue Oshinei UAT and production credentials, one per branch (or one token plus server-side branch binding); confirm the production base URLs; confirm the <code>branchId</code>, <code>brandId</code> and <code>terminalId</code> values for each Oshinei branch and how a new branch is added; state the token lifetime and rotation procedure (your error 1905 "token expired").</td></tr>
+</table>
+</div>
+
+<div class="req">
+<h3>R10 — Specification corrections <span class="pri n">Before development</span></h3>
+<p>Please correct the items listed in Appendix A and send a single updated version of the document with a change log.</p>
+</div>
+
+<!-- ===================== 7. EASY ===================== -->
+<h2 id="s7">7. Requests to Easy POS (E1–E5)</h2>
+<p class="lead">Because CRM PLUS is a standard API that the POS must call, the POS-side work falls to Easy POS. We ask Easy to confirm the following.</p>
+<table>
+  <tr><th style="width:7%">Ref.</th><th>Request</th><th style="width:30%">Why</th></tr>
+  <tr><td>E1</td><td>Confirm that Easy will build the POS side through HO_CRM against the CRM PLUS API, with effort, cost and delivery date</td><td>Change of roles described in section 1</td></tr>
+  <tr><td>E2</td><td>Confirm HO_CRM supports the CRM PLUS call format: <code>Authorization: token</code> header, <code>application/x-www-form-urlencoded</code> bodies, and per-call <code>branchId</code>/<code>terminalId</code></td><td>Different from the JSON format in our draft</td></tr>
+  <tr><td>E3</td><td>Confirm where results are written: member id (<code>Sale.CustomerId</code> or <code>CustRefNum</code>), points (<code>EarnPoint</code>, <code>RedeemedPoint</code>, <code>BalancePoint</code>), coupons (<code>PromotionByCRM</code>), and that every call is logged in <code>CallAPILog</code> with phone numbers masked</td><td>All are empty today (section 2.3–2.4)</td></tr>
+  <tr><td>E4</td><td>Confirm timeout handling: the bill always closes; earn is queued and retried with the same <code>refId</code>; status is checked before any retry; queued items older than 24 hours are reported to Oshinei</td><td>Protects sales when Buzzebees is unreachable</td></tr>
+  <tr><td>E5</td><td>Confirm whether the expired <code>ApiKey</code> for system "Easy" (8 Jul 2026) is needed, and the receipt-QR format supported by <code>QRDataReceiptSetting</code></td><td>Inputs to R8 and R9</td></tr>
+</table>
+
+<!-- ===================== 8. OSHINEI ===================== -->
+<h2 id="s8">8. Items Oshinei will confirm (D1–D5)</h2>
+<p class="lead">For transparency, these business rules are decided by Oshinei and will be sent separately. They do not block your reply to R1–R10.</p>
+<table>
+  <tr><th style="width:7%">Ref.</th><th>Decision</th><th style="width:36%">Oshinei's current preference</th></tr>
+  <tr><td>D1</td><td>Acceptance of Easy POS as the POS-side developer</td><td>Subject to E1</td></tr>
+  <tr><td>D2</td><td>Earn method: Buzzebees calculates points from the amount (<code>/pos/earn</code>) or the POS sends points (<code>/pos/earn_direct_spending</code>)</td><td><code>/pos/earn</code>, so earn rules are maintained in one place</td></tr>
+  <tr><td>D3</td><td>Earn base: amount after discount, with or without VAT and service charge; whether Grab and LINE MAN bills earn</td><td>To be confirmed</td></tr>
+  <tr><td>D4</td><td>Reversal after points are spent: negative balance or deduction from the next earn</td><td>To be confirmed</td></tr>
+  <tr><td>D5</td><td>Pilot branches and start dates</td><td>Pilot in one branch first</td></tr>
+</table>
+
+<!-- ===================== 9. CREDENTIALS ===================== -->
+<h2 id="s9">9. Credential handling</h2>
+<div class="box">
+<p>The document we received contains merchant tokens in clear text in several sheets, including tokens labelled "TMN only" and "All Except TMN". We have not copied these tokens into any other document and have restricted circulation of the file.</p>
+<p>We ask Buzzebees to (1) confirm whether these tokens are valid in any environment and revoke them if so, (2) remove tokens from specification documents in future, and (3) deliver Oshinei credentials through a separate secure channel (R9).</p>
+</div>
+<p>On our side, credentials will be stored only in the POS configuration managed by Easy and in Oshinei's secret store, never in documents, URLs or logs.</p>
+
+<!-- ===================== 10. NEXT STEPS ===================== -->
+<h2 id="s10">10. Next steps</h2>
+<table>
+  <tr><th style="width:6%">No.</th><th>Step</th><th style="width:24%">Owner</th><th style="width:22%">Timing (proposed)</th></tr>
+  <tr><td>1</td><td>Written reply to R1–R10, with an updated specification</td><td>Buzzebees</td><td>Within 10 business days</td></tr>
+  <tr><td>2</td><td>Written reply to E1–E5, with effort and cost</td><td>Easy POS</td><td>Within 10 business days</td></tr>
+  <tr><td>3</td><td>Joint meeting to agree scope and the final API version</td><td>Oshinei (convenor)</td><td>After steps 1–2</td></tr>
+  <tr><td>4</td><td>UAT credentials and sandbox access for Easy and Oshinei</td><td>Buzzebees</td><td>After the meeting</td></tr>
+  <tr><td>5</td><td>Development and UAT against the test cases in our specification</td><td>Easy POS with Buzzebees</td><td>To be agreed</td></tr>
+  <tr><td>6</td><td>Pilot in one branch, daily reconciliation, go/no-go</td><td>Oshinei</td><td>To be agreed</td></tr>
+</table>
+
+<div class="sign">
+<p>Yours faithfully,</p>
+<table>
+  <tr><th style="width:50%">For Oshinei</th><th>Acknowledged by Buzzebees</th></tr>
+  <tr><td>Name:</td><td>Name:</td></tr>
+  <tr><td>Position: Project owner, CRM integration</td><td>Position:</td></tr>
+  <tr><td>Date:</td><td>Date:</td></tr>
+</table>
+</div>
+
+<!-- ===================== APPENDIX A ===================== -->
+<h2 id="s11">Appendix A — Specification review, sheet by sheet</h2>
+<p class="lead">Observations on "API CRM PLUS_full - 2026.xlsx". Items marked ✱ need correction (R10).</p>
+<table>
+  <tr><th style="width:17%">Sheet</th><th style="width:30%">Content</th><th>Observation</th></tr>
+  <tr><td>Version</td><td>v1 2022-12-12 create; v2 2024-01-04 earn via user id; v3 2025-01-05 earn direct with spending</td><td>Each sheet still shows "Last Update Date 2022-12-12". Please align sheet dates with the version log. ✱</td></tr>
+  <tr><td>Profile</td><td><code>GET /pos/profile</code>; code or contactNumber</td><td>Declared HTTP verb is GET with "Body" parameters and Content-Type form-urlencoded; the curl passes <code>contactNumber</code> as a query string. Please state query parameters for GET. ✱ Both code and contactNumber are marked mandatory although only one is sent. ✱ Full personal profile returned (R4).</td></tr>
+  <tr><td>Earn</td><td><code>POST /pos/earn</code>; code/contactNumber, terminalId, amount, remark, remark2</td><td>No refId or receipt number (R1). <code>amount</code> is a string: please state decimal format and whether it is VAT-inclusive. ✱ Response "points" is null while "points_earn" carries the value; please confirm which field to use. ✱</td></tr>
+  <tr><td>Earn via user id</td><td><code>POST /pos/earn_direct</code>; userId, terminalId, amount, description, remark</td><td>Field table has no <code>points</code>, but the curl sends <code>points="121.1"</code> and the error sample says "Parameter Missing or Invalid (points)". ✱</td></tr>
+  <tr><td>Earn Direct point</td><td><code>POST /pos/earn_direct_spending</code>; userId, terminalId, amount, points, description, remark</td><td>The curl calls <code>/pos/earn_direct</code>, not <code>/earn_direct_spending</code>. ✱ Please state whether points may be decimal.</td></tr>
+  <tr><td>Refund point</td><td><code>POST /earn/cancel</code>; token, transactionId, terminalId</td><td>Same-day limit (R2). Sample host is the old <code>stgwallet</code> domain, contrary to sheet "url". ✱</td></tr>
+  <tr><td>Redeem</td><td><code>POST /wallet/pay</code>; code, refId, terminalId, branchId, brandId, amount, campaignId, stampcount</td><td>Status "unknown" refers to an unspecified query API (R5). Payment versus points not clear (R7). Response sample contains a national ID ("idcard"); please confirm this is not returned to the POS (R4). ✱</td></tr>
+  <tr><td>Check code</td><td><code>POST /wallet/pay</code> with <code>to_use=false</code>, <code>transaction_id</code></td><td>Uses <code>transaction_id</code> while Redeem uses <code>refId</code>; please confirm which identifier links check and redeem. ✱</td></tr>
+  <tr><td>Error Code</td><td>HTTP codes 400–500; custom ids 1414, 1905, 2048, 2526; payment 404, 4010, 10002</td><td>Please add ids for duplicate refId, duplicate receipt, reversal window expired and already reversed (4027 appears only in "Refund point"). ✱</td></tr>
+  <tr><td>url</td><td>Old and new staging/production hosts, change due 30 Jun 2024</td><td>Please confirm the new hosts are final and replace old hosts in all samples. ✱</td></tr>
+</table>
+
+<!-- ===================== APPENDIX B ===================== -->
+<h2 id="s12">Appendix B — Data sources and method</h2>
+<table>
+  <tr><th style="width:28%">Item</th><th>Detail</th></tr>
+  <tr><td>Source</td><td>Easy POS head-office database HQ_Oshinei (Microsoft SQL Server), read-only account, queried 14 and 27 October 2026</td></tr>
+  <tr><td>Period</td><td>1 January – 30 September 2026 unless stated; points checked to 26 October 2026</td></tr>
+  <tr><td>Finalised bill</td><td><code>Sale.IsFinalize = 1 AND Sale.Active = 1 AND ISNULL(Sale.IsReturn,0) = 0</code></td></tr>
+  <tr><td>Voided bill</td><td><code>Sale.IsFinalize = 1 AND Sale.Active = 0</code>; void delay = calendar days between <code>SaleDate</code> and <code>DeleteDate</code></td></tr>
+  <tr><td>Hour of payment</td><td>Hour of <code>Sale.SaleDate</code> (bill closing time), Thailand time</td></tr>
+  <tr><td>Bill identifier test</td><td>Distinct (BranchId, SaleNum) and distinct SaleId over all finalised bills in September 2026</td></tr>
+  <tr><td>Loyalty usage</td><td>Bills with non-zero <code>EarnPoint</code> or <code>RedeemedPoint</code>; row counts of loyalty tables</td></tr>
+  <tr><td>Limitations</td><td>Branches not mapped in our reporting are included here (database level). Figures describe current operations; volumes after a loyalty launch may change.</td></tr>
+</table>
+<p class="note">Prepared by Oshinei. This letter refers to the Oshinei document "API Specification for the Easy POS – Buzzebees Integration, Draft 1.1" (English and Thai editions), which remains the reference for test cases and business rules.</p>
+
+</body>
+</html>

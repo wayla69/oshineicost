@@ -1,0 +1,733 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>สรุป API เชื่อม Easy POS กับ Buzzebees — ฉบับร่าง 1.0</title>
+<style>
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Regular.woff2') format('woff2');font-weight:400;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Medium.woff2') format('woff2');font-weight:500;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-SemiBold.woff2') format('woff2');font-weight:600;font-style:normal}
+@font-face{font-family:'KIRA UI';src:url('fonts/KIRA-UI-Bold.woff2') format('woff2');font-weight:700;font-style:normal}
+
+:root{
+  --ink:#141414; --muted:#5a5a5a; --rule:#cfcfcf; --soft:#f3f4f6;
+  --accent:#1f4e8c; --accent-soft:#e7eef8;
+}
+@page{ size:A4; }
+html,body{ margin:0; padding:0; }
+body{
+  font-family:'KIRA UI',sans-serif; font-synthesis:none;
+  color:var(--ink); font-size:10.5pt; line-height:1.55;
+  -webkit-print-color-adjust:exact; print-color-adjust:exact;
+}
+h1{ font-size:22pt; font-weight:700; line-height:1.3; margin:0 0 6pt; }
+h2{ font-size:15pt; font-weight:600; color:var(--accent); margin:0 0 4pt; padding-bottom:4pt; border-bottom:1.5px solid var(--accent); break-before:page; break-after:avoid; }
+h2.first{ break-before:auto; }
+h3{ font-size:12pt; font-weight:600; margin:14pt 0 4pt; break-after:avoid; }
+h4{ font-size:10.5pt; font-weight:600; margin:10pt 0 3pt; break-after:avoid; }
+p{ margin:0 0 6pt; orphans:3; widows:3; }
+p.lead{ margin:4pt 0 8pt; }
+p.owner{ color:var(--accent); font-weight:500; font-size:9.5pt; margin:0 0 8pt; }
+p.note{ font-size:9.5pt; color:var(--muted); margin:3pt 0 8pt; }
+code{ font-family:'KIRA UI',monospace; font-size:9.5pt; background:var(--soft); padding:0 3px; border-radius:3px; }
+pre{ font-family:'KIRA UI',monospace; font-size:9.5pt; line-height:1.45; background:var(--soft); border:1px solid var(--rule); border-radius:4px; padding:8pt 10pt; margin:4pt 0 8pt; white-space:pre; break-inside:avoid; }
+table{ width:100%; border-collapse:collapse; font-size:9.5pt; line-height:1.45; margin:4pt 0 10pt; break-inside:avoid; }
+th,td{ border:1px solid var(--rule); padding:3.5pt 5pt; vertical-align:top; text-align:left; }
+th{ background:var(--soft); font-weight:600; }
+td.own, th.own{ white-space:nowrap; }
+td.own{ color:var(--accent); font-weight:500; }
+td.k{ white-space:nowrap; }
+ul,ol{ margin:0 0 8pt 18pt; padding:0; }
+li{ margin:0 0 3pt; break-inside:avoid; }
+ul.check{ list-style:none; margin-left:0; }
+ul.check li{ padding-left:18pt; position:relative; }
+ul.check li::before{ content:""; position:absolute; left:0; top:3.5pt; width:9pt; height:9pt; border:1.2px solid var(--muted); border-radius:2px; }
+.api{ break-inside:avoid; margin-bottom:6pt; }
+.api h3{ margin-top:12pt; }
+.api .path{ font-weight:400; font-size:10pt; color:var(--muted); margin-left:6pt; }
+.grp{ break-inside:avoid; }
+.keep{ break-inside:avoid; }
+.fig{ break-inside:avoid; margin:6pt 0 10pt; }
+.fig svg{ width:100%; height:auto; display:block; }
+.fig .cap{ font-size:9pt; color:var(--muted); margin-top:2pt; }
+hr.sp{ border:0; border-top:1px solid var(--rule); margin:10pt 0; }
+
+/* cover */
+.cover{ break-after:page; padding-top:70pt; }
+.cover .kicker{ color:var(--accent); font-weight:600; font-size:11pt; letter-spacing:.3px; margin-bottom:10pt; }
+.cover h1{ font-size:26pt; }
+.cover .sub{ font-size:12.5pt; color:var(--muted); margin:0 0 26pt; }
+.cover table{ font-size:10.5pt; }
+.cover .status{ margin-top:22pt; border-left:3px solid var(--accent); padding:6pt 10pt; background:var(--accent-soft); }
+.cover .meta{ margin-top:30pt; font-size:9.5pt; color:var(--muted); }
+/* toc */
+.toc{ break-after:page; }
+.toc ol{ list-style:none; margin:8pt 0 0; }
+.toc li{ display:flex; justify-content:space-between; border-bottom:1px dotted var(--rule); padding:3pt 0; }
+.toc li span.n{ color:var(--muted); width:22pt; flex:none; }
+.toc li span.t{ flex:1; }
+.toc li span.pg{ width:30pt; text-align:right; flex:none; color:var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ===================== COVER ===================== -->
+<section class="cover">
+  <div class="kicker">เอกสารข้อกำหนดการเชื่อมต่อ</div>
+  <h1>สรุป API เชื่อม Easy POS กับ Buzzebees</h1>
+  <p class="sub">ระบบสมาชิก สะสมแต้ม และคูปอง ที่จุดคิดเงินของ Oshinei ทุกสาขา</p>
+
+  <table>
+    <tr><th style="width:24%">ฝ่าย</th><th style="width:34%">ตำแหน่งหน้าที่ในโครงการ</th><th>งานหลัก</th></tr>
+    <tr><td class="own">Buzzebees</td><td>ผู้พัฒนาและผู้ดูแลระบบ</td><td>พัฒนา API B0–B9, ถอดรหัส QR ใบเสร็จ, sandbox, LINE OA, รายงานกระทบยอด</td></tr>
+    <tr><td class="own">Easy POS</td><td>ผู้ให้สเปกและผู้ตั้งค่า POS</td><td>สเปก HO_CRM, รูปแบบ QR ใบเสร็จ, ตั้งค่า URL และคีย์รายสาขา, ผูกคูปองกับรหัสส่วนลด</td></tr>
+    <tr><td class="own">Oshinei</td><td>เจ้าของโครงการ ผู้ตัดสินใจกติกา และผู้ตรวจรับ</td><td>กติกาแต้มและคูปอง, สาขานำร่อง, อบรมแคชเชียร์, กระทบยอดรายวัน, ตรวจรับงาน</td></tr>
+  </table>
+
+  <div class="status">
+    <b>สถานะ: ฉบับร่าง 1.0</b> — ชื่อฟิลด์ เส้นทาง และเวลาตอบทั้งหมดเป็นข้อเสนอ ให้ Buzzebees ปรับตามสเปก HO_CRM ของ Easy เมื่อได้รับ ตัวเลขที่ระบุว่า "เสนอ" ต้องได้รับการยืนยันจากผู้รับผิดชอบก่อนใช้
+  </div>
+
+  <p class="meta">จัดทำโดย Oshinei · วันที่ 14 ตุลาคม 2569 · เอกสารนี้ใช้เป็นฐานการประชุม 3 ฝ่าย (Oshinei, Easy POS, Buzzebees)</p>
+</section>
+
+<!-- ===================== TOC ===================== -->
+<section class="toc">
+  <h2 class="first">สารบัญ</h2>
+  <ol>
+    <li><span class="n">1</span><span class="t">คำศัพท์</span><span class="pg" data-key="s1">3</span></li>
+    <li><span class="n">2</span><span class="t">ขอบเขตและหน้าที่</span><span class="pg" data-key="s2">4</span></li>
+    <li><span class="n">3</span><span class="t">ผู้รับผิดชอบแต่ละงาน</span><span class="pg" data-key="s3">5</span></li>
+    <li><span class="n">4</span><span class="t">ภาพรวม API และแผนผังการเชื่อมต่อ</span><span class="pg" data-key="s4">6</span></li>
+    <li><span class="n">5</span><span class="t">ลำดับการเรียกต่อ 1 บิล</span><span class="pg" data-key="s5">8</span></li>
+    <li><span class="n">6</span><span class="t">รูปแบบคำขอและคำตอบ</span><span class="pg" data-key="s6">9</span></li>
+    <li><span class="n">7</span><span class="t">รายละเอียดแต่ละเส้น B0–B9</span><span class="pg" data-key="s7">11</span></li>
+    <li><span class="n">8</span><span class="t">QR บนใบเสร็จ</span><span class="pg" data-key="s8">15</span></li>
+    <li><span class="n">9</span><span class="t">ข้อกำหนดทั่วไป</span><span class="pg" data-key="s9">16</span></li>
+    <li><span class="n">10</span><span class="t">การกระทบยอดรายวัน</span><span class="pg" data-key="s10">18</span></li>
+    <li><span class="n">11</span><span class="t">กรณีทดสอบก่อนรับมอบ</span><span class="pg" data-key="s11">19</span></li>
+    <li><span class="n">12</span><span class="t">เรื่องที่ต้องตกลงร่วมกัน</span><span class="pg" data-key="s12">21</span></li>
+  </ol>
+  <p class="note" style="margin-top:14pt">วิธีอ่าน: หัวข้อ 1–5 สำหรับทุกฝ่าย · หัวข้อ 6–10 สำหรับทีมเทคนิคของ Buzzebees และ Easy · หัวข้อ 11–12 สำหรับการประชุมตรวจรับและตัดสินใจ</p>
+</section>
+
+<!-- ===================== 1 ===================== -->
+<h2 id="s1">1. คำศัพท์</h2>
+<p class="lead">คำที่ใช้ซ้ำในเอกสารนี้ ความหมายเดียวกันทุกหัวข้อ</p>
+<table>
+  <tr><th style="width:24%">คำ</th><th>ความหมาย</th></tr>
+  <tr><td class="k">สะสมแต้ม (earn)</td><td>ลูกค้าได้แต้มจากยอดซื้อในบิล</td></tr>
+  <tr><td class="k">แลกแต้ม (burn)</td><td>ลูกค้าใช้แต้มเป็นส่วนลดในบิล</td></tr>
+  <tr><td class="k">คูปอง</td><td>สิทธิ์ส่วนลดที่มีรหัส ออกโดย Buzzebees ใช้ได้ครั้งเดียว</td></tr>
+  <tr><td class="k">คีย์บิล</td><td>branch_code + sale_date + receipt_no ระบุบิล 1 ใบ เพราะเลขบิลซ้ำกันข้ามสาขาและข้ามวัน</td></tr>
+  <tr><td class="k">request_id</td><td>เลขอ้างอิงคำขอที่ POS สร้าง ไม่ซ้ำ ใช้ส่งซ้ำโดยไม่ทำรายการซ้ำ</td></tr>
+  <tr><td class="k">transaction_ref</td><td>เลขอ้างอิงรายการที่ Buzzebees สร้าง ใช้ยกเลิก (B6) ตรวจสถานะ (B8) และกระทบยอด (B9)</td></tr>
+  <tr><td class="k">HO_CRM</td><td>ตัวเชื่อม CRM ภายนอกที่มีใน Easy POS เป็นช่องที่ POS เรียก API ของ Buzzebees</td></tr>
+  <tr><td class="k">QR ใบเสร็จ</td><td>QR ที่พิมพ์บนใบเสร็จทุกใบ ให้ลูกค้าสแกนรับแต้มเองใน LINE OA</td></tr>
+  <tr><td class="k">void</td><td>การยกเลิกบิลทั้งใบหลังปิดบิลแล้ว</td></tr>
+</table>
+
+<!-- ===================== 2 ===================== -->
+<h2 id="s2">2. ขอบเขตและหน้าที่</h2>
+<p class="lead">ระบบต้องให้แคชเชียร์ค้นสมาชิก สะสมแต้ม ใช้คูปอง แลกแต้ม และยกเลิกรายการได้ที่จุดคิดเงินของทุกสาขาที่ใช้ Easy POS (ประมาณ 35 สาขา) การสมัครสมาชิกทำใน LINE OA ของ Buzzebees เท่านั้น POS ไม่รับสมัคร</p>
+<table>
+  <tr><th style="width:18%">ฝ่าย</th><th style="width:30%">ตำแหน่งหน้าที่</th><th>หน้าที่</th></tr>
+  <tr><td class="own">Buzzebees</td><td>ผู้พัฒนาและผู้ดูแลระบบ</td><td>พัฒนา API B0–B9 ตามสเปก HO_CRM, ถอดรหัส QR ใบเสร็จ, จัดหา sandbox และบัญชีทดสอบ, ส่งรายงานกระทบยอดรายวัน, ตั้งค่า LINE OA กติกาแต้ม และคูปอง</td></tr>
+  <tr><td class="own">Easy POS</td><td>ผู้ให้สเปกและผู้ตั้งค่า POS</td><td>ส่งสเปก HO_CRM และรูปแบบ QR ใบเสร็จให้ Buzzebees, ตั้งค่า URL และคีย์รายสาขาใน POS, เปิด QR ใบเสร็จรายสาขา, ผูกคูปองกับรหัสส่วนลดใน Easy, ร่วมทดสอบ</td></tr>
+  <tr><td class="own">Oshinei</td><td>เจ้าของโครงการ ผู้ตัดสินใจ และผู้ตรวจรับ</td><td>กำหนดกติกาแต้มและคูปอง, เลือกสาขานำร่อง, อบรมแคชเชียร์, กระทบยอดรายวัน, ตรวจรับงาน</td></tr>
+</table>
+<p class="note"><b>นอกขอบเขต:</b> การเปลี่ยน POS เป็น B-POS, การสั่งอาหารออนไลน์และเดลิเวอรี, การสมัครสมาชิกที่ POS, และการส่งแคมเปญการตลาด (เป็นงานในระบบ Buzzebees ไม่กระทบ API)</p>
+
+<!-- ===================== 3 ===================== -->
+<h2 id="s3">3. ผู้รับผิดชอบแต่ละงาน</h2>
+<p class="lead">Buzzebees เป็นผู้พัฒนาและดูแลระบบ Easy เป็นผู้ให้สเปกและตั้งค่า POS Oshinei เป็นผู้ตัดสินใจกติกาและตรวจรับงาน งานใดไม่มีผู้รับผิดชอบในตารางนี้ให้ถือว่ายังไม่มีเจ้าภาพ</p>
+<table>
+  <tr><th style="width:5%">#</th><th>งาน</th><th style="width:24%">ผู้รับผิดชอบหลัก</th><th style="width:22%">ผู้ร่วม / ผู้ตรวจ</th><th style="width:13%">ช่วงเวลา</th></tr>
+  <tr><td>1</td><td>ส่งสเปก HO_CRM และรูปแบบ QR ใบเสร็จ</td><td class="own">Easy (ทีมเทคนิค)</td><td>Buzzebees รับ</td><td>ก่อนเริ่มพัฒนา</td></tr>
+  <tr><td>2</td><td>ปรับชื่อฟิลด์และเส้นทางในเอกสารนี้ให้ตรงสเปก</td><td class="own">Buzzebees (หัวหน้าทีมพัฒนา)</td><td>Easy และ Oshinei ตรวจ</td><td>ก่อนเริ่มพัฒนา</td></tr>
+  <tr><td>3</td><td>พัฒนา API B0–B9 และจัดหา sandbox</td><td class="own">Buzzebees (ทีมพัฒนา)</td><td>Oshinei ตรวจรับ</td><td>ช่วงพัฒนา</td></tr>
+  <tr><td>4</td><td>ตั้งค่า URL คีย์รายสาขา เปิด HO_CRM และ QR ใบเสร็จใน POS</td><td class="own">Easy (ทีมเทคนิค)</td><td>Buzzebees ออกคีย์</td><td>ก่อนทดสอบ</td></tr>
+  <tr><td>5</td><td>ผูกคูปองแต่ละชนิดกับรหัสส่วนลดใน Easy</td><td class="own">Easy (ตั้งค่า)</td><td>Oshinei กำหนดรายการ</td><td>ก่อนทดสอบ</td></tr>
+  <tr><td>6</td><td>กำหนดกติกาแต้มและคูปอง และตั้งค่าใน backoffice</td><td class="own">Oshinei (เจ้าของโครงการ)</td><td>Buzzebees ตั้งค่า</td><td>ก่อนทดสอบ</td></tr>
+  <tr><td>7</td><td>LINE OA หน้าสมัครสมาชิก และข้อความความยินยอม PDPA</td><td class="own">Buzzebees</td><td>Oshinei อนุมัติข้อความ</td><td>ก่อนทดสอบ</td></tr>
+  <tr><td>8</td><td>ทดสอบบน sandbox ตามกรณีทดสอบ (หัวข้อ 11)</td><td class="own">Buzzebees ร่วมกับ Easy</td><td>Oshinei ตรวจรับ</td><td>ช่วงทดสอบ</td></tr>
+  <tr><td>9</td><td>ทดสอบที่สาขานำร่องด้วยบิลจริง</td><td class="own">Easy (หน้างาน) ร่วมกับ Buzzebees</td><td>Oshinei (ฝ่ายปฏิบัติการสาขา)</td><td>ช่วงนำร่อง</td></tr>
+  <tr><td>10</td><td>อบรมแคชเชียร์และคู่มือหน้าจอ</td><td class="own">Oshinei (ฝ่ายปฏิบัติการสาขา)</td><td>Easy ให้ภาพหน้าจอ</td><td>ก่อนเปิดใช้</td></tr>
+  <tr><td>11</td><td>กระทบยอดรายวัน และแจ้งรายการไม่ตรง</td><td class="own">Oshinei (ฝ่ายบัญชี)</td><td>Buzzebees แก้ไขภายใน 3 วันทำการ</td><td>หลังเปิดใช้ ทุกวัน</td></tr>
+  <tr><td>12</td><td>ดูแลระบบ: เหตุขัดข้อง เปลี่ยนคีย์ เวอร์ชัน API</td><td class="own">Buzzebees (ฝ่ายดูแลระบบ)</td><td>Easy และ Oshinei รับแจ้ง</td><td>หลังเปิดใช้</td></tr>
+  <tr><td>13</td><td>สัญญาประมวลผลข้อมูลส่วนบุคคล (DPA) และนโยบายข้อมูล</td><td class="own">Oshinei (ผู้ควบคุมข้อมูล)</td><td>Buzzebees (ผู้ประมวลผล)</td><td>ก่อนเปิดใช้</td></tr>
+</table>
+
+<h3>ผู้ประสานงานหลัก (รอกรอกชื่อ)</h3>
+<table>
+  <tr><th style="width:18%">ฝ่าย</th><th style="width:34%">ตำแหน่งที่รับผิดชอบ</th><th style="width:24%">ชื่อ</th><th>ช่องทางติดต่อ</th></tr>
+  <tr><td class="own">Buzzebees</td><td>ผู้จัดการโครงการ</td><td></td><td></td></tr>
+  <tr><td class="own">Buzzebees</td><td>หัวหน้าทีมพัฒนา API</td><td></td><td></td></tr>
+  <tr><td class="own">Easy POS</td><td>ผู้ดูแลลูกค้า (account)</td><td></td><td></td></tr>
+  <tr><td class="own">Easy POS</td><td>ทีมเทคนิค HO_CRM</td><td></td><td></td></tr>
+  <tr><td class="own">Oshinei</td><td>เจ้าของโครงการ</td><td></td><td></td></tr>
+  <tr><td class="own">Oshinei</td><td>ฝ่ายบัญชี (กระทบยอด)</td><td></td><td></td></tr>
+  <tr><td class="own">Oshinei</td><td>ฝ่ายปฏิบัติการสาขา (นำร่อง อบรม)</td><td></td><td></td></tr>
+</table>
+
+<!-- ===================== 4 ===================== -->
+<h2 id="s4">4. ภาพรวม API และแผนผังการเชื่อมต่อ</h2>
+<p class="owner">ผู้พัฒนาฝั่งรับ: Buzzebees · ผู้เรียก: Easy POS (B0–B8), Easy HQ (B7), ระบบรายงาน Oshinei (B9)</p>
+<p class="lead">ทุกเส้นเป็นการเรียกเข้าหา Buzzebees ไม่มีการเรียกจาก Buzzebees มายัง POS เพราะเครื่อง POS อยู่หลังเครือข่ายร้าน รับการเรียกเข้าไม่ได้</p>
+
+<div class="fig">
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="28" font-size="15" font-weight="600" fill="#141414">ทุกเส้นเรียกเข้าหา Buzzebees: Easy POS 8 เส้น Easy HQ 1 เส้น Oshinei 1 เส้น</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M284 112H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 232H340V144H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 320H356V288H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 408H340V372H396" marker-end="url(#map-arrow)"/>
+  </g>
+  <rect x="380" y="60" width="356" height="364" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="84" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees</text>
+  <rect x="396" y="100" width="324" height="56" rx="8" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="558" y="124" text-anchor="middle" font-weight="600" fill="#141414">API สำหรับ POS (/pos/v1)</text>
+  <text x="558" y="144" text-anchor="middle" font-size="11.5" fill="#141414">รับ B0–B9 · ตรวจคีย์รายสาขา · กันรายการซ้ำ</text>
+  <rect x="396" y="176" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="200" text-anchor="middle" font-weight="600" fill="#141414">ฐานสมาชิก แต้ม คูปอง</text>
+  <text x="558" y="220" text-anchor="middle" font-size="11.5" fill="#5a5a5a">กติกาแต้ม · คูปอง · ประวัติรายการ</text>
+  <rect x="396" y="252" width="324" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="276" text-anchor="middle" font-weight="600" fill="#141414">LINE OA (CRM PLUS)</text>
+  <text x="558" y="296" text-anchor="middle" font-size="11.5" fill="#5a5a5a">สมัครสมาชิก · ความยินยอม PDPA</text>
+  <text x="558" y="312" text-anchor="middle" font-size="11.5" fill="#5a5a5a">QR สมาชิก · สแกน QR ใบเสร็จ</text>
+  <rect x="396" y="344" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="368" text-anchor="middle" font-weight="600" fill="#141414">รายงานและกระทบยอด</text>
+  <text x="558" y="388" text-anchor="middle" font-size="11.5" fill="#5a5a5a">รายการรายวัน earn / burn / coupon / void</text>
+
+  <rect x="24" y="60" width="260" height="120" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="84" font-weight="600" fill="#141414">Easy POS · เครื่องสาขา ประมาณ 35 สาขา</text>
+  <text x="36" y="104" font-size="11.5" fill="#5a5a5a">B0 ตรวจการเชื่อมต่อ · B1 ค้นสมาชิก</text>
+  <text x="36" y="120" font-size="11.5" fill="#5a5a5a">B2 ตรวจคูปอง · B3 ตัดคูปอง</text>
+  <text x="36" y="136" font-size="11.5" fill="#5a5a5a">B4 แลกแต้ม · B5 สะสมแต้ม</text>
+  <text x="36" y="152" font-size="11.5" fill="#5a5a5a">B6 ยกเลิกรายการ · B8 สอบถามสถานะ</text>
+  <text x="36" y="168" font-size="11.5" fill="#5a5a5a">พิมพ์ QR ใบเสร็จให้ลูกค้า</text>
+  <rect x="24" y="204" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="228" font-weight="600" fill="#141414">Easy HQ · สำนักงานใหญ่</text>
+  <text x="36" y="248" font-size="11.5" fill="#5a5a5a">B7 ส่งข้อมูลสาขาและเมนู วันละครั้ง</text>
+  <rect x="24" y="284" width="260" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="308" font-weight="600" fill="#141414">ลูกค้า (ผ่าน LINE)</text>
+  <text x="36" y="328" font-size="11.5" fill="#5a5a5a">สมัครสมาชิก รับ QR สมาชิก</text>
+  <text x="36" y="344" font-size="11.5" fill="#5a5a5a">สแกน QR ใบเสร็จเพื่อรับแต้มเอง</text>
+  <rect x="24" y="380" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="404" font-weight="600" fill="#141414">ระบบรายงาน Oshinei</text>
+  <text x="36" y="424" font-size="11.5" fill="#5a5a5a">B9 ดึงรายงานกระทบยอด ทุกวัน 06:00</text>
+
+  <text x="340" y="104" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B0–B6, B8</text>
+  <text x="346" y="194" font-size="11.5" fill="#5a5a5a">B7</text>
+  <text x="362" y="306" font-size="11.5" fill="#5a5a5a">LINE</text>
+  <text x="346" y="370" font-size="11.5" fill="#5a5a5a">B9</text>
+</svg>
+<div class="cap">แผนผัง API: ผู้เรียก 4 ฝ่าย กับส่วนของ Buzzebees ที่รับ</div>
+</div>
+
+<table>
+  <tr><th style="width:6%">เส้น</th><th style="width:19%">ชื่อ</th><th style="width:10%">กลุ่ม</th><th style="width:20%">ผู้เรียก → ผู้รับ</th><th>เรียกเมื่อ</th><th style="width:15%">ตอบภายใน</th></tr>
+  <tr><td>B0</td><td>ตรวจการเชื่อมต่อ</td><td>สนับสนุน</td><td>Easy POS → Buzzebees</td><td>เปิดกะ และทุก 5 นาทีเมื่อครั้งก่อนล้มเหลว</td><td>2 วินาที</td></tr>
+  <tr><td>B1</td><td>ค้นสมาชิก</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>แคชเชียร์สแกน QR สมาชิก หรือกรอกเบอร์โทร</td><td>3 วินาที</td></tr>
+  <tr><td>B2</td><td>ตรวจคูปอง</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>ลูกค้าเลือกคูปอง ก่อนกดชำระ</td><td>3 วินาที</td></tr>
+  <tr><td>B3</td><td>ตัดคูปอง</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>กดชำระเงิน</td><td>3 วินาที</td></tr>
+  <tr><td>B4</td><td>แลกแต้มเป็นส่วนลด</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>กดชำระเงิน</td><td>3 วินาที</td></tr>
+  <tr><td>B5</td><td>สะสมแต้ม</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>ชำระเงินสำเร็จ ก่อนพิมพ์ใบเสร็จ</td><td>3 วินาที (ส่งซ้ำได้)</td></tr>
+  <tr><td>B6</td><td>ยกเลิกรายการ</td><td>หลัก</td><td>Easy POS → Buzzebees</td><td>ยกเลิกบิลก่อนปิด หรือ void / คืนบิลภายหลัง</td><td>5 วินาที (ส่งซ้ำได้)</td></tr>
+  <tr><td>B7</td><td>ส่งข้อมูลหลัก</td><td>สนับสนุน</td><td>Easy HQ → Buzzebees</td><td>วันละครั้ง 05:00 หรือเมื่อสาขา/เมนูเปลี่ยน</td><td>30 วินาที</td></tr>
+  <tr><td>B8</td><td>สอบถามสถานะรายการ</td><td>สนับสนุน</td><td>Easy POS → Buzzebees</td><td>B3–B5 หมดเวลารอ และ POS ต้องรู้ผลก่อนปิดบิล</td><td>3 วินาที</td></tr>
+  <tr><td>B9</td><td>รายงานกระทบยอด</td><td>สนับสนุน</td><td>ระบบรายงาน Oshinei → Buzzebees</td><td>ทุกวัน 06:00</td><td>30 วินาที</td></tr>
+</table>
+<p class="note">เส้นหลัก (B1–B6) กระทบการคิดเงินโดยตรง จึงกำหนดเวลาตอบสั้น เส้นสนับสนุน (B0, B7, B8, B9) ใช้ดูแลระบบ กู้คืนเมื่อเกิดปัญหา และตรวจสอบยอด</p>
+
+<!-- ===================== 5 ===================== -->
+<h2 id="s5">5. ลำดับการเรียกต่อ 1 บิล</h2>
+<p class="owner">ผู้พัฒนาฝั่ง POS (ลำดับการเรียกและการจัดการเมื่อไม่สำเร็จ): Easy · ผู้พัฒนาฝั่งรับ: Buzzebees</p>
+<p class="lead">บิลหนึ่งใบเรียก API สูงสุด 5 ครั้ง (B1–B5) ทุกครั้งเริ่มจาก Easy POS การตัดคูปองและแต้ม (B3, B4) ต้องสำเร็จก่อนปิดบิล ส่วนสะสมแต้ม (B5) เรียกหลังชำระเงินสำเร็จและก่อนพิมพ์ใบเสร็จ เพื่อให้ใบเสร็จแสดงแต้มที่ได้และแต้มคงเหลือ</p>
+
+<div class="fig">
+<svg viewBox="0 0 760 368" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <defs><marker id="seq-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="28" font-size="15" font-weight="600" fill="#141414">บิลหนึ่งใบเรียก Buzzebees ไม่เกิน 5 ครั้ง และต้องตัดคูปองหรือแต้มสำเร็จก่อนปิดบิล</text>
+  <text x="24" y="96" font-weight="600" fill="#141414">Easy POS</text>
+  <text x="24" y="312" font-size="11.5" fill="#5a5a5a">กรณียกเว้น</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M232 92H250" marker-end="url(#seq-arrow)"/>
+    <path d="M358 92H376" marker-end="url(#seq-arrow)"/>
+    <path d="M484 92H502" marker-end="url(#seq-arrow)"/>
+    <path d="M610 92H628" marker-end="url(#seq-arrow)"/>
+    <path d="M178 128V196" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+    <path d="M304 128V196" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+    <path d="M430 128V196" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+    <path d="M556 128V196" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+    <path d="M332 272V236" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+    <path d="M600 272V236" marker-start="url(#seq-arrow)" marker-end="url(#seq-arrow)"/>
+  </g>
+  <rect x="124" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="178" y="80" text-anchor="middle" font-weight="600" fill="#141414">สแกนสมาชิก</text>
+  <text x="178" y="102" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B1 ค้นสมาชิก</text>
+  <rect x="250" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="304" y="80" text-anchor="middle" font-weight="600" fill="#141414">เลือกคูปอง</text>
+  <text x="304" y="102" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B2 ตรวจคูปอง</text>
+  <rect x="376" y="56" width="108" height="72" rx="8" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="430" y="80" text-anchor="middle" font-weight="600" fill="#141414">กดชำระเงิน</text>
+  <text x="430" y="102" text-anchor="middle" font-size="11.5" fill="#141414">B3 ตัดคูปอง</text>
+  <text x="430" y="118" text-anchor="middle" font-size="11.5" fill="#141414">B4 ตัดแต้ม</text>
+  <rect x="502" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="556" y="80" text-anchor="middle" font-weight="600" fill="#141414">ชำระสำเร็จ</text>
+  <text x="556" y="102" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B5 สะสมแต้ม</text>
+  <rect x="628" y="56" width="108" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="682" y="80" text-anchor="middle" font-weight="600" fill="#141414">พิมพ์ใบเสร็จ</text>
+  <text x="682" y="102" text-anchor="middle" font-size="11.5" fill="#5a5a5a">แสดงแต้มที่ได้</text>
+  <text x="682" y="118" text-anchor="middle" font-size="11.5" fill="#5a5a5a">+ QR ใบเสร็จ</text>
+  <text x="186" y="166" font-size="11.5" fill="#5a5a5a">B1</text>
+  <text x="312" y="166" font-size="11.5" fill="#5a5a5a">B2</text>
+  <text x="438" y="166" font-size="11.5" fill="#5a5a5a">B3, B4</text>
+  <text x="564" y="166" font-size="11.5" fill="#5a5a5a">B5</text>
+  <rect x="124" y="196" width="612" height="40" rx="8" fill="#f3f4f6" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="430" y="221" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees (CRM PLUS)</text>
+  <rect x="232" y="272" width="200" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="332" y="296" text-anchor="middle" font-weight="600" fill="#141414">ยกเลิกบิล หรือ void</text>
+  <text x="332" y="318" text-anchor="middle" font-size="11.5" fill="#5a5a5a">คืนคูปอง คืนแต้มที่แลก</text>
+  <text x="332" y="334" text-anchor="middle" font-size="11.5" fill="#5a5a5a">หักแต้มที่ได้ไปแล้ว</text>
+  <rect x="500" y="272" width="200" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="600" y="296" text-anchor="middle" font-weight="600" fill="#141414">หมดเวลารอ B3–B5</text>
+  <text x="600" y="318" text-anchor="middle" font-size="11.5" fill="#5a5a5a">ถามผลด้วย request_id เดิม</text>
+  <text x="600" y="334" text-anchor="middle" font-size="11.5" fill="#5a5a5a">ไม่ได้ผล → ไม่ให้ส่วนลด</text>
+  <text x="340" y="258" font-size="11.5" fill="#5a5a5a">B6</text>
+  <text x="608" y="258" font-size="11.5" fill="#5a5a5a">B8</text>
+</svg>
+<div class="cap">ลำดับการเรียก API ต่อ 1 บิล: 5 ขั้นตอน และ 2 กรณียกเว้น</div>
+</div>
+
+<ol>
+  <li>แคชเชียร์สแกน QR สมาชิกจาก LINE หรือกรอกเบอร์โทร → <b>B1 ค้นสมาชิก</b> POS แสดงชื่อ แต้มคงเหลือ และคูปองที่ใช้ได้</li>
+  <li>ลูกค้าเลือกคูปอง → <b>B2 ตรวจคูปอง</b> (ยังไม่ตัด) POS ใส่ส่วนลดตามคำตอบ</li>
+  <li>ลูกค้าขอแลกแต้ม → POS คำนวณส่วนลดจาก point_balance × point_value_thb ที่ได้จาก B1 ยังไม่เรียก API</li>
+  <li>กดชำระเงิน → <b>B3 ตัดคูปอง</b> และ <b>B4 ตัดแต้ม</b> ทีละรายการ ถ้ารายการใดไม่สำเร็จ POS ยกเลิกรายการที่สำเร็จไปแล้วด้วย B6 แล้วแจ้งแคชเชียร์</li>
+  <li>ชำระเงินสำเร็จ → <b>B5 สะสมแต้ม</b> → พิมพ์ใบเสร็จพร้อมแต้มที่ได้ แต้มคงเหลือ และ QR ใบเสร็จ ถ้า B5 ไม่ตอบในเวลา ใบเสร็จพิมพ์ "แต้มจะเข้าภายใน 24 ชั่วโมง" และ POS เข้าคิวส่งซ้ำ</li>
+  <li>ยกเลิกบิลก่อนปิด หลัง B3/B4 สำเร็จแล้ว → <b>B6</b> ด้วย transaction_refs ทันทีเพื่อคืนคูปองและแต้ม</li>
+  <li>void หรือคืนบิลภายหลัง → <b>B6</b> คืนคูปอง คืนแต้มที่แลก และหักแต้มที่ได้ การคืนบางรายการ = B6 ยกเลิกทั้งบิล แล้ว B5 ใหม่ด้วยยอดหลังคืน</li>
+</ol>
+<p><b>กรณีหมดเวลารอ B3, B4 หรือ B5:</b> POS เรียก <b>B8 สอบถามสถานะ</b> ด้วย request_id เดิม ได้ completed → ใช้ผลนั้น; ได้ not_found → ถือว่าไม่ได้ตัด ไม่ให้ส่วนลด; B8 ไม่ตอบเช่นกัน → ไม่ให้ส่วนลด ปิดบิลราคาเต็ม รายการที่อาจตัดไปแล้วจะปรากฏในรายงานกระทบยอด และ Buzzebees คืนให้ลูกค้า</p>
+
+<!-- ===================== 6 ===================== -->
+<h2 id="s6">6. รูปแบบคำขอและคำตอบ</h2>
+<p class="owner">ผู้กำหนดรูปแบบสุดท้าย: Buzzebees (ปรับตามสเปก HO_CRM ของ Easy)</p>
+<p class="lead">ทุกเส้นเป็น HTTPS + JSON เส้นทางนำหน้าด้วย <code>/pos/v1/</code> (เสนอ) Buzzebees กำหนด URL ของ sandbox และ production แยกกัน</p>
+
+<h3>Header ทุกคำขอ</h3>
+<table>
+  <tr><th style="width:28%">Header</th><th>ค่า</th></tr>
+  <tr><td class="k">X-Api-Key</td><td>คีย์ของสาขานั้น (Buzzebees ออกให้ 1 คีย์ต่อสาขา)</td></tr>
+  <tr><td class="k">X-Branch-Code</td><td>รหัสสาขาใน Easy ต้องตรงกับคีย์</td></tr>
+  <tr><td class="k">Api-Version</td><td>1</td></tr>
+  <tr><td class="k">Content-Type</td><td>application/json; charset=utf-8</td></tr>
+</table>
+
+<h3>ฟิลด์ร่วมใน body ทุกคำขอ (B1–B7)</h3>
+<table>
+  <tr><th style="width:22%">ฟิลด์</th><th style="width:24%">ชนิด</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">request_id</td><td>string (UUID v4)</td><td>POS สร้างใหม่ทุกคำขอ ส่งซ้ำด้วยค่าเดิมเมื่อหมดเวลา</td></tr>
+  <tr><td class="k">branch_code</td><td>string</td><td>รหัสสาขาใน Easy (BranchCode)</td></tr>
+  <tr><td class="k">terminal_id</td><td>string</td><td>เครื่อง POS</td></tr>
+  <tr><td class="k">cashier_id</td><td>string</td><td>รหัสผู้ใช้ POS ที่ทำรายการ</td></tr>
+  <tr><td class="k">request_time</td><td>string (ISO 8601)</td><td>เวลาฝั่ง POS เช่น 2026-10-14T18:32:05+07:00</td></tr>
+</table>
+
+<div class="keep">
+<h3>ซองคำตอบทุกเส้น</h3>
+<pre>{
+  "status": "ok",
+  "code": "OK",
+  "message": "สำเร็จ",
+  "request_id": "6f1c0e5a-...",
+  "server_time": "2026-10-14T18:32:06+07:00",
+  "data": { }
+}</pre>
+<table>
+  <tr><th style="width:22%">ฟิลด์</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">status</td><td>ok หรือ error</td></tr>
+  <tr><td class="k">code</td><td>OK หรือรหัสข้อผิดพลาดตามตารางในหัวข้อ 9</td></tr>
+  <tr><td class="k">message</td><td>ข้อความภาษาไทยสั้น ที่ POS แสดงให้แคชเชียร์ได้ทันที</td></tr>
+  <tr><td class="k">request_id</td><td>สะท้อนค่าจากคำขอ</td></tr>
+  <tr><td class="k">data</td><td>ฟิลด์ตอบของแต่ละเส้น เป็น {} เมื่อ error</td></tr>
+</table>
+</div>
+
+<h3>รหัส HTTP</h3>
+<table>
+  <tr><th style="width:16%">รหัส</th><th style="width:42%">ความหมาย</th><th>POS ทำอย่างไร</th></tr>
+  <tr><td>200</td><td>ประมวลผลแล้ว ทั้งสำเร็จและปฏิเสธทางธุรกิจ (ดู code)</td><td>แสดง message</td></tr>
+  <tr><td>400</td><td>คำขอผิดรูปแบบ</td><td>บันทึก log แจ้งเป็นข้อบกพร่องระบบ</td></tr>
+  <tr><td>401</td><td>คีย์ไม่ถูกต้อง หรือไม่ตรงสาขา</td><td>แสดง "เชื่อมต่อระบบสมาชิกไม่ได้"</td></tr>
+  <tr><td>409</td><td>request_id เดิมแต่เนื้อหาต่างจากครั้งก่อน</td><td>สร้าง request_id ใหม่แล้วส่งอีกครั้ง</td></tr>
+  <tr><td>429</td><td>เรียกถี่เกิน</td><td>รอตาม Retry-After แล้วส่งซ้ำ</td></tr>
+  <tr><td>5xx หรือหมดเวลา</td><td>ระบบ Buzzebees ขัดข้อง</td><td>ถือว่าไม่สำเร็จ ทำตามกติกาเมื่อ Buzzebees ไม่ตอบ (หัวข้อ 9)</td></tr>
+</table>
+
+<!-- ===================== 7 ===================== -->
+<h2 id="s7">7. รายละเอียดแต่ละเส้น B0–B9</h2>
+<p class="owner">ผู้พัฒนาฝั่งรับ: Buzzebees · ผู้พัฒนาฝั่งเรียกและผู้บันทึกลงตาราง Easy: Easy (ทีมเทคนิค)</p>
+<p class="lead">แต่ละเส้นระบุฟิลด์ที่ POS ส่ง (นอกเหนือจากฟิลด์ร่วม) ฟิลด์ใน data ที่ Buzzebees ตอบ และตารางใน Easy ที่เก็บค่านั้น (ชื่อตาราง Easy มาจากโครงสร้างฐานข้อมูลที่มีอยู่ ให้ Easy ยืนยัน)</p>
+
+<div class="api">
+<h3>B0 ตรวจการเชื่อมต่อ <span class="path">GET /pos/v1/health</span></h3>
+<p>ไม่มี body ใช้ header เท่านั้น ตอบ status และ server_time ถ้าไม่สำเร็จ POS แสดงสัญลักษณ์ "ระบบสมาชิกออฟไลน์" และปิดปุ่มคูปองและแลกแต้มจนกว่าจะติดต่อได้อีก</p>
+</div>
+
+<div class="api">
+<h3>B1 ค้นสมาชิก <span class="path">POST /pos/v1/members/lookup</span></h3>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">member_qr</td><td>ส่ง</td><td>รหัสจาก QR สมาชิกใน LINE OA อายุ 5 นาที (ส่งอย่างใดอย่างหนึ่งระหว่าง member_qr กับ phone)</td></tr>
+  <tr><td class="k">phone</td><td>ส่ง</td><td>เบอร์โทร 10 หลัก ใช้เมื่อลูกค้าไม่มีโทรศัพท์ในมือ</td></tr>
+  <tr><td class="k">member_id</td><td>ตอบ</td><td>รหัสสมาชิก ใช้ใน B2–B5</td></tr>
+  <tr><td class="k">display_name</td><td>ตอบ</td><td>ชื่อปิดบางส่วน เช่น สม*** ให้แคชเชียร์ยืนยันกับลูกค้า</td></tr>
+  <tr><td class="k">tier</td><td>ตอบ</td><td>ระดับสมาชิก (ถ้ามี)</td></tr>
+  <tr><td class="k">point_balance</td><td>ตอบ</td><td>แต้มคงเหลือ</td></tr>
+  <tr><td class="k">point_value_thb</td><td>ตอบ</td><td>มูลค่า 1 แต้มเป็นบาท POS ใช้คำนวณส่วนลดก่อนเรียก B4</td></tr>
+  <tr><td class="k">min_burn, max_burn_per_bill</td><td>ตอบ</td><td>แต้มขั้นต่ำและสูงสุดที่แลกได้ต่อบิล</td></tr>
+  <tr><td class="k">points_expiring_30d</td><td>ตอบ</td><td>แต้มที่จะหมดอายุใน 30 วัน ให้แคชเชียร์แจ้งลูกค้า</td></tr>
+  <tr><td class="k">coupons[]</td><td>ตอบ</td><td>คูปองที่ใช้ได้ที่สาขานี้: coupon_code, name, discount_text, expiry</td></tr>
+</table>
+<p class="note"><b>Easy บันทึก:</b> Sale.CustomerId หรือ Sale.CustRefNum = member_id (ให้ Easy ระบุช่องที่ใช้) การค้นด้วยเบอร์โทรตอบเฉพาะชื่อปิดบางส่วนและแต้ม ไม่ตอบข้อมูลส่วนบุคคลอื่น</p>
+</div>
+
+<div class="api">
+<h3>B2 ตรวจคูปอง <span class="path">POST /pos/v1/coupons/validate</span></h3>
+<p>ตรวจว่าคูปองใช้กับบิลนี้ได้หรือไม่ ยังไม่ตัดสิทธิ์ เรียกซ้ำได้ทุกครั้งที่บิลเปลี่ยน</p>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">coupon_code</td><td>ส่ง</td><td>จาก QR คูปอง หรือเลือกจาก coupons[] ใน B1</td></tr>
+  <tr><td class="k">member_id</td><td>ส่ง</td><td>ไม่บังคับสำหรับคูปองทั่วไปที่ไม่ผูกสมาชิก</td></tr>
+  <tr><td class="k">sale_type</td><td>ส่ง</td><td>dine_in, take_away, delivery</td></tr>
+  <tr><td class="k">bill_amount</td><td>ส่ง</td><td>ยอดก่อนส่วนลด รวม VAT</td></tr>
+  <tr><td class="k">items[]</td><td>ส่ง</td><td>item_code, qty, unit_price, amount สำหรับคูปองรายเมนู</td></tr>
+  <tr><td class="k">valid</td><td>ตอบ</td><td>true / false</td></tr>
+  <tr><td class="k">reason</td><td>ตอบ</td><td>รหัสข้อผิดพลาดเมื่อ valid = false</td></tr>
+  <tr><td class="k">discount_type</td><td>ตอบ</td><td>amount (บาท), percent, free_item</td></tr>
+  <tr><td class="k">discount_value, max_discount</td><td>ตอบ</td><td>มูลค่าส่วนลด และเพดานสูงสุดเป็นบาท</td></tr>
+  <tr><td class="k">apply_to, item_codes[]</td><td>ตอบ</td><td>bill หรือ items พร้อมรหัสเมนูที่ได้ส่วนลด</td></tr>
+  <tr><td class="k">easy_promotion_code</td><td>ตอบ</td><td>รหัสส่วนลดใน Easy ที่ผูกกับคูปองชนิดนี้ POS ใส่ส่วนลดด้วยรหัสนี้</td></tr>
+</table>
+</div>
+
+<div class="api">
+<h3>B3 ตัดคูปอง <span class="path">POST /pos/v1/coupons/redeem</span></h3>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">coupon_code, member_id</td><td>ส่ง</td><td>เหมือน B2</td></tr>
+  <tr><td class="k">receipt_no, sale_date</td><td>ส่ง</td><td>รวมกับ branch_code เป็นคีย์บิล</td></tr>
+  <tr><td class="k">discount_amount</td><td>ส่ง</td><td>ส่วนลดที่ใช้จริงเป็นบาท Buzzebees ตรวจว่าไม่เกินที่ B2 ตอบ</td></tr>
+  <tr><td class="k">transaction_ref</td><td>ตอบ</td><td>เลขอ้างอิงรายการ</td></tr>
+  <tr><td class="k">redeemed_at</td><td>ตอบ</td><td>เวลาที่ตัด</td></tr>
+</table>
+<p class="note"><b>Easy บันทึก:</b> PromotionByCRM (CouponNumber, DiscountAmount, TransactionRef, IsSuccess) คูปองที่ตัดแล้วกลับมาใช้ได้อีกเฉพาะผ่าน B6</p>
+</div>
+
+<div class="api">
+<h3>B4 แลกแต้มเป็นส่วนลด <span class="path">POST /pos/v1/points/burn</span></h3>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">member_id, receipt_no, sale_date</td><td>ส่ง</td><td></td></tr>
+  <tr><td class="k">points</td><td>ส่ง</td><td>แต้มที่ลูกค้าขอใช้ ต้องอยู่ระหว่าง min_burn กับ max_burn_per_bill</td></tr>
+  <tr><td class="k">expected_discount</td><td>ส่ง</td><td>ส่วนลดที่ POS คำนวณไว้ (points × point_value_thb) Buzzebees ตรวจว่าตรงกัน</td></tr>
+  <tr><td class="k">discount_amount</td><td>ตอบ</td><td>ส่วนลดที่ให้จริง</td></tr>
+  <tr><td class="k">point_balance</td><td>ตอบ</td><td>แต้มคงเหลือหลังตัด</td></tr>
+  <tr><td class="k">transaction_ref</td><td>ตอบ</td><td>เลขอ้างอิงรายการ</td></tr>
+</table>
+<p class="note"><b>Easy บันทึก:</b> Sale.RedeemedPoint, Sale.BalancePoint และ PromotionByCRM อีก 1 แถวเป็นส่วนลดจากแต้ม</p>
+</div>
+
+<div class="api">
+<h3>B5 สะสมแต้ม <span class="path">POST /pos/v1/points/earn</span></h3>
+<p>เรียกหลังชำระเงินสำเร็จและก่อนพิมพ์ใบเสร็จ เพื่อให้ใบเสร็จแสดงแต้มที่ได้และแต้มคงเหลือ คีย์บิลเดิมสะสมได้ครั้งเดียว (ครั้งที่สองตอบ DUPLICATE_RECEIPT)</p>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">member_id, receipt_no, sale_date, sale_time</td><td>ส่ง</td><td></td></tr>
+  <tr><td class="k">sale_type, covers</td><td>ส่ง</td><td>ช่องทางขาย และจำนวนที่นั่ง</td></tr>
+  <tr><td class="k">gross_amount, discount_amount, service_charge, vat_amount</td><td>ส่ง</td><td>ยอดก่อนส่วนลด ส่วนลดรวม ค่าบริการ VAT แยกครบเพื่อให้ Buzzebees คิดแต้มตามฐานที่ตกลง</td></tr>
+  <tr><td class="k">net_amount_inc_vat, net_amount_ex_vat</td><td>ส่ง</td><td>ยอดสุทธิหลังส่วนลด</td></tr>
+  <tr><td class="k">payment_methods[]</td><td>ส่ง</td><td>method, amount (cash, qr, credit_card, …)</td></tr>
+  <tr><td class="k">items[]</td><td>ส่ง</td><td>item_code, item_name, qty, amount สำหรับแต้มพิเศษรายเมนู</td></tr>
+  <tr><td class="k">related_refs[]</td><td>ส่ง</td><td>transaction_ref ของ B3/B4 ในบิลนี้ ให้ Buzzebees ผูกรายการเข้าด้วยกัน</td></tr>
+  <tr><td class="k">earned_points</td><td>ตอบ</td><td>แต้มที่ได้จากบิลนี้</td></tr>
+  <tr><td class="k">point_balance</td><td>ตอบ</td><td>แต้มคงเหลือ</td></tr>
+  <tr><td class="k">transaction_ref</td><td>ตอบ</td><td>เลขอ้างอิงรายการ</td></tr>
+  <tr><td class="k">receipt_message</td><td>ตอบ</td><td>ข้อความสั้นพิมพ์ท้ายใบเสร็จ (ไม่เกิน 2 บรรทัด)</td></tr>
+</table>
+<p class="note"><b>Easy บันทึก:</b> Sale.EarnPoint, Sale.EarnPointNetAmount, Sale.BalancePoint และพิมพ์ earned_points, point_balance, receipt_message บนใบเสร็จ ถ้า B5 ไม่ตอบในเวลา ใบเสร็จพิมพ์ "แต้มจะเข้าภายใน 24 ชั่วโมง" และ POS เข้าคิวส่งซ้ำด้วย request_id เดิม</p>
+</div>
+
+<div class="api">
+<h3>B6 ยกเลิกรายการ <span class="path">POST /pos/v1/transactions/void</span></h3>
+<p>ใช้ 3 กรณี: ยกเลิกบิลก่อนปิดหลัง B3/B4 สำเร็จแล้ว, void บิลหลังปิด, และคืนบิล การคืนบางรายการให้เรียก B6 ยกเลิกทั้งบิล แล้วเรียก B5 ใหม่ด้วยยอดหลังคืน</p>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">void_type</td><td>ส่ง</td><td>cancel_before_close, void, return</td></tr>
+  <tr><td class="k">receipt_no, sale_date</td><td>ส่ง</td><td>บิลที่ยกเลิก (ไม่บังคับเมื่อ cancel_before_close)</td></tr>
+  <tr><td class="k">transaction_refs[]</td><td>ส่ง</td><td>ทุกรายการ B3–B5 ของบิลนี้ รวมรายการจาก QR ใบเสร็จถ้ามี</td></tr>
+  <tr><td class="k">void_reason</td><td>ส่ง</td><td>เหตุผลที่แคชเชียร์เลือกใน POS</td></tr>
+  <tr><td class="k">reversed[]</td><td>ตอบ</td><td>transaction_ref, status (reversed, already_reversed, not_found)</td></tr>
+  <tr><td class="k">point_balance</td><td>ตอบ</td><td>แต้มคงเหลือหลังยกเลิก ติดลบได้ถ้าลูกค้าใช้แต้มที่ได้จากบิลนี้ไปแล้ว</td></tr>
+</table>
+<p class="note"><b>Easy บันทึก:</b> PromotionByCRM.DiscountStatus ของรายการที่ยกเลิก (ให้ Easy ยืนยันช่อง)</p>
+</div>
+
+<div class="api">
+<h3>B7 ส่งข้อมูลหลัก <span class="path">PUT /pos/v1/master/branches และ PUT /pos/v1/master/items</span></h3>
+<p>ผู้เรียกคือ Easy HQ ไม่ใช่เครื่องสาขา ส่งทั้งชุดทุกครั้ง Buzzebees ใช้ตั้งคูปองรายสาขาและแต้มพิเศษรายเมนู</p>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">branches[]</td><td>ส่ง</td><td>branch_code, name, active</td></tr>
+  <tr><td class="k">items[]</td><td>ส่ง</td><td>item_code, name, category, price, active</td></tr>
+  <tr><td class="k">received</td><td>ตอบ</td><td>จำนวนที่รับ</td></tr>
+  <tr><td class="k">rejected[]</td><td>ตอบ</td><td>code, reason ของแถวที่รับไม่ได้</td></tr>
+</table>
+</div>
+
+<div class="api">
+<h3>B8 สอบถามสถานะรายการ <span class="path">GET /pos/v1/transactions/{request_id}</span></h3>
+<p>ใช้เมื่อ B3, B4 หรือ B5 หมดเวลารอ และ POS ต้องรู้ว่า Buzzebees ทำรายการไปแล้วหรือไม่</p>
+<table>
+  <tr><th style="width:30%">ฟิลด์</th><th style="width:10%">ส่ง/ตอบ</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">request_id</td><td>ส่ง (ใน path)</td><td>request_id ของคำขอที่หมดเวลา</td></tr>
+  <tr><td class="k">status</td><td>ตอบ</td><td>completed, not_found, reversed</td></tr>
+  <tr><td class="k">original</td><td>ตอบ</td><td>data ชุดเดิมของคำตอบนั้น เมื่อ completed</td></tr>
+</table>
+<p class="note"><b>POS ทำตามนี้:</b> completed → ใช้ผลเดิมปิดบิล; not_found → ถือว่ายังไม่ตัด ไม่ให้ส่วนลด; B8 ก็ไม่ตอบ → ไม่ให้ส่วนลด ปิดบิลราคาเต็ม รายการที่อาจตัดไปแล้วจะปรากฏในรายงานกระทบยอด และ Buzzebees คืนให้ลูกค้า</p>
+</div>
+
+<div class="api">
+<h3>B9 รายงานกระทบยอด <span class="path">GET /pos/v1/reports/daily?branch_code=&amp;date=</span></h3>
+<p>ผู้เรียกคือระบบรายงานของ Oshinei ตอบ rows[] ตามคอลัมน์ในหัวข้อ 10 พร้อม total_count และ generated_at ใช้คีย์ระดับสำนักงานใหญ่ ไม่ใช่คีย์สาขา ไฟล์ CSV ทางอีเมลหรือ SFTP เป็นทางสำรอง</p>
+</div>
+
+<!-- ===================== 8 ===================== -->
+<h2 id="s8">8. QR บนใบเสร็จ</h2>
+<p class="owner">รูปแบบ QR: Easy (ทีมเทคนิค) · การถอดรหัสและให้แต้ม: Buzzebees · เปิดใช้รายสาขา: Easy</p>
+<p class="lead">ใบเสร็จทุกใบพิมพ์ QR ลูกค้าที่ไม่ได้แสดงสมาชิกตอนคิดเงินสแกนใน LINE OA เพื่อรับแต้มภายหลัง ลูกค้าใหม่สแกนแล้วสมัครสมาชิกก่อนรับแต้มได้ ไม่ต้องเรียก API จาก POS (Easy มีค่าตั้ง QrDataReceipt อยู่แล้ว ยังปิดใช้งานทุกสาขา)</p>
+<table>
+  <tr><th style="width:38%">ข้อมูลใน QR</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">branch_code, receipt_no, sale_date, sale_time</td><td>คีย์บิล ต้องตรงกับที่ส่งใน B5</td></tr>
+  <tr><td class="k">net_amount_inc_vat, earn_base_amount</td><td>ยอดสุทธิ และยอดฐานคิดแต้มตามที่ตกลง</td></tr>
+  <tr><td class="k">signature</td><td>HMAC-SHA256 ของฟิลด์ข้างต้น ด้วยคีย์ที่ Buzzebees ออกให้ (QRDataSecretKey ใน Easy) กันการแก้ยอด (เสนอ)</td></tr>
+</table>
+<p>รูปแบบการเรียงข้อมูลใน QR (ตัวคั่น ลำดับฟิลด์ การเข้ารหัส) ให้เป็นไปตามที่ QRDataReceiptSetting ของ Easy รองรับ ให้ Easy ส่งสเปกให้ Buzzebees</p>
+<h4>กติกา</h4>
+<ul>
+  <li>1 ใบเสร็จรับแต้มได้ครั้งเดียว และต้องสแกนภายใน 7 วันนับจาก sale_date (เสนอ)</li>
+  <li>บิลที่สะสมแต้มผ่าน B5 แล้ว สแกน QR ต้องได้ข้อความ "บิลนี้สะสมแต้มแล้ว" ไม่ได้แต้มซ้ำ (ตรวจจากคีย์บิล)</li>
+  <li>รายการจาก QR ใบเสร็จบันทึกด้วย channel = receipt_qr และมี transaction_ref เหมือนรายการอื่น</li>
+  <li>บิลที่ถูก void หลังลูกค้าสแกนแล้ว หักแต้มคืนผ่าน B6 (Buzzebees ค้นรายการจากคีย์บิล แม้ POS ไม่มี transaction_ref)</li>
+  <li>QR ที่ signature ไม่ตรง ถูกปฏิเสธ และ Buzzebees บันทึกไว้ในรายงานกระทบยอด</li>
+</ul>
+
+<!-- ===================== 9 ===================== -->
+<h2 id="s9">9. ข้อกำหนดทั่วไป</h2>
+<p class="owner">ผู้รับผิดชอบให้เป็นไปตามข้อกำหนด: Buzzebees (ฝั่งรับและการดูแลระบบ) · Easy (ฝั่ง POS: เวลารอ คิวส่งซ้ำ การบันทึก log)</p>
+
+<div class="keep">
+<h3>ความปลอดภัย</h3>
+<ul>
+  <li>HTTPS (TLS 1.2 ขึ้นไป) ทุกเส้น</li>
+  <li>คีย์แยกต่อสาขา ส่งใน header เท่านั้น ห้ามใส่ใน URL คีย์ของสาขาหนึ่งใช้กับ branch_code อื่นไม่ได้</li>
+  <li>เพิกถอนคีย์ทีละสาขาได้ และเปลี่ยนคีย์ได้โดยไม่หยุดบริการ (คีย์เก่าและใหม่ใช้ได้พร้อมกัน 7 วัน)</li>
+  <li>คีย์ระดับสำนักงานใหญ่สำหรับ B7 และ B9 จำกัด IP ต้นทางถ้าทำได้</li>
+  <li>ข้อมูลส่วนบุคคลที่ผ่าน API มีเพียง member_id ชื่อปิดบางส่วน และเบอร์โทรขาเข้าใน B1 เท่านั้น</li>
+</ul>
+</div>
+
+<div class="keep">
+<h3>การส่งซ้ำและการกันรายการซ้ำ</h3>
+<ul>
+  <li>request_id เดิม + เนื้อหาเดิม → ตอบผลเดิม (HTTP 200) ไม่ทำรายการซ้ำ</li>
+  <li>request_id เดิม + เนื้อหาต่าง → HTTP 409</li>
+  <li>คีย์บิลเดิมสะสมแต้ม (B5) ได้ครั้งเดียว ไม่ว่าจะมาจาก POS หรือ QR ใบเสร็จ</li>
+  <li>คิวส่งซ้ำของ B5 และ B6: ส่งซ้ำที่ 1, 5, 15 นาที จากนั้นทุก 1 ชั่วโมง จนครบ 24 ชั่วโมง แล้วจึงแจ้งเป็นรายการค้างในรายงานกระทบยอด</li>
+</ul>
+</div>
+
+<div class="keep">
+<h3>เวลาตอบและกรณี Buzzebees ไม่ตอบ</h3>
+<ul>
+  <li>POS ตั้งเวลารอตามตารางภาพรวม API เกินเวลาถือว่าไม่สำเร็จ</li>
+  <li>ปิดบิลได้เสมอ ระบบสมาชิกล่มต้องไม่ขวางการขาย</li>
+  <li>คูปองและแลกแต้ม (B2–B4) ใช้ไม่ได้ระหว่างออฟไลน์ แคชเชียร์เห็น "ระบบสมาชิกออฟไลน์" จาก B0</li>
+  <li>แต้มเข้าภายหลังผ่านคิวส่งซ้ำ หรือลูกค้าสแกน QR ใบเสร็จเอง ทั้งสองทางใช้คีย์บิลเดียวกันจึงไม่ซ้ำ</li>
+</ul>
+</div>
+
+<div class="keep">
+<h3>การบันทึก เวลา และเงิน</h3>
+<ul>
+  <li>Easy บันทึกทุกคำขอและคำตอบใน CallAPILog เก็บ 90 วัน เบอร์โทรใน log ปิดเป็น 08x-xxx-1234</li>
+  <li>เวลาทุกค่าเป็น ISO 8601 เขตเวลาไทย (+07:00)</li>
+  <li>sale_date = วันทำการของ POS (SaleDate ใน Easy) บิลหลังเที่ยงคืนก่อนปิดรอบยังนับเป็นวันเดิม</li>
+  <li>เงินเป็นบาท ทศนิยม 2 ตำแหน่ง แยกยอดรวม VAT และก่อน VAT เสมอ แต้มเป็นจำนวนเต็ม</li>
+</ul>
+</div>
+
+<div class="keep">
+<h3>ปริมาณงานที่ต้องรองรับ</h3>
+<table>
+  <tr><th style="width:40%">รายการ</th><th>ค่า</th></tr>
+  <tr><td>สาขา</td><td>ประมาณ 35</td></tr>
+  <tr><td>บิลต่อเดือน (ปี 2026)</td><td>50,000–70,000 หรือประมาณ 1,600–2,300 บิลต่อวัน</td></tr>
+  <tr><td>ชั่วโมงเร่งด่วนทั้งเครือ</td><td>ประมาณ 500 บิลต่อชั่วโมง (ประมาณการ) หรือไม่เกิน 2,500 คำขอต่อชั่วโมง</td></tr>
+  <tr><td>ความสามารถขั้นต่ำที่ขอ</td><td>10 คำขอต่อวินาที</td></tr>
+  <tr><td>ความพร้อมใช้</td><td>99.5% ต่อเดือนในเวลาเปิดร้าน 10:00–22:00 (เสนอ)</td></tr>
+</table>
+</div>
+
+<div class="keep">
+<h3>สภาพแวดล้อมและเวอร์ชัน</h3>
+<ul>
+  <li>sandbox แยกจาก production มีสมาชิกทดสอบ คูปองทดสอบ และคีย์ทดสอบให้ Easy และ Oshinei</li>
+  <li>เวอร์ชัน API ระบุใน header Api-Version การเปลี่ยนที่ไม่เข้ากันกับเดิมต้องแจ้งล่วงหน้า 30 วัน และคงเวอร์ชันเดิมอย่างน้อย 6 เดือน</li>
+  <li>ช่องแจ้งเหตุขัดข้องและการปิดปรับปรุงล่วงหน้า (อยู่ในหัวข้อ 12)</li>
+</ul>
+</div>
+
+<div class="keep">
+<h3>รหัสข้อผิดพลาด (เสนอ)</h3>
+<table>
+  <tr><th style="width:24%">รหัส</th><th style="width:38%">ความหมาย</th><th>ข้อความที่ POS แสดง</th></tr>
+  <tr><td class="k">MEMBER_NOT_FOUND</td><td>ไม่พบสมาชิก</td><td>ไม่พบสมาชิก แนะนำให้สแกน QR ใบเสร็จเพื่อสมัคร</td></tr>
+  <tr><td class="k">QR_EXPIRED</td><td>QR สมาชิกหมดอายุ</td><td>กรุณาให้ลูกค้าเปิด QR ใหม่</td></tr>
+  <tr><td class="k">COUPON_USED</td><td>คูปองใช้แล้ว</td><td>คูปองนี้ใช้ไปแล้ว</td></tr>
+  <tr><td class="k">COUPON_EXPIRED</td><td>คูปองหมดอายุ</td><td>คูปองหมดอายุ</td></tr>
+  <tr><td class="k">COUPON_CONDITION</td><td>ไม่ตรงเงื่อนไข (สาขา เมนู ยอดขั้นต่ำ ช่องทาง)</td><td>ไม่ตรงเงื่อนไขคูปอง + message จาก Buzzebees</td></tr>
+  <tr><td class="k">COUPON_NOT_OWNER</td><td>คูปองเป็นของสมาชิกอื่น</td><td>คูปองไม่ตรงกับสมาชิก</td></tr>
+  <tr><td class="k">INSUFFICIENT_POINTS</td><td>แต้มไม่พอ</td><td>แต้มไม่พอ</td></tr>
+  <tr><td class="k">BURN_LIMIT</td><td>แลกแต้มนอกช่วง min_burn–max_burn_per_bill</td><td>แลกแต้มได้ X–Y แต้มต่อบิล</td></tr>
+  <tr><td class="k">DUPLICATE_RECEIPT</td><td>คีย์บิลนี้สะสมแต้มแล้ว</td><td>บิลนี้สะสมแต้มแล้ว</td></tr>
+  <tr><td class="k">AMOUNT_MISMATCH</td><td>discount_amount หรือ expected_discount ไม่ตรงกับที่ Buzzebees คำนวณ</td><td>ยอดส่วนลดไม่ตรง กรุณาตรวจคูปองใหม่</td></tr>
+  <tr><td class="k">TXN_NOT_FOUND</td><td>ไม่พบ transaction_ref ที่ขอยกเลิก</td><td>ไม่พบรายการที่จะยกเลิก</td></tr>
+  <tr><td class="k">AUTH_FAILED</td><td>คีย์ไม่ถูกต้องหรือไม่ตรงสาขา</td><td>เชื่อมต่อระบบสมาชิกไม่ได้ แจ้งผู้จัดการสาขา</td></tr>
+</table>
+</div>
+
+<!-- ===================== 10 ===================== -->
+<h2 id="s10">10. การกระทบยอดรายวัน</h2>
+<p class="owner">ผู้กระทบยอด: Oshinei (ฝ่ายบัญชี) · ผู้ส่งรายงานและผู้แก้ไข: Buzzebees · ผู้ให้ข้อมูลฝั่ง POS: Easy</p>
+<p class="lead">Oshinei ดึงรายการของวันก่อนจาก B9 ทุกวัน 06:00 แล้วเทียบกับข้อมูลใน Easy 3 ด้าน: (1) ทุกรายการใน Buzzebees มีบิลใน Easy (2) ทุกบิลที่ Easy บันทึกแต้มหรือคูปองมีรายการใน Buzzebees (3) ยอดส่วนลดและแต้มเท่ากันทั้งสองฝั่ง</p>
+<table>
+  <tr><th style="width:38%">คอลัมน์</th><th>หมายเหตุ</th></tr>
+  <tr><td class="k">transaction_ref, request_id</td><td>เลขอ้างอิงทั้งสองฝั่ง</td></tr>
+  <tr><td class="k">type</td><td>earn, burn, coupon, void</td></tr>
+  <tr><td class="k">channel</td><td>pos หรือ receipt_qr</td></tr>
+  <tr><td class="k">branch_code, sale_date, receipt_no</td><td>คีย์บิล</td></tr>
+  <tr><td class="k">member_id</td><td></td></tr>
+  <tr><td class="k">points</td><td>บวก = ได้แต้ม ลบ = ใช้หรือหัก</td></tr>
+  <tr><td class="k">discount_amount, coupon_code</td><td>ส่วนลดเป็นบาท และรหัสคูปอง (ถ้ามี)</td></tr>
+  <tr><td class="k">status</td><td>completed, reversed, rejected</td></tr>
+  <tr><td class="k">created_at</td><td>เวลาที่ Buzzebees บันทึก</td></tr>
+</table>
+<ul>
+  <li>รายการที่ไม่ตรงกัน (มีในฝั่งเดียว หรือยอดต่างกัน) ให้แก้ภายใน 3 วันทำการ โดย Buzzebees เป็นผู้ปรับแต้มให้ตรงกับบิลใน Easy</li>
+  <li>ส่วนลดจากคูปองและแต้มต้องแยกจากส่วนลดอื่นใน Easy ได้ผ่าน PromotionByCRM เพื่อให้รายงานส่วนลดของร้านไม่ปนกัน</li>
+  <li>รายการค้างในคิวส่งซ้ำเกิน 24 ชั่วโมง Easy ส่งรายการให้ Oshinei ทุกเช้าเพื่อตามแก้</li>
+</ul>
+
+<!-- ===================== 11 ===================== -->
+<h2 id="s11">11. กรณีทดสอบก่อนรับมอบ</h2>
+<p class="lead">ทดสอบบน sandbox ก่อน แล้วทดสอบซ้ำที่สาขานำร่อง 1 สาขาด้วยบิลจริง ทุกข้อต้องผ่าน และรายงานกระทบยอดของวันทดสอบต้องตรงกับ Easy ทุกรายการ</p>
+<table>
+  <tr><th style="width:38%">กลุ่มทดสอบ</th><th style="width:32%">ผู้ทดสอบ</th><th>ผู้ตรวจรับ</th></tr>
+  <tr><td>การคิดเงินปกติ, คูปองและแต้ม, การยกเลิก</td><td class="own">Buzzebees ร่วมกับ Easy (ทีมเทคนิค)</td><td>Oshinei (เจ้าของโครงการ)</td></tr>
+  <tr><td>เครือข่ายและการส่งซ้ำ</td><td class="own">Easy (ทีมเทคนิค)</td><td>Buzzebees ยืนยันฝั่งรับ, Oshinei ตรวจรับ</td></tr>
+  <tr><td>QR ใบเสร็จ ข้อมูลหลัก และรายงาน</td><td class="own">Buzzebees</td><td>Oshinei (ฝ่ายบัญชีตรวจรายงาน)</td></tr>
+  <tr><td>ทดสอบซ้ำที่สาขานำร่อง</td><td class="own">Easy (หน้างาน) ร่วมกับ Buzzebees</td><td>Oshinei (ฝ่ายปฏิบัติการสาขา)</td></tr>
+</table>
+
+<div class="grp">
+<h4>การคิดเงินปกติ</h4>
+<ul class="check">
+  <li>B0: ตัดการเชื่อมต่อ → POS แสดง "ระบบสมาชิกออฟไลน์" และกลับมาปกติเองเมื่อเชื่อมต่อได้</li>
+  <li>B1: ค้นด้วย QR และด้วยเบอร์โทร ได้ชื่อปิดบางส่วน แต้มคงเหลือ และคูปองของสาขานั้นถูกต้อง; QR หมดอายุ → QR_EXPIRED</li>
+  <li>B5: บิลปกติได้แต้มตามกติกา ใบเสร็จพิมพ์แต้มที่ได้และคงเหลือ และ Sale.EarnPoint ตรงกับ Buzzebees</li>
+  <li>B5: บิลที่มีส่วนลด ค่าบริการ และหลายวิธีชำระ คิดแต้มตามฐานที่ตกลง</li>
+  <li>B5: บิลเดลิเวอรี ได้หรือไม่ได้แต้มตามที่ตกลง</li>
+</ul>
+</div>
+<div class="grp">
+<h4>คูปองและแต้ม</h4>
+<ul class="check">
+  <li>B2/B3: คูปองทั้งบิล คูปองรายเมนู และคูปองแถมเมนู ใช้ได้และลง PromotionByCRM ด้วย easy_promotion_code ที่ถูกต้อง</li>
+  <li>B2: คูปองใช้แล้ว หมดอายุ ผิดสาขา ยอดไม่ถึง และของสมาชิกอื่น → รหัสข้อผิดพลาดตรงตามตาราง</li>
+  <li>B3: คูปองเดิมใช้ซ้ำที่สาขาอื่นในเวลาเดียวกันไม่ได้</li>
+  <li>B4: แลกแต้มปกติ แลกเกินที่มี และแลกนอกช่วง min/max → สองกรณีหลังถูกปฏิเสธ</li>
+  <li>B4: expected_discount ไม่ตรง → AMOUNT_MISMATCH และไม่ตัดแต้ม</li>
+</ul>
+</div>
+<div class="grp">
+<h4>การยกเลิก</h4>
+<ul class="check">
+  <li>B6: ยกเลิกบิลก่อนปิดหลัง B3/B4 สำเร็จ → คูปองกลับมาใช้ได้ แต้มคืนทันที</li>
+  <li>B6: void บิลที่ใช้คูปอง แลกแต้ม และได้แต้ม → ทั้งสามรายการถูกย้อนกลับ</li>
+  <li>B6: void บิลที่ลูกค้าใช้แต้มที่ได้ไปแล้ว → ยอดติดลบตามที่ตกลง</li>
+  <li>B6 + B5: คืนบางรายการ → แต้มสุทธิตรงกับยอดหลังคืน</li>
+  <li>B6: ยกเลิกซ้ำ → already_reversed ไม่คืนสองรอบ</li>
+</ul>
+</div>
+<div class="grp">
+<h4>เครือข่ายและการส่งซ้ำ</h4>
+<ul class="check">
+  <li>ตัดอินเทอร์เน็ตตอนปิดบิล → ปิดบิลได้ ใบเสร็จพิมพ์ "แต้มจะเข้าภายใน 24 ชั่วโมง" และแต้มเข้าหลังเน็ตกลับมา ไม่ซ้ำ</li>
+  <li>ส่งคำขอเดิมซ้ำ (request_id เดิม เนื้อหาเดิม) → ได้ผลเดิม ไม่มีรายการซ้ำ</li>
+  <li>request_id เดิม เนื้อหาต่าง → HTTP 409</li>
+  <li>B8: B3 หมดเวลาหลัง Buzzebees ตัดแล้ว → B8 ตอบ completed และ POS ใช้ผลนั้นปิดบิล; หมดเวลาก่อนถึง Buzzebees → not_found</li>
+  <li>คีย์ของสาขา A ใช้กับ branch_code B → 401</li>
+</ul>
+</div>
+<div class="grp">
+<h4>QR ใบเสร็จ ข้อมูลหลัก และรายงาน</h4>
+<ul class="check">
+  <li>สแกน QR ใบเสร็จปกติ → ได้แต้ม; สแกนซ้ำ → ไม่ได้; บิลที่ได้แต้มผ่าน B5 แล้ว → ไม่ได้; QR ที่แก้ยอด → ถูกปฏิเสธ</li>
+  <li>B7: ส่งสาขาและเมนูทั้งชุด → received ครบ และคูปองรายเมนูอ้างอิง item_code ได้</li>
+  <li>B9: รายงานกระทบยอดของวันทดสอบตรงกับ Easy ทุกรายการ รวมรายการที่ยกเลิกและจาก QR ใบเสร็จ</li>
+</ul>
+</div>
+
+<!-- ===================== 12 ===================== -->
+<h2 id="s12">12. เรื่องที่ต้องตกลงร่วมกัน</h2>
+<p class="lead">รายการที่ต้องได้คำตอบก่อนเริ่มพัฒนา แยกตามผู้รับผิดชอบ</p>
+
+<div class="grp">
+<h3>ก่อนเริ่มพัฒนา <span class="path">ผู้รับผิดชอบ: Easy และ Buzzebees</span></h3>
+<ul class="check">
+  <li><b>Easy:</b> ส่งสเปก HO_CRM และรูปแบบ QR ใบเสร็จ ให้ Buzzebees ปรับชื่อฟิลด์และเส้นทางในเอกสารนี้ให้ตรง และยืนยันช่องที่ Easy บันทึก (Sale.CustomerId / CustRefNum, PromotionByCRM)</li>
+  <li><b>Easy:</b> ยืนยันว่า HO_CRM รองรับการเรียกครบ B0–B8 เส้นใดที่ไม่รองรับ ต้องมีค่าพัฒนาเพิ่มหรือไม่</li>
+  <li><b>Buzzebees:</b> ยืนยันว่ารองรับการสแกน QR ใบเสร็จจาก POS ภายนอก และมี sandbox</li>
+</ul>
+</div>
+
+<div class="grp">
+<h3>กติกาทางธุรกิจ <span class="path">ผู้ตัดสินใจ: Oshinei (เจ้าของโครงการ)</span></h3>
+<ul class="check">
+  <li>ฐานคิดแต้ม: ยอดหลังส่วนลด รวมหรือไม่รวม VAT และค่าบริการ และอัตราแต้มต่อบาท</li>
+  <li>มูลค่า 1 แต้มเมื่อแลก ขั้นต่ำและสูงสุดต่อบิล และอายุแต้ม</li>
+  <li>บิลเดลิเวอรี (Grab, LINE MAN) ได้แต้มหรือไม่</li>
+  <li>คูปองใช้ร่วมกับส่วนลดอื่นในบิลเดียวกันได้หรือไม่ ใช้ได้กี่ใบต่อบิล และใช้คูปองพร้อมแลกแต้มในบิลเดียวได้หรือไม่</li>
+  <li>void บิลที่ลูกค้าใช้แต้มที่ได้ไปแล้ว ยอดติดลบได้หรือหักจากแต้มที่ได้ครั้งถัดไป</li>
+  <li>ข้อความท้ายใบเสร็จ (receipt_message) ใครเป็นผู้กำหนดและเปลี่ยนได้บ่อยแค่ไหน</li>
+</ul>
+</div>
+
+<div class="grp">
+<h3>การตั้งค่าและการดูแล <span class="path">ผู้รับผิดชอบ: Buzzebees และ Easy, Oshinei อนุมัติ</span></h3>
+<ul class="check">
+  <li><b>Easy:</b> ผูกคูปองแต่ละชนิดกับรหัสส่วนลดใน Easy (easy_promotion_code) ใครดูแลตารางผูกนี้</li>
+  <li><b>Buzzebees:</b> คีย์รายสาขา Buzzebees ออก Easy ตั้งค่า และขั้นตอนเปลี่ยนคีย์เมื่อเปิดสาขาใหม่หรือคีย์รั่ว</li>
+  <li><b>Oshinei กับ Buzzebees:</b> สัญญาประมวลผลข้อมูลส่วนบุคคล (DPA) ที่เก็บข้อมูล และระยะเก็บ</li>
+  <li><b>Buzzebees:</b> ค่าพัฒนา ค่าใช้จ่ายรายเดือน ระดับบริการ (ความพร้อมใช้ เวลาแก้ปัญหา) และช่องแจ้งเหตุขัดข้อง</li>
+  <li><b>Oshinei:</b> สาขานำร่อง วันเริ่มทดสอบ sandbox และวันเริ่มใช้จริง</li>
+</ul>
+</div>
+
+</body>
+</html>

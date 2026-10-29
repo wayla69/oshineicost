@@ -1,0 +1,48 @@
+<svg viewBox="0 0 760 460" xmlns="http://www.w3.org/2000/svg" font-family="'KIRA UI',sans-serif" font-size="13">
+  <defs><marker id="map-arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M0 0L10 5L0 10z" fill="#8a8a8a"/></marker></defs>
+  <text x="24" y="28" font-size="15" font-weight="600" fill="#141414">API ทุกลำดับเรียกใช้ไปยัง Buzzebees: Easy POS 8 ลำดับ Easy HQ 1 ลำดับ Oshinei 1 ลำดับ</text>
+  <g fill="none" stroke="#8a8a8a" stroke-width="1.25">
+    <path d="M284 112H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 232H340V144H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 320H356V288H396" marker-end="url(#map-arrow)"/>
+    <path d="M284 408H340V372H396" marker-end="url(#map-arrow)"/>
+  </g>
+  <rect x="380" y="60" width="356" height="364" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="84" text-anchor="middle" font-weight="600" fill="#141414">Buzzebees</text>
+  <rect x="396" y="100" width="324" height="56" rx="8" fill="#1f4e8c" fill-opacity="0.10" stroke="#1f4e8c" stroke-width="2"/>
+  <text x="558" y="124" text-anchor="middle" font-weight="600" fill="#141414">API สำหรับ POS (/pos/v1)</text>
+  <text x="558" y="144" text-anchor="middle" font-size="11.5" fill="#141414">รับคำขอ B0–B9 · ตรวจสอบคีย์ API · ป้องกันรายการซ้ำ</text>
+  <rect x="396" y="176" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="200" text-anchor="middle" font-weight="600" fill="#141414">ฐานข้อมูลสมาชิก คะแนน และคูปอง</text>
+  <text x="558" y="220" text-anchor="middle" font-size="11.5" fill="#5a5a5a">เงื่อนไขคะแนน · คูปอง · ประวัติรายการ</text>
+  <rect x="396" y="252" width="324" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="276" text-anchor="middle" font-weight="600" fill="#141414">LINE OA (CRM PLUS)</text>
+  <text x="558" y="296" text-anchor="middle" font-size="11.5" fill="#5a5a5a">การสมัครสมาชิก · ความยินยอมตาม PDPA</text>
+  <text x="558" y="312" text-anchor="middle" font-size="11.5" fill="#5a5a5a">QR สมาชิก · การสแกน QR บนใบเสร็จรับเงิน</text>
+  <rect x="396" y="344" width="324" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="558" y="368" text-anchor="middle" font-weight="600" fill="#141414">รายงานและการกระทบยอด</text>
+  <text x="558" y="388" text-anchor="middle" font-size="11.5" fill="#5a5a5a">รายการรายวัน earn / burn / coupon / void</text>
+
+  <rect x="24" y="60" width="260" height="120" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="84" font-weight="600" fill="#141414">Easy POS · เครื่อง POS ประมาณ 35 สาขา</text>
+  <text x="36" y="104" font-size="11.5" fill="#5a5a5a">B0 ตรวจสอบการเชื่อมต่อ · B1 ค้นหาสมาชิก</text>
+  <text x="36" y="120" font-size="11.5" fill="#5a5a5a">B2 ตรวจสอบสิทธิ์คูปอง · B3 ใช้สิทธิ์คูปอง</text>
+  <text x="36" y="136" font-size="11.5" fill="#5a5a5a">B4 แลกคะแนน · B5 สะสมคะแนน</text>
+  <text x="36" y="152" font-size="11.5" fill="#5a5a5a">B6 ยกเลิกรายการ · B8 สอบถามสถานะ</text>
+  <text x="36" y="168" font-size="11.5" fill="#5a5a5a">พิมพ์ QR บนใบเสร็จรับเงิน</text>
+  <rect x="24" y="204" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="228" font-weight="600" fill="#141414">Easy HQ · สำนักงานใหญ่</text>
+  <text x="36" y="248" font-size="11.5" fill="#5a5a5a">B7 ส่งข้อมูลสาขาและเมนู วันละหนึ่งครั้ง</text>
+  <rect x="24" y="284" width="260" height="72" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="308" font-weight="600" fill="#141414">ลูกค้า (ผ่าน LINE)</text>
+  <text x="36" y="328" font-size="11.5" fill="#5a5a5a">สมัครสมาชิกและรับ QR สมาชิก</text>
+  <text x="36" y="344" font-size="11.5" fill="#5a5a5a">สแกน QR บนใบเสร็จเพื่อรับคะแนน</text>
+  <rect x="24" y="380" width="260" height="56" rx="8" fill="none" stroke="#8a8a8a" stroke-width="1.25"/>
+  <text x="36" y="404" font-weight="600" fill="#141414">ระบบรายงาน Oshinei</text>
+  <text x="36" y="424" font-size="11.5" fill="#5a5a5a">B9 ดึงรายงานการกระทบยอด ทุกวัน 06:00 น.</text>
+
+  <text x="340" y="104" text-anchor="middle" font-size="11.5" fill="#5a5a5a">B0–B6, B8</text>
+  <text x="346" y="194" font-size="11.5" fill="#5a5a5a">B7</text>
+  <text x="362" y="306" font-size="11.5" fill="#5a5a5a">LINE</text>
+  <text x="346" y="370" font-size="11.5" fill="#5a5a5a">B9</text>
+</svg>
