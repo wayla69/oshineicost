@@ -405,6 +405,9 @@ def put_targets(entries: List[TargetEntry]):
             )
             saved += 1
         con.commit()
+    # 2026-10-29: the management report (pace.target, the phone's target card) lives in the cache until the next data swap
+    # (core.HEAVY_TTL) - a saved target must show at once
+    invalidate_cache("report_management", "report_management_months", "home_", "branch_scorecard", rebuild_cost=False)
     return {"ok": True, "saved": saved}
 
 

@@ -20,7 +20,7 @@ import io as _io
 from rules import VAT_DIVISOR, closed_branches, discount_base_row, drop_closed, hidden_amount, discount_excess, discount_policy_pct, effective_unit_cost_sql, food_cost_status_th, food_cost_target, needs_cost_sql, net_revenue_row, net_revenue_sum, raw_unit_cost_sql, scope_filter, tier_code_sql
 from rules import GRAND_MENU_FROM, bill_item_branch_sql, TIER_EXTRA, month_projection, tier_codes_between, tier_label
 from targets import attainment, target_revenue_total, targets_for_month
-from core import (
+from core import (HEAVY_TTL,
     HERE,
     _FOOD_CATEGORY_FILTER, _build_sku_effective_cost, _cogs_case, _iso_week_sql, _unified_cogs_expr,
     get_db, ttl_cache,
@@ -2525,18 +2525,24 @@ def _mgt_tier_drivers(*, TC, ce, con, cs, rows_t, t_bids, t_ph, tier_out):
             lblmap = {e: (l or e) for e, l in con.execute(
                 "SELECT ent, label FROM menu_fact_meta")}
 
+            # 2026-10-29 (speed): one query per tier for both kinds, memoised - the reference tier's groups are the same
+            # rows as its own build read; was 14 queries (0.5 s) for 5 tiers, now 5
+            _drv_memo: dict = {}
+
             def _drv(kind_like, tier, pax):
-                d = {}
                 if not pax:
-                    return d
-                for ent, cg, q in con.execute(
-                        f"""SELECT ent, SUM(ent_cogs), SUM(qty)
-                                        FROM menu_fact_day
-                                        WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
-                                          AND tier=? AND ent LIKE ? GROUP BY ent""",
-                        [cs.isoformat(), ce.isoformat()] + t_bids + [tier, kind_like]):
-                    d[ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
-                return d
+                    return {}
+                if tier not in _drv_memo:
+                    both = {"g:%": {}, "s:%": {}}
+                    for ent, cg, q in con.execute(
+                            f"""SELECT ent, SUM(ent_cogs), SUM(qty)
+                                            FROM menu_fact_day
+                                            WHERE day BETWEEN ? AND ? AND branch_id IN ({t_ph})
+                                              AND tier=? AND (ent LIKE 'g:%' OR ent LIKE 's:%') GROUP BY ent""",
+                            [cs.isoformat(), ce.isoformat()] + t_bids + [tier]):
+                        both["g:%" if ent.startswith("g:") else "s:%"][ent] = ((cg or 0.0) / pax, (q or 0.0) / pax * 100)
+                    _drv_memo[tier] = both
+                return _drv_memo[tier][kind_like]
 
             def _build(frow):
                 ft = frow["tier"]; ftpax = TC[ft]["pax"]
@@ -3204,7 +3210,7 @@ def _mgt_payment(con, *, branch, ce, cs, group, has_prev, pe, ps):
     return {"payment": payment}
 
 
-@ttl_cache
+@ttl_cache(ttl=HEAVY_TTL, stale=HEAVY_TTL, daily=True)   # lives until the next data swap or Thai midnight (core.HEAVY_TTL)
 def report_management(
     period: str = Query("daily"),            # 'daily' | 'weekly' | 'monthly' | 'yearly' (PR-PP2)
     date:   Optional[str] = Query(None),     # focus day (default = latest day in data)
@@ -3594,7 +3600,7 @@ def report_management_route(
 _MGT_YOY_FROM = "2026-05-15"   # the report's year-on-year guard: a year-ago window is complete only from mid-May 2026
 
 
-@ttl_cache
+@ttl_cache(ttl=HEAVY_TTL, stale=HEAVY_TTL, daily=True)
 def report_management_months(
     branch: Optional[str] = Query(None),
     group:  Optional[str] = Query(None),
