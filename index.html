@@ -2361,6 +2361,9 @@ body.mgt-reading .content-area { padding-top: 10px; }
   /* the owner's summary keeps its own six tabs; they sit just above the bottom navigation */
   body.ph-on #msNav { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom: 5px; }
   body.ph-on #mobileSummary { padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
+  /* 2026-10-29: #phNav is hidden on the summary (PR-PD no. 15), so its bar sits at the very bottom - lifted 56 px it floated with content showing under it */
+  body.ph-on.ph-summary #msNav { bottom: 0; padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
+  body.ph-on.ph-summary #mobileSummary { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
   body.ph-on #msSheet { z-index: 50; padding-bottom: 40px; }
   /* a page: room under the content for the navigation (the sticky action rows of the branch and warehouse pages sit just above it) */
   body.ph-on .content-area, body.ph-on.franchise-phone .content-area, body.ph-on.supply-phone .content-area { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }

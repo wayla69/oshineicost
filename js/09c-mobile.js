@@ -2197,7 +2197,7 @@ async function msLoadFocusTag(j, menu) {
   const key = (j.selected_month || '') + '|' + (msBranch() || '');
   try {
     if (!_msSpikeCache[key]) {
-      const q = new URLSearchParams({ period: 'mtd', threshold: '1.5', limit: '300' });
+      const q = new URLSearchParams({ period: 'mtd', threshold: '1.5', limit: '300', slim: '1' });   // names + กระจุก tag only (the full answer is ~750 KB)
       if (msBranch()) q.set('branch', msBranch());
       if (j.range && j.range[1]) q.set('date', j.range[1]);
       _msSpikeCache[key] = api(`${API}/api/sales/menu-spike?${q}`);
@@ -2514,7 +2514,7 @@ const _msMomBasisNote = m => !m.mtd ? ''
 function msMonthCell(label, value, mom, yoy) {
   return `<div style="min-width:0"><div style="font-size:13px;${_msMuted}">${label}</div>
     <div style="font-size:15px;font-weight:700;font-variant-numeric:tabular-nums;color:var(--text-primary,#1e293b);white-space:nowrap">${value}</div>
-    <div style="font-size:13px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:13px;white-space:nowrap"><span style="${_msMuted}">เทียบปีก่อน</span> ${yoy}</div>` : ''}</div>`;
+    <div style="font-size:13px;white-space:nowrap">${mom}</div>${yoy != null ? `<div style="font-size:13px;line-height:1.3;margin-top:2px"><div style="${_msMuted};font-size:12px">ปีก่อน</div><div style="white-space:nowrap">${yoy}</div></div>` : ''}</div>`;   // 2026-10-29: the label on its own line - one 4-column cell is ~80 px, "เทียบปีก่อน ▲ 21.9%" ran into the next cell
 }
 function msMonthsHtml(d, selected) {
   const asc = d.months || [];
@@ -2544,7 +2544,7 @@ function msMonthsHtml(d, selected) {
         style="padding:10px 0 12px;min-height:44px;cursor:pointer;border-top:1px solid var(--border,#e2e8f0);${on ? 'box-shadow:inset 3px 0 0 var(--group, var(--accent,#1f3a6b));padding-left:10px;margin-left:-10px;' : ''}">
       <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin-bottom:6px"><b style="font-size:14px;color:var(--text-primary,#1e293b)">${esc(msPeriodLabel(m.range[0], 'month'))}</b>${tag}<span style="flex:1"></span><span style="font-size:13px;${_msMuted}">แตะเพื่อดูสรุป ›</span></div>
       ${note ? `<div style="font-size:13px;${_msMuted};margin:-2px 0 6px">${note}</div>` : ''}
-      <div style="display:grid;grid-template-columns:repeat(${showGp ? 4 : 3},1fr);gap:6px">
+      <div style="display:grid;grid-template-columns:repeat(${showGp ? 4 : 3},minmax(0,1fr));gap:6px">
         ${msMonthCell('รายได้', fmt(m.revenue), msMomTxt(M.revenue), Y ? msMomTxt(Y.revenue) : null)}
         ${msMonthCell('ลูกค้า', fmtN(m.customers), msMomTxt(M.customers), Y ? msMomTxt(Y.customers) : null)}
         ${msMonthCell('รายได้/หัว', m.rev_per_head != null ? fmt(m.rev_per_head) : '—', msMomTxt(M.rev_per_head), Y ? msMomTxt(Y.rev_per_head) : null)}
@@ -2552,7 +2552,7 @@ function msMonthsHtml(d, selected) {
       </div></div>`;
   }).join('');
   return `<div style="padding:10px 0 8px">${msGlanceLine(sentence)}${chart}</div>
-    <p style="font-size:13px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · เทียบปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบวันเท่ากันของเดือนก่อน ไม่เทียบกับทั้งเดือน</p>
+    <p style="font-size:13px;${_msMuted};margin:0 0 6px">ตัวเลขใต้แท่ง และบรรทัดแรกใต้ตัวเลขในแต่ละเดือน = % เทียบเดือนก่อน · ปีก่อน = เทียบเดือนเดียวกันของปีก่อน · แท่งประ = เดือนปัจจุบัน (สะสม) เทียบวันเท่ากันของเดือนก่อน ไม่เทียบกับทั้งเดือน</p>
     ${cards}
     <p style="font-size:13px;${_msMuted};margin:6px 0 8px">รายได้ไม่รวม VAT และค่าบริการ · เทียบปีก่อน แสดงเมื่อข้อมูลปีก่อนครบช่วงเทียบ${showGp ? ' · GP ใช้ต้นทุนสูตร (BoM) เฉพาะเมนูที่มีต้นทุนแล้ว ต้นทุนจึงเป็นค่าขั้นต่ำ' : ''}</p>`;
 }

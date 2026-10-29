@@ -325,3 +325,15 @@ def test_the_endpoint_answer_carries_the_streak_rule_and_the_rows_their_streak()
     assert r["dish_focus_pct"] == 50 and r["dish_streak"] == {"weeks": 5, "x": 1.2, "min_plates": 5}
     assert all(isinstance(x["streak_weeks"], int) and "unit_cost" in x for x in r["dishes"] if not x["uncosted"])
     assert all("concentration" in x for x in r["dishes"] if x["excess"] > 0 and x["pushers"])
+
+
+def test_slim_answer_keeps_only_dish_names_and_concentration():
+    """slim=1 (phone food-cost tile): dishes as {menu, concentration} and nothing else."""
+    from fastapi.testclient import TestClient
+    import main
+    c = TestClient(main.app)
+    full = c.get("/api/sales/menu-spike?period=mtd&threshold=1.5&limit=300").json()
+    slim = c.get("/api/sales/menu-spike?period=mtd&threshold=1.5&limit=300&slim=1").json()
+    assert set(slim) == {"slim", "dishes"}
+    assert [d["menu"] for d in slim["dishes"]] == [d["menu"] for d in full.get("dishes") or []]
+    assert all(set(d) == {"menu", "concentration"} for d in slim["dishes"])
