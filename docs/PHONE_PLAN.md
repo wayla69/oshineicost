@@ -66,9 +66,11 @@ The sheet is generic: any `<table>` works. In touch, the card lists of 7 open th
 
 `_PH_BARS` in `js/09c-mobile.js`. Badges are the open-task counts of `nav_badges` (`data-nb="p:<tab>:<pane>"`). หน้าแรก always carries the person's whole open list (`data-nb="t"`, the count the old งานของฉัน entry had). An entry the login may not open is dropped; a role with three entries shows three, evenly spaced.
 
+Phone B (owner 2026-10-30): a management login has ONE bottom bar (`#phNav`) on every screen - the summary's own seven-tab `#msNav` is not shown in the phone shell. Its ยอดขาย / สาขา / เมนู open the summary's detail screens (`ms:` targets; a login without `report.management` opens the pages named in `_PH_BARS`). กำไร (ต้นทุนอาหาร) and ส่วนลด are cards of หน้าแรก. Every centre view has ONE header (`#phTop`: title or back arrow, the month and branch chips over `#msMonthSel` / `#msBranch`, ฉัน); a full-app page keeps its top bar in the same colours. A card opens its detail with `history.pushState`; the back arrow and the phone's back button return to the cards at the same scroll. "เปิดแดชบอร์ดเต็ม (เดสก์ท็อป)" is a row of ฉัน.
+
 | Role | หน้าแรก opens | 2 | 3 | 4 | 5 |
 |---|---|---|---|---|---|
-| management | launcher (badge: open tasks) | ยอดขาย → dailysales | กำไร → gpbranch | สาขา → overall | ฉัน |
+| management | launcher + overview cards (badge: open tasks) | ยอดขาย → summary detail `sales` | สาขา → detail `branches` | เมนู → detail `menu` | ฉัน |
 | salessupport | หน้างาน | คิวใบสั่งซื้อ (badge) | ใบตัดเบิกสาขา (badge) | เคลม (badge) | ฉัน |
 | warehouse | launcher | คิวใบสั่งซื้อ (badge) | — | — | ฉัน |
 | analyst | หน้างาน | ต้นทุนต่อจาน (badge) | ราคารายเดือน (badge) | ไฟล์ราคา (badge) | ฉัน |

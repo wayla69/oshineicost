@@ -164,7 +164,7 @@ test('a touch page stays in แตะง่าย by default (หน้างา
 
 // the bar of each role, drawn by the live code for that role (its modules from the app's own role table): the entries, their targets allowed, their counts
 const BARS = {
-  management: ['หน้าแรก', 'ยอดขาย', 'กำไร', 'สาขา', 'ฉัน'],
+  management: ['หน้าแรก', 'ยอดขาย', 'สาขา', 'เมนู', 'ฉัน'],   // phone B (owner 2026-10-30)
   salessupport: ['หน้าแรก', 'คิวใบสั่งซื้อ', 'ใบตัดเบิกสาขา', 'เคลม', 'ฉัน'],
   warehouse: ['หน้าแรก', 'คิวใบสั่งซื้อ', 'ฉัน'],
   analyst: ['หน้าแรก', 'ต้นทุนต่อจาน', 'ราคารายเดือน', 'ไฟล์ราคา', 'ฉัน'],

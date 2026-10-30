@@ -24,7 +24,7 @@ def test_every_phone_way_into_the_summary_checks_report_management():
         if "if (phOn()) { phShowSummary(); return; }" in ln:
             continue                                      # inside showMobileSummary itself: the phone shell's own page of it
         assert "report.management" in ln, ln.strip()[:160]
-    assert "hasModule('report.management') ? 'phShowSummary()'" in MOB          # ยอดขายเมื่อวาน: the summary for management only
+    assert "hasModule('report.management') ? \"phOpenDetail('yesterday')\"" in MOB   # ยอดขายเมื่อวาน: its detail (phone B) for management only
     assert "key === 'mgmt' && hasModule('report.management')" in MOB              # the ผู้บริหาร tile
     assert "const extra = hasModule('report.management')" in MOB                   # the search extra
 
