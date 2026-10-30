@@ -130,7 +130,10 @@ def pc(tmp_path, monkeypatch):
 
     def fake(c, branch_id, rnd, order_day, **kw):
         calls.append(branch_id)
-        return {"rows": [{"code": "X", "need": float(len(calls))}], "branch_id": branch_id}
+        out = {"rows": [{"code": "X", "need": float(len(calls))}], "branch_id": branch_id}
+        if branch_id == 3:                                     # the franchise branch is planned from the benchmark (A and B's slips)
+            out["ref_mode"] = {"active": True, "benchmark": True}
+        return out
     monkeypatch.setattr(F, "suggest", fake)
     yield con, calls
     con.close()
@@ -220,6 +223,11 @@ def test_the_cache_is_off_when_the_usage_cache_is_off_and_after_its_ttl(pc, monk
     _plan(con)
     _plan(con)
     assert len(calls) == 3
+    time.sleep(0.08)
+    _plan(con)
+    assert len(calls) == 3                                                           # past the TTL: the precomputed store (no TTL) answers
+    from bom_center import precompute as PC
+    PC.clear()
     time.sleep(0.08)
     _plan(con)
     assert len(calls) == 4

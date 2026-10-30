@@ -41,6 +41,7 @@ from bom_center.fmt import NORMAL_OR_MEDIAN_TH as _NORMAL_OR_MEDIAN_TH
 from bom_center.fmt import CLASS_SHORT_TH as _CLASS_SHORT
 from bom_center.fmt import add_short as _short
 from bom_center import master as _m
+from bom_center import precompute as _pc
 from bom_center import master_gaps as _mg
 from bom_center import orders as _or
 from bom_center import per_sales as _pv
@@ -54,11 +55,19 @@ from bom_center import recipes as _r
 from bom_center import release as _rl
 from bom_center import stock as _st
 from bom_center import variance as _va
-from bom_center.schema import ensure as _ensure
+from bom_center.schema import ensure as _schema_ensure
 from bom_center.units import Converter
 from bom_center.units import norm as _unit_norm
 
 router = APIRouter()
+_pc.install(_core)            # invalidate_cache() tells the precomputed plans what changed (bom_center/precompute.py)
+
+
+def _ensure(con):
+    """schema.ensure, and a note that a bom-center request is being served: the plan precompute worker stays quiet meanwhile."""
+    _pc.mark_live()
+    _schema_ensure(con)
+
 _MONTH = re.compile(r"^\d{4}-(0[1-9]|1[0-2])$")
 
 
@@ -2058,6 +2067,8 @@ def bc_order_calendar_save(rows: List[CalRow], request: Request):
     with get_db() as con:
         _ensure(con)
         _write(con, go)
+    for b in {r.branch_id for r in rows}:
+        _pc.bump(b, "calendar")         # the cover window of the branch's rounds follows its delivery days
     return {"ok": True, "rows": len(rows)}
 
 
@@ -2275,6 +2286,8 @@ async def bc_order_calendar_import(request: Request, file: UploadFile = File(...
             _m.audit(con, who, "order_calendar_import", "bc_order_calendar", file.filename, None,
                      f"{len(changed)} branches / {n_rounds} rounds")
         _write(con, go)
+        for r in changed:
+            _pc.bump(r["branch_id"], "calendar")
         out["saved"] = n_rounds
     return out
 
@@ -2286,8 +2299,8 @@ def bc_forecast(branch_id: int = Query(...), round: str = Query("1"), order_day:
         raise HTTPException(400, "รอบต้องเป็น 1, 2 หรือแซลมอนสด")
     with get_db() as con:
         _ensure(con)
-        return _fc.suggest(con, branch_id, round, _parse_day(order_day), weeks=weeks,
-                           season="auto" if season == "auto" else "off")
+        return _fc.suggest_cached(con, branch_id, round, _parse_day(order_day), weeks=weeks,     # the plan cache + precomputed store
+                                  season="auto" if season == "auto" else "off")
 
 
 class RunBody(BaseModel):
@@ -2658,7 +2671,8 @@ def bc_stock_save(body: StockBody, request: Request, branch_id: Optional[int] = 
         out = _write(con, lambda: fn(con, bid, [ln.dict() for ln in body.lines], _who(request),
                                      submit=body.submit, count_date=body.count_date, note=body.note))
     if body.submit:
-        invalidate_cache("bc_")
+        with _pc.flush_scope(bid):      # a count changes this branch's plans only
+            invalidate_cache("bc_")
     return out
 
 
@@ -3896,6 +3910,8 @@ def bc_order_save(body: OrderBody, request: Request, branch_id: Optional[int] = 
                 raise HTTPException(400, {"code": "late", "message": str(e), "cutoff_at": e.cutoff_at,
                                           "cutoff_th": e.cutoff_th})
         out = _write(con, go)
+    if body.submit:
+        _pc.schedule(bid, "order")      # the branch's order signature moved: its precomputed plans are recomputed
     return out
 
 
@@ -4017,7 +4033,8 @@ def bc_order_receive(order_id: int, body: ReceiveBody, request: Request, branch_
         bid = _stock_branch(con, request, branch_id)
         out = _write(con, lambda: _or.receive(con, bid, order_id, [ln.dict() for ln in body.lines], _who(request),
                                               receipt_date=body.receipt_date, ack=body.ack, claim_note=body.claim_note))
-    invalidate_cache("bc_")
+    with _pc.flush_scope(bid):          # a receipt changes this branch's plans only
+        invalidate_cache("bc_")
     return out
 
 
@@ -4059,7 +4076,8 @@ async def bc_receive_import(order_id: int, request: Request, file: UploadFile = 
                 con.rollback()
         out = _write(con, lambda: _bf.import_receive(con, bid, order_id, parsed, _who(request), file.filename, dry_run=False,
                                                      ack=ack, receipt_date=receipt_date, claim_note=claim_note))
-    invalidate_cache("bc_")
+    with _pc.flush_scope(bid):          # a receipt changes this branch's plans only
+        invalidate_cache("bc_")
     return out
 
 
@@ -4339,7 +4357,8 @@ async def bc_claim_create(request: Request, payload: str = Form(...), photos: Li
         _ensure(con)
         bid = _stock_branch(con, request, branch_id)
         out = _write(con, lambda: _cl.create(con, bid, order_id, p.get("lines") or [], raws, p.get("note"), _who(request)))
-    invalidate_cache("bc_")
+    with _pc.flush_scope(bid):          # a claim of this branch's receipt changes its plans only
+        invalidate_cache("bc_")
     return out
 
 
@@ -4458,8 +4477,12 @@ class ProcessBody(BaseModel):
 def bc_hub_process(order_id: int, body: ProcessBody, request: Request):
     with get_db() as con:
         _ensure(con)
-        return _write(con, lambda: _hub.process(con, order_id, [ln.dict() for ln in body.lines], _who(request),
-                                                po_ref=body.po_ref))
+        out = _write(con, lambda: _hub.process(con, order_id, [ln.dict() for ln in body.lines], _who(request),
+                                               po_ref=body.po_ref))
+        row = con.execute("SELECT branch_id FROM bc_order WHERE order_id=?", (order_id,)).fetchone()
+    if row:
+        _pc.schedule(row[0], "order")   # the branch's order signature moved: its precomputed plans are recomputed
+    return out
 
 
 class KeyedBody(BaseModel):
@@ -4473,7 +4496,8 @@ def bc_hub_keyed(body: KeyedBody, request: Request):
     with get_db() as con:
         _ensure(con)
         out = _write(con, lambda: _hub.set_keyed(con, body.order_ids, body.keyed, _who(request)))
-    invalidate_cache("bc_")
+    with _pc.flush_scope():             # the "keyed" mark is read by no plan
+        invalidate_cache("bc_")
     return out
 
 
@@ -4880,5 +4904,6 @@ async def bc_stock_count_import(request: Request, file: UploadFile = File(...), 
             except ValueError as e:
                 raise HTTPException(400, str(e))
         out = _write(con, lambda: _st.import_count(con, bid, count_date, lines, _who(request), dry_run=False))
-    invalidate_cache("bc_")
+    with _pc.flush_scope(bid):          # a count changes this branch's plans only
+        invalidate_cache("bc_")
     return out

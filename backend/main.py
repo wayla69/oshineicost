@@ -963,6 +963,13 @@ def _swap_incoming_and_warm() -> bool:
     # then recompute the most-requested reports in the background,
     # one at a time, so nobody pays the cold query after a sync
     warm_cache_async()
+    # and every branch's order plan for its coming deliveries (bom_center/precompute.py), so opening the
+    # order page after the sync is a lookup
+    try:
+        from bom_center import precompute as _bc_pre
+        _bc_pre.schedule(None, "swap")
+    except Exception as e:
+        print(f"[plan-precompute] could not schedule: {e}")
     return True
 
 
@@ -2752,6 +2759,23 @@ def _cloud_backup_startup():
         _cloud_backup.start()
     except Exception as e:  # noqa: BLE001 - a scheduler fault must never stop the app from serving
         print(f"[cloud-backup] could not start: {e}")
+
+
+@app.on_event("startup")
+def _plan_precompute_startup():
+    """The precomputed order plans (bom_center/precompute.py): one worker thread, a first pass shortly after start, then after
+    every data swap and every write that changes a plan. Off under pytest (the tests run passes themselves) and with
+    OSHINEI_PLAN_PRECOMPUTE=0."""
+    import sys as _sys
+    if "pytest" in _sys.modules:
+        return
+    try:
+        from bom_center import precompute as _bc_pre
+        _bc_pre.start()
+    except Exception as e:  # noqa: BLE001 - never stops the app from serving
+        print(f"[plan-precompute] could not start: {e}")
+
+
 @app.on_event("startup")
 def _cloud_jobs_startup():
     """The feedback fetch, the Invisible Voice push and the task watchdog run on the Fly machine (backend/cloud_jobs.py,
