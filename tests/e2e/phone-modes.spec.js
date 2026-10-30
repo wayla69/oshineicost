@@ -166,8 +166,7 @@ test('every page opens in แตะง่าย by default - a report page too -
     const touch = await page.evaluate(DRAWN, '#tab-' + p.tab);
     expect(touch.min, `smallest text of ${p.tab} in แตะง่าย`).toBeGreaterThanOrEqual(12);
   }
-  expect(errors, errors.join('
-')).toHaveLength(0);
+  expect(errors, errors.join('\n')).toHaveLength(0);
   await ctx.close();
 });
 
