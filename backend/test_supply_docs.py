@@ -123,10 +123,10 @@ def test_a_role_names_every_supply_page_of_its_own_department_in_the_manual():
         want = {p["label"] for p in pages if (p["tab"] in SUPPLY_TABS or p["tab"] == "franchise") and not p["bom"]}
         missing = want - set(rows[role]["pages"])
         assert not missing, f"{role}: the row does not name {sorted(missing)} of {home['label']}"
-        # PR-S4: a recipe page (bom: true) is hidden in stock mode, so the row leaves it out and the appendix of the manual names it
-        appendix = re.search(r'id="manualRecipeAppendix".*?</ol>', MANUAL, re.S).group(0)
+        # PR-S4: a recipe page (bom: true) is hidden in stock mode, so the row leaves it out; the task manual (owner 2026-10-30) has no
+        # recipe tasks in this phase either (the old "ภาคผนวก: ส่วนสูตร (Phase 2)" appendix is gone, as in the training set of #519)
         gone = {p["label"] for p in pages if (p["tab"] in SUPPLY_TABS) and p["bom"]}
-        assert all(g in appendix for g in gone), f"{role}: {sorted(g for g in gone if g not in appendix)} missing from the recipe appendix"
+        assert not gone & set(rows[role]["pages"]), f"{role}: recipe pages named in the row: {sorted(gone & set(rows[role]['pages']))}"
 
 
 def test_every_department_and_page_label_of_the_manual_exists_in_departments():
@@ -165,7 +165,10 @@ def test_the_close_has_five_steps_in_the_manual_and_nine_in_full_mode():
 
 
 def test_the_branch_flow_of_the_manual_names_the_phone_screens():
-    block = re.search(r'id="manualBranchFlow".*?</ol>', MANUAL, re.S).group(0)
+    # the task manual (owner 2026-10-30): one <article class="mt" data-d="brn …"> per branch task instead of one long "G." list
+    tasks = re.findall(r'<article class="mt"[^>]*data-d="[^"]*\bbrn\b[^"]*"[^>]*>(.*?)</article>', MANUAL, re.S)
+    assert len(tasks) >= 8, len(tasks)
+    block = "\n".join(tasks)
     for w in ("ส่งใบตัดเบิก", "ส่งใบสั่งซื้อ", "รับครบ", "มีรายการไม่ครบ", "บันทึกรับของ", "แจ้งของขาด/เสีย", "ส่งผลนับ", "แจ้งว่าบันทึกรับของครบ"):
         assert w in block, w
 
@@ -233,6 +236,9 @@ ALLOW_BOLD = {
     "เบิกใช้", "ของเสีย", "สาเหตุ", "ประสานงานขาย", "ผลต่าง", "ใช้จริง", "ตามสูตร",
     "เพิ่มไปยังหน้าจอหลัก",                   # the browser's own menu item, not the app's
     "สาขาปรับ +20% (โปรโมชัน)",               # the chip is built from the branch's own percent and reason
+    # the Phase 2 appendix of branch_guide.html names two section titles of the full mode; only the old in-app manual wrote them, and the
+    # task manual (owner 2026-10-30) has no recipe part in this phase
+    "ส่วนต่างรายเดือน", "ส่วนต่างรายวันเทียบสูตร",
 }
 
 
