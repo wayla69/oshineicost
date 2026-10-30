@@ -1,442 +1,1104 @@
 <!-- ══════════════════════════════════════════════════════════════════════════
-     TAB: USER MANUAL (Phase 18b) — in-app help for all tabs + workflows
+     TAB: คู่มือการใช้งาน — a task manual (owner 2026-10-30: "a real manual, not narrative"; layout A + search)
+     Top: title + search (title, keywords and step text of every task) · department chips (the signed-in role's department opens) ·
+     task cards (2 columns) · the open task: เมื่อไร, numbered steps (on-screen words in bold), "ถ้าเห็น … → …", a folded
+     "ถ้าเจอปัญหา (N)" and the related page. Bottom, folded: คำศัพท์ · แผนที่เมนูตามแผนก · เอกสารและสไลด์ · มีอะไรใหม่.
+     The tasks are the <article class="mt"> elements of #manTasks: data-d = department keys of DEPARTMENTS (js/01-core.js, space-
+     separated), data-when, data-icon (a DEPT_ICONS key), data-kw (search words), data-go = "tab|pane" of the related page.
+     js/18-launcher.js deptManualRender draws the chips, the cards and the search from them on every visit (TABS.manual.load).
 ══════════════════════════════════════════════════════════════════════════ -->
 <div id="tab-manual" class="hidden tab-content">
-  <div class="card p-5 mb-4" style="background:#dbeafe;border:1px solid var(--accent)">
-    <div class="flex items-start gap-3">
-      <span style="font-size:32px"></span>
-      <div class="flex-1">
-        <h2 class="text-lg font-bold text-indigo-900">คู่มือการใช้งาน Oshinei Dashboard</h2>
-        <p class="text-xs text-slate-600 mt-1">รวมวิธีใช้งานแต่ละ tab · กฎสำคัญ · workflow ที่ใช้บ่อย · troubleshooting</p>
-        <p class="text-[11px] mt-1" style="color:var(--good-ink)"><b>อัปเดต 2026-10-28 (หนึ่งแผนก หนึ่งหน้าจอ):</b> หน้าแรก แถบไอคอนด้านซ้าย และหน้าแรกบนโทรศัพท์แสดงเฉพาะแผนกของบัญชีนั้น ทุกหน้าที่แผนกใช้ทำงานอยู่ในการ์ดของแผนก (รวมภาพรวม ยอดขายรายวัน แนวโน้ม) ผู้บริหารเห็นทุกแผนก · หน้าที่มีสิทธิ์แต่ไม่อยู่ในแผนก เปิดได้จาก <b>ค้นหา</b> และ <b>หน้ารายงานทั้งหมด</b> · รายงานผู้บริหารเป็นสิทธิ์ของผู้บริหารเท่านั้น · หน้าสิทธิ์ (ตั้งค่า → จัดการผู้ใช้) มีปุ่ม <b>ใช้ค่าตั้งต้นของระบบ</b></p>
-        <p class="text-[11px] mt-1" style="color:var(--good-ink)"><b>อัปเดต 2026-10-21 (เมนูตามแผนก):</b> <b>หน้าแรก</b>เป็นไอคอนของแผนก แตะแผนกแล้วเลือกหน้า · แถบไอคอนด้านซ้ายมีแผนกของบัญชีนี้ และ ค้นหา (หรือกด / หรือ Ctrl + K) · เปิดหน้าใดแล้ว แถบไอคอนด้านบนของหน้าคือหน้าอื่นของแผนกเดียวกัน · วงกลมแดงบอกจำนวนงานที่รอ · งานที่เสร็จแล้วซ่อนไว้ แสดงด้วยตัวกรอง <b>เสร็จแล้ว</b> · ผลการบันทึกขึ้นเป็นข้อความที่มุมล่างของจอ ส่วนคำอธิบายอยู่หลังปุ่ม <b>?</b> · บนโทรศัพท์ แถบล่างคือ หน้าแรก · งานของฉัน · ค้นหา · ฉัน · ตำแหน่งของทุกหน้าอยู่ที่ <a href="#manualDeptMap" style="color:var(--accent)">แผนที่เมนูตามแผนก</a> ด้านล่าง</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-10-13 (วัตถุดิบและใบสั่งซื้อ):</b> ปิดเดือนต้อง<b>นับของครบทุกรายการ</b> (ใส่ 0 ถ้าไม่มีของ ช่องว่างถือว่ายังไม่ได้นับ) ไม่มีการปิดเดือนด้วยการนับบางส่วน · <b>การแจ้งเตือนบนมือถือ</b> 08:00 งานของวัน · 11:00 เตือนก่อนเวลาส่งสุดท้าย · 13:15 รายชื่อสาขาที่ส่งไม่ทัน ถึงบัญชีสาขาที่เปิดใช้งานทุกบัญชี · หน้างานของฝ่ายกลางบนโทรศัพท์ · ตารางการใช้งานทุกสาขา · เวลาแสดงเป็นเวลาไทย · คำเรียกชุดเดียวกันทั้งระบบ: ส่งใบสั่งซื้อภายใน พฤ. 15/10 เวลา 13:15 · ของที่ควรเหลือ (ตามระบบ) · ของแพง ปานกลาง ถูก · ต้องนับ · ยกเลิกใบรับของ</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-10-07 (วัตถุดิบและใบสั่งซื้อ):</b> งานวัตถุดิบ สูตร ใบสั่งซื้อ และการปิดงวดเดือนรวมเป็นหน้าชุดเดียวกัน ตั้งอยู่ในแผนกของแต่ละฝ่าย (ดู <b>แผนที่เมนูตามแผนก</b>) · <b>หน้างาน</b> แสดงงานที่ต้องทำวันนี้และสถานะปิดงวดเดือนพร้อมปุ่ม "ไปที่งาน →" เปิดจาก หน้าแรก → งานของฉันวันนี้ → ดูทั้งหมด · เดือนและสาขาเลือกครั้งเดียวใช้ร่วมกันทุกหน้า · ดูตัวอย่างก่อนบันทึกได้ทุกหน้า บันทึกจริงต้องกรอก<b>รหัสปลดล็อก</b>ครั้งเดียวต่อเบราว์เซอร์ · ปิดงวดเดือนมีขั้นตอนพร้อมสถานะ (โหมดสต๊อก 5 ขั้น) · รายละเอียดในหัวข้อ "วัตถุดิบและใบสั่งซื้อ" และ Workflow F–G ด้านล่าง</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-10-01 (จัดกลุ่มใหม่):</b> หน้ารายงานทั้งหมดจัดกลุ่มตามคำถาม — <b>รายงานผู้บริหาร</b> ขึ้นไปอยู่บนสุด · <b>ส่วนลด &amp; เงิน</b> เป็นกลุ่มของตัวเอง (ส่วนลด · พนักงาน · เงินสด · บิลยกเลิก) · ช่วงเวลา + ช่องทางย้ายไปอยู่ใน <b>ยอดขาย</b> · ปรับเมนู/โอกาสเมนู รวมใน <b>เมนู</b> · วิเคราะห์วัตถุดิบ/เป้าลดต้นทุน ย้ายไป <b>ต้นทุน</b> · Top 60 ต้นทุน/หัว เป็นมุมมองย่อยของ ต้นทุน/หัว · เมนูทำเงิน เปิดที่มุมมอง Menu Engineering ในวิเคราะห์เมนู · ไม่มีแท็บใดถูกซ่อนหรือลบ</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-07-20 (Lean Overhaul):</b> รวมแท็บเป็น <b>12 กลุ่ม</b> — ทุกแท็บเดิมยังอยู่ครบ เปิดจากแผนก หรือจาก <b>หน้ารายงานทั้งหมด</b> · "ต้องดูวันนี้" ย้ายไปปุ่มในหน้าแรก · Forecast รวมเป็น <code>/api/forecast</code> เส้นเดียว (mode=month/branches/trend/buffet) · ดูสถิติการใช้งานจริงที่ <b>Settings → การใช้งานจริง</b></p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (Kill list — พักไว้):</b> จากสถิติ 47 วัน มี 17 แท็บที่ยังไม่มีใครเปิด แต่<b>ทุกแท็บยังแสดงและใช้งานได้ตามเดิม</b> — เจ้าของตัดสินให้รอจนทุกคนใช้งานครบก่อน จึงยังไม่ซ่อนหรือลบแท็บใด · รายชื่อที่เฝ้าดูและตัวเลขล่าสุดอยู่ที่ Settings → การใช้งานจริง และรายงาน <code>docs/LEAN_KILL_LIST_2026-09.html</code> · หน้าเดียวกันมีตาราง <b>การเข้าใช้รายคน</b>: ทุกบัญชีพร้อมสถานะ ใช้งานอยู่ / เคยเข้าแต่เงียบ / ยังไม่เคยเข้าใช้ (ยังใช้รหัสเริ่มต้น), login ล่าสุด, วันที่ใช้ และแท็บที่ใช้บ่อย — ใช้ตามว่าใครยังไม่ได้เริ่มใช้แอป · <b>ทุกวันจันทร์</b>ระบบสรุปเอง (ใครยังไม่เคยเข้า / ใครหายไปเกิน 14 วัน) เป็นแบนเนอร์บนหน้าแรกของผู้ดูแล และส่งเข้า Telegram เมื่อตั้งค่า bot แล้ว</p>
-        <p class="text-[11px] mt-1" style="color:#166534"><b>อัปเดต 2026-09-05 (เริ่มต้นใช้งาน + เป้ารายสาขา):</b> คน<b>ที่ login ครั้งแรก</b>จะเห็นการ์ด "เริ่มต้นใช้งาน" บนหน้าแรก — สามหน้าที่บทบาทนั้นใช้บ่อยที่สุด กดเปิดได้เลย (กด "เข้าใจแล้ว" เพื่อซ่อน) · <b>เป้ารายสาขา</b>ตั้งเองอัตโนมัติ = <b>ยอดจริงของสาขานั้นในเดือนเดียวกันของปีก่อน</b> (รายได้สุทธิ + จำนวนลูกค้า) เลื่อนไปทุกปี — Settings → Monthly Targets แสดงที่มาของเป้าทุกแถว พิมพ์ตัวเลขเองได้ถ้าต้องการ (เว้นว่างหรือ 0 = กลับไปอัตโนมัติ) สาขาที่ยังไม่มีข้อมูลปีก่อนจะไม่มีเป้า</p>
-        <p class="text-xs text-slate-500 mt-2">Easy POS (เชื่อม real-time, อัปเดตทุก 30 นาที) · 27 สาขา · 2025-05 → ปัจจุบัน · ใช้ <code style="background:#fef3c7;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> เป็นรายได้ (VAT ไม่นับ) · <b>COGS ใช้สูตร ของเราเท่านั้น</b> เดียวกันทุกหน้า (GP ~40%)</p>
-        <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06: เมนูจัดเป็น 6 กลุ่ม · COGS รวมเป็นสูตรเดียว (BoM→sku_cost) · เอา ฿ ออก · เพิ่มหน้า "เมนูเสิร์ฟเยอะ×ต้นทุน"</p>
-        <p class="text-[11px] text-indigo-700 mt-1">อัปเดต 2026-06-02: Buffet Performance ใช้ <b>pax จริง</b> (customer_count = 2.70/บิล) + food cost จริง (66%) + แยกผู้ใหญ่/เด็ก · ซ่อนเมตริก tier ที่ไม่มีข้อมูล · Menu Engineering ออกแบบใหม่เป็น <b>4 กลุ่มแนะนำการกระทำ</b> (ดาวเด่น/ม้างาน/เพชรในตม/ตัวถ่วง) · กราฟรายสาขา (Seat Util, Bills/Table) แสดง<b>ครบ 27 สาขา</b> · แก้ VAT ใน Spend-per-Head + กำไรต่อบิล</p>
-        <p class="text-[11px] mt-1" style="color:var(--accent)"><b>อัปเดต 2026-06-05 (Prime Cost):</b> ★ <b>Prime Cost = Food% + Labor%</b> ในแท็บ <b>P&amp;L รายสาขา</b> — ต้นทุนควบคุมได้ที่ใหญ่สุด 2 ตัว · ใส่ <b>ค่าแรงแยกจากค่าเช่า</b> ที่ <b>Settings → ค่าแรง + ค่าใช้จ่ายคงที่</b> (กรอกครั้งเดียว/สาขา) → ปลดล็อก Prime% เทียบเกณฑ์ AYCE (ดี &lt;70% · สูง &gt;78%). Food% แสดงจริงทันทีแม้ยังไม่ใส่ค่าแรง</p>
-        <p class="text-[11px] mt-1" style="color:#9d174d"><b>อัปเดต 2026-06-05:</b> ★ <b>Heavy-Eater Margin Tail</b> + <b>Turn-Time & Table Throughput</b> (ใน Buffet Performance → กำไร & P&L) · <b>รวมกลุ่มให้กระชับ</b> — แท็บ <b>ต้นทุน</b> และ <b>กำไร & P&L</b> อยู่ในกลุ่มเดียวกันของหน้ารายงานทั้งหมด และเป็นหน้าในแผนกเดียวกัน · <b>เวลาปิดร้าน/ความสดข้อมูล</b> (เลือกวันที่ได้) · <b>ต้นทุน/หัว รายสาขา</b> = เครื่องมือวัดประสิทธิภาพ (รายได้/หัว, ต้นทุน%, GP/หัว, เทียบเฉลี่ยเครือ) · <b>ต้นทุน → เปรียบเทียบ ต้นทุน/หัว รายสาขา</b> · <b>P&L ต่อบิล</b> เพิ่ม margin รายสาขา · <b>รายงาน §2/§3</b> เทียบเดือนเต็มจริง (กันเดือนไม่จบ) · Extra: <b>คลิกสาขาเพื่อเจาะลึกรายวัน/รายบิล</b> (เงินสด/บิลยกเลิก) + <b>ประเภทลูกค้าแยกสาขา</b> (ยอด ex-VAT แล้ว) + ธงเตือน<b>อัตรายกเลิก</b>สูง</p>
-      </div>
+  <style>
+    #tab-manual .man { max-width: 1100px; }
+    #tab-manual .man-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 12px; }
+    #tab-manual .man-title { margin: 0; font-size: 20px; font-weight: 700; color: var(--text-primary); }
+    #tab-manual .man-search { flex: 1 1 280px; display: flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border-control); border-radius: var(--r-md); background: var(--bg-input, var(--bg-card)); color: var(--text-muted); }
+    #tab-manual .man-search:focus-within { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-soft); }
+    #tab-manual .man-search input { flex: 1; min-width: 0; border: 0; outline: 0; background: transparent; font-size: 15px; color: var(--text-primary); min-height: 42px; }
+    #tab-manual .man-res { display: grid; gap: 6px; margin-bottom: 14px; }
+    #tab-manual .man-res-empty { margin: 0 0 14px; font-size: 14px; color: var(--text-secondary); }
+    #tab-manual .man-res button { display: flex; align-items: center; gap: 10px; width: 100%; text-align: left; padding: 10px 12px; min-height: 48px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--bg-card); color: var(--text-primary); cursor: pointer; font-size: 15px; }
+    #tab-manual .man-res button:hover { border-color: var(--border-control); background: var(--bg-subtle); }
+    #tab-manual .man-res small { display: block; font-size: 13px; color: var(--text-secondary); }
+    #tab-manual .man-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 14px; }
+    #tab-manual .man-chip { display: inline-flex; align-items: center; gap: 6px; min-height: 40px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: 999px; background: var(--bg-card); color: var(--text-primary); font-size: 14px; font-weight: 600; cursor: pointer; }
+    #tab-manual .man-chip svg { color: var(--dk); }
+    #tab-manual .man-chip[aria-pressed="true"] { background: var(--dt); border-color: var(--dk); color: var(--text-primary); box-shadow: inset 0 0 0 1px var(--dk); }
+    #tab-manual .man-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-bottom: 14px; }
+    @media (max-width: 359px) { #tab-manual .man-grid { grid-template-columns: 1fr; } }
+    @media (min-width: 1024px) { #tab-manual .man-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+    #tab-manual .man-card { display: flex; align-items: flex-start; gap: 10px; text-align: left; padding: 12px; min-height: 64px; border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-card); color: var(--text-primary); cursor: pointer; }
+    #tab-manual .man-card:hover { border-color: var(--border-control); background: var(--bg-subtle); }
+    #tab-manual .man-card[aria-expanded="true"] { border-color: var(--dk); box-shadow: inset 0 0 0 1px var(--dk); background: var(--dt); }
+    #tab-manual .man-ic { flex: 0 0 auto; width: 36px; height: 36px; border-radius: var(--r-md); display: flex; align-items: center; justify-content: center; background: var(--dt); color: var(--dk); }
+    #tab-manual .man-card b { display: block; font-size: 15px; line-height: 1.35; }
+    #tab-manual .man-card small { display: block; margin-top: 2px; font-size: 13px; color: var(--text-secondary); }
+    #tab-manual .man-chip:focus-visible, #tab-manual .man-card:focus-visible, #tab-manual .man-res button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+    #tab-manual .mt { border: 1px solid var(--dk, var(--border)); border-left-width: 4px; border-radius: var(--r-lg); background: var(--bg-card); padding: 14px 16px; margin-bottom: 14px; color: var(--text-primary); scroll-margin-top: 80px; }
+    #tab-manual .mt[hidden] { display: none; }
+    #tab-manual .mt h3 { margin: 0; font-size: 18px; font-weight: 700; }
+    #tab-manual .mt-when { margin: 2px 0 10px; font-size: 14px; color: var(--text-secondary); }
+    #tab-manual .mt ol { margin: 0; padding-left: 1.6em; list-style: decimal; font-size: 15px; line-height: 1.6; }
+    #tab-manual .mt li { margin: 4px 0; padding-left: 2px; }
+    #tab-manual .mt li::marker { font-weight: 700; color: var(--dk, var(--text-secondary)); }
+    #tab-manual .mt-if { margin: 12px 0 0; padding: 8px 12px; border: 1px solid var(--watch-f); border-left-width: 4px; border-radius: var(--r-sm); background: var(--watch-t); color: var(--text-primary); font-size: 14px; line-height: 1.55; }
+    #tab-manual .mt-pr { margin-top: 12px; border-top: 1px solid var(--border-soft); padding-top: 8px; }
+    #tab-manual .mt-pr summary { cursor: pointer; font-size: 14px; font-weight: 600; color: var(--text-primary); min-height: 32px; display: flex; align-items: center; }
+    #tab-manual .mt-pr dl { margin: 6px 0 0; display: grid; gap: 8px; font-size: 14px; line-height: 1.5; }
+    #tab-manual .mt-pr dt { font-weight: 600; }
+    #tab-manual .mt-pr dd { margin: 0; color: var(--text-secondary); }
+    #tab-manual .mt-go { margin: 12px 0 0; font-size: 14px; color: var(--text-secondary); }
+    #tab-manual .mt-go a, #tab-manual .man-fold a { color: var(--accent); text-decoration: underline; }
+    #tab-manual .man-fold { border: 1px solid var(--border); border-radius: var(--r-lg); background: var(--bg-card); margin-bottom: 10px; }
+    #tab-manual .man-fold > summary { cursor: pointer; padding: 12px 16px; min-height: 48px; display: flex; align-items: center; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+    #tab-manual .man-fold > .man-body { padding: 0 16px 14px; font-size: 14px; line-height: 1.6; color: var(--text-primary); }
+    #tab-manual .man-gl { margin: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr)); gap: 10px 24px; }
+    #tab-manual .man-gl dt { font-weight: 700; }
+    #tab-manual .man-gl dd { margin: 0; color: var(--text-secondary); }
+    #tab-manual .man-new { margin: 0; padding-left: 1.2em; list-style: disc; display: grid; gap: 6px; }
+    #tab-manual .man-new b { color: var(--text-primary); }
+    #tab-manual .man-new li { color: var(--text-secondary); }
+    #tab-manual .man-docs { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+    #tab-manual .man-roles { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 8px; }
+    #tab-manual .man-roles th { text-align: left; color: var(--text-muted); padding: 4px 8px 4px 0; }
+    #tab-manual .man-roles td { border-top: 1px solid var(--border-soft); padding: 6px 8px 6px 0; vertical-align: top; color: var(--text-secondary); }
+    #tab-manual .man-roles .chip { color: var(--text-primary); }
+    #tab-manual .man-roles .pg { font-style: normal; }
+    @media (max-width: 700px) { #tab-manual .man-roles thead { display: none; } #tab-manual .man-roles tr, #tab-manual .man-roles td { display: block; } #tab-manual .man-roles td { border-top: 0; padding: 2px 0; } #tab-manual .man-roles tr { border-top: 1px solid var(--border-soft); padding: 6px 0; } }
+  </style>
+
+  <div class="man">
+    <div class="man-head">
+      <h2 class="man-title">คู่มือการใช้งาน</h2>
+      <label class="man-search"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></svg>
+        <input id="manSearch" type="search" autocomplete="off" placeholder="ค้นหางาน เช่น สั่งของ เคลม ปิดเดือน" aria-label="ค้นหางาน" oninput="deptManualSearch(this.value)" onkeydown="if(event.key==='Escape'){this.value='';deptManualSearch('');}"></label>
     </div>
-  </div>
+    <div id="manResults" class="man-res" hidden></div>
+    <div id="manChips" class="man-chips" role="group" aria-label="แผนก"></div>
+    <div id="manGrid" class="man-grid"></div>
 
-  <!-- What's new — 2026-06-04 feature drop -->
-  <div class="card p-5 mb-4" style="border:1px solid var(--accent)">
-    <h3 class="font-bold text-base mb-1 text-slate-800">อัปเดต 2026-06-04 — เชื่อม POS real-time + รายงานใหม่</h3>
-    <p class="text-xs text-slate-500 mb-3">เชื่อมฐานข้อมูล Easy POS โดยตรง (อัปเดตอัตโนมัติทุก 30 นาที) + หน้า P&L ต่อบิล/ปฏิบัติการ + เทียบเดือนแบบแฟร์</p>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-      <div class="border border-indigo-200 rounded-lg p-3" style="background:var(--accent-soft)">
-        <p class="font-bold text-slate-700 mb-1">ข้อมูล Real-time</p>
-        เชื่อม Easy POS (MS SQL) → Dashboard ตรง · ข้อมูลสดถึงวันล่าสุด อัปเดตทุก 30 นาที. <b>กฎเหล็ก: ต้นทุน/COGS ใช้สูตร ของเราเท่านั้น</b> — POS ไม่มีข้อมูลต้นทุนวัตถุดิบ.
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">เทียบเดือนแบบแฟร์ (MTD)</p>
-        <b>ภาพรวม</b> + กล่อง <b>Insights</b> — เมื่อเดือนยังไม่จบ จะเทียบ <b>ช่วงวันเท่ากัน</b> (เช่น 1–3 มิ.ย. เทียบ 1–3 พ.ค.) ไม่ใช่เดือนเต็มเทียบเดือนไม่เต็ม.
-      </div>
-      <div class="border border-emerald-200 rounded-lg p-3" style="background:#ecfdf5">
-        <p class="font-bold text-slate-700 mb-1">P&L ต่อบิล (ใหม่)</p>
-        <b>สาขา & กำไร → P&L ต่อบิล</b> — กำไร/บิล, กำไร/หัว · <b>ปุ่มสลับ GM ⇄ COGS</b> · การกระจาย gross margin <b>ละเอียด</b> (ช่วงละ 5% ใน 0–50%, 10% เหนือนั้น) — <b>คลิกแถบเพื่อเจาะลึก</b> เห็นสรุป + บิลรายใบในช่วงนั้น · <b>บิลขาดทุนทั้งหมด</b> + export CSV. (COGS = BoM)
-      </div>
-      <div class="border border-indigo-200 rounded-lg p-3" style="background:var(--accent-soft)">
-        <p class="font-bold text-slate-700 mb-1">รายงานปฏิบัติการ (ใหม่)</p>
-        <b>ปฏิบัติการ → รายงานปฏิบัติการ</b> — สัดส่วนการชำระเงิน · ช่องทางขาย · การยกเลิก/Void · โต๊ะหมุนเวียน · โปรโมชัน/คูปอง (เลือกเดือน).
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">จัดกลุ่มใหม่ (6 กลุ่ม)</p>
-        กลุ่มของหน้ารายงานทั้งหมดจัดให้สมดุล + ชื่อไทยทั้งหมด · ย้าย <b>ยอดขายรายวัน → ภาพรวม</b>, <b>บุฟเฟ่ต์เด็ก & ลูกค้า → กลุ่มบุฟเฟ่ต์</b>. ดูตารางครบด้านล่าง.
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">Optimize ฐานข้อมูล</p>
-        VACUUM + ANALYZE อัตโนมัติทุกครั้งที่ sync — query เร็วขึ้น, ไฟล์เล็กลง.
-      </div>
+    <div id="manTasks">
+      <!-- ═══ สาขา (brn) — docs/pilot/branch_guide.html ═══ -->
+      <article class="mt" id="mt-brn-start" data-d="brn" data-icon="key" data-when="ครั้งแรกที่ใช้ · ทำครั้งเดียว" data-kw="เริ่มใช้ ติดตั้ง รหัสผ่าน เข้าสู่ระบบ แจ้งเตือน ตัวอักษรใหญ่ wh_" hidden>
+        <h3>เริ่มใช้ครั้งแรก</h3>
+        <ol>
+          <li>เข้าสู่ระบบด้วยชื่อผู้ใช้ของสาขา (ขึ้นต้นด้วย wh_) และรหัสผ่านเริ่มต้น แล้วตั้งรหัสผ่านใหม่ทันที</li>
+          <li>แตะ <b>ฉัน</b> ที่แถบล่าง แล้วแตะ <b>ติดตั้ง</b> ในการ์ด <b>ติดตั้ง Oshinei บนหน้าจอ</b> (iPhone: ปุ่มแชร์ → เพิ่มไปยังหน้าจอโฮม)</li>
+          <li>ที่ <b>ฉัน</b> แตะ <b>เปิดการแจ้งเตือน</b> ในการ์ด <b>แจ้งเตือนตอนเช้า</b></li>
+          <li>อ่านตัวอักษรยาก แตะ <b>ตัวอักษรใหญ่</b> ที่หัวของหน้าตัดเบิก สั่งของ หรือรับของ</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>เข้าระบบไม่ได้</dt><dd>ติดต่อประสานงานขาย</dd></div>
+          <div><dt>ไม่เห็นการ์ดแจ้งเตือนบน iPhone</dt><dd>เพิ่มระบบไปยังหน้าจอโฮมก่อน แล้วเปิดจากไอคอนนั้น</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-today" data-d="brn" data-icon="brief" data-when="ทุกเช้า" data-kw="งานวันนี้ ต้องทำวันนี้ หน้าแรก งานค้าง" data-go="supplyhome" hidden>
+        <h3>ดูงานของวันนี้</h3>
+        <ol>
+          <li>แตะ <b>หน้าแรก</b> ที่แถบล่าง</li>
+          <li>อ่านรายการ <b>ต้องทำวันนี้</b>: ตัดเบิก ใบสั่งซื้อที่ต้องส่ง ของที่รอรับ</li>
+          <li>แตะแถวเพื่อไปที่งาน ทำตามลำดับจากบนลงล่าง</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็น “ใบตัดเบิกค้าง 4 วัน (8–11/10)” → แตะแถวนั้น แล้วทำใบของวันที่ค้างทีละวัน</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>รอบที่ส่งวันอื่นไม่อยู่ในงานของวันนี้</dt><dd>แสดงเป็น “ถัดไป: รอบ … ส่งก่อน …” ทำเมื่อถึงวันนั้น</dd></div>
+          <div><dt>ขึ้น “ไม่มีงานค้างวันนี้”</dt><dd>ทำครบแล้ว ไม่ต้องทำอะไรเพิ่ม</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-issue" data-d="brn" data-icon="box" data-when="ทุกวัน · ก่อนส่งใบสั่งซื้อ" data-kw="ตัดเบิก เบิก ของเสีย ใบตัดเบิก เบิกเพิ่ม เบิกเหมือนเมื่อวาน" data-go="branchstock|issue" hidden>
+        <h3>ตัดเบิก</h3>
+        <ol>
+          <li>แตะ <b>ตัดเบิก</b> ที่แถบล่าง แถบวันแสดง <b>วันนี้</b> และวันที่ยังไม่ทำ (สีส้ม)</li>
+          <li>แตะโซน: <b>แช่แข็ง</b> · <b>แช่เย็น</b> · <b>ของแห้ง</b> · <b>บาร์น้ำ</b> · <b>อื่น ๆ</b></li>
+          <li>ช่อง <b>เบิกใช้</b>: ใส่จำนวนที่ครัวใช้ตามหน่วยใต้ช่อง ไม่ได้ใช้ให้เว้นว่าง</li>
+          <li>ช่อง <b>ของเสีย</b>: ใส่จำนวนที่ทิ้งและเลือกสาเหตุ</li>
+          <li>ใช้ใกล้เคียงเมื่อวาน แตะ <b>เบิกเหมือนเมื่อวาน</b> แล้วแก้เฉพาะรายการที่ต่าง</li>
+          <li>แตะ <b>ส่งใบตัดเบิก</b> แล้วแตะ <b>ส่ง</b> ในคำถาม</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็น “ยังไม่ได้ตั้งหน่วย” พร้อมชื่อวัตถุดิบ → แจ้งฝ่ายวิเคราะห์</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>หารายการไม่เจอ</dt><dd>แตะ <b>แสดงทั้งหมด</b> ท้ายโซน (รายการที่ไม่ได้ใช้ใน 14 วันซ่อนอยู่)</dd></div>
+          <div><dt>ลืมรายการหลังส่ง (วันเดียวกัน)</dt><dd>แตะ <b>เบิกเพิ่ม</b> กรอกเฉพาะจำนวนที่บวกเพิ่ม แล้วแตะ <b>บันทึกการเบิกเพิ่ม</b></dd></div>
+          <div><dt>ส่งแล้วกรอกผิด</dt><dd>แจ้งประสานงานขายให้เปิดแก้ไข</dd></div>
+          <div><dt>ลืมทำวันก่อน</dt><dd>แตะวันนั้นในแถบวัน ทำย้อนหลังได้ แต่นับเป็น “ส่งช้า”</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-order" data-d="brn" data-icon="cart" data-when="ทุกรอบ · ก่อน 13:15 สองวันก่อนวันส่ง" data-kw="สั่งของ ใบสั่งซื้อ จำนวนที่ควรสั่ง ส่งใบสั่งซื้อ เวลาส่งสุดท้าย ค่าปรับ" data-go="branchstock|order" hidden>
+        <h3>สั่งของ</h3>
+        <ol>
+          <li>แตะ <b>สั่งของ</b> ที่แถบล่าง แถวบนสุดบอกรอบ วันส่ง และเวลาส่งสุดท้าย</li>
+          <li>ตรวจ “จำนวนที่ควรสั่ง” และ “ของที่ควรเหลือ (ตามระบบ)” ของแต่ละรายการ</li>
+          <li>เห็นด้วย ไม่ต้องแก้ · ไม่เห็นด้วย แก้ช่อง <b>สั่ง</b> (ต่างเกิน 20% เลือกเหตุผลใต้รายการ)</li>
+          <li>รอบนี้ลูกค้าจะต่างจากปกติ แตะ <b>ยอดขายรอบนี้ต่างจากปกติ?</b> ใส่ % และเหตุผล แล้วแตะ <b>ใช้กับจำนวนที่ควรสั่ง</b></li>
+          <li>แตะ <b>ส่งใบสั่งซื้อ</b> แล้วแตะ <b>ส่งใบสั่งซื้อ</b> ในคำถาม</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็น “ส่งใบตัดเบิกวันนี้แล้วจึงส่งใบสั่งซื้อได้” → แตะ <b>ไปที่ตัดเบิก</b> ส่งใบของวันนี้ก่อน แล้วกลับมา</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ขึ้น “ใบตัดเบิกยังไม่พอ (N/14 วัน) · กรอกยอดสั่งเอง”</dt><dd>ส่งใบตัดเบิกยังไม่ครบ 14 วัน ให้กรอกช่อง <b>สั่ง</b> เอง</dd></div>
+          <div><dt>ขึ้น “จากเฉลี่ยทุกสาขา”</dt><dd>กรอก <b>ยอดขายที่คาดของรอบนี้ (บาท)</b> แล้วแตะ <b>คำนวณจำนวนที่ควรสั่ง</b> ก่อนส่ง</dd></div>
+          <div><dt>แก้จนสับสน</dt><dd>แตะ <b>สั่งตามจำนวนที่ควรสั่งทั้งหมด</b> เพื่อกลับไปใช้จำนวนที่ควรสั่ง</dd></div>
+          <div><dt>เลยเวลาส่งสุดท้าย</dt><dd>ยังส่งได้ แต่มีค่าปรับที่ต้องชำระให้คลังภายนอก</dd></div>
+          <div><dt>ส่งแล้วต้องแก้</dt><dd>แตะ <b>เปิดแก้ไข</b> ได้จนกว่าคลังบันทึกจำนวนที่ส่ง</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-moved" data-d="brn" data-icon="cal" data-when="เมื่อมีประกาศสีเหลืองที่หน้าสั่งของ" data-kw="เลื่อนรอบส่ง ล่าช้า วันส่งใหม่ ประกาศ รอบส่งของ" data-go="branchstock|order" hidden>
+        <h3>รอบส่งของถูกเลื่อน</h3>
+        <ol>
+          <li>อ่านประกาศ “รอบ … · เลื่อนรอบส่งของ” ที่หน้าสั่งของ (หรือหน้างาน)</li>
+          <li>ดู <b>ปกติส่ง</b> · <b>เลื่อนเป็น</b> · เหตุผล</li>
+          <li>ยังไม่ส่งใบสั่งซื้อ: จำนวนที่ควรสั่งคิดถึงวันส่งใหม่แล้ว ส่งใบสั่งซื้อตามเวลาเดิมของรอบ</li>
+          <li>ส่งใบสั่งซื้อไปแล้ว: ตรวจว่าของพอใช้ถึงวันส่งใหม่</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นป้าย “ล่าช้า” ที่รอบในหน้าสั่งของ → รอบนั้นถูกเลื่อน ของมาถึงตามวันใน “เลื่อนเป็น”</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ของไม่พอใช้ถึงวันส่งใหม่</dt><dd>แจ้งประสานงานขาย</dd></div>
+          <div><dt>ประกาศ “ยกเลิกการเลื่อนรอบส่งของ”</dt><dd>รอบนั้นกลับมาส่งตามวันปกติ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-recv" data-d="brn" data-icon="recv" data-when="ทุกครั้งที่ของมาถึง" data-kw="รับของ รับครบ มีรายการไม่ครบ บันทึกรับของ ปลาทั้งตัว ซื้อเอง ยกเลิกใบรับของ" data-go="branchstock|recv" hidden>
+        <h3>รับของ</h3>
+        <ol>
+          <li>แตะ <b>รับของ</b> ที่แถบล่าง (มีหลายใบ แตะ <b>รับของ</b> ที่ใบนั้น)</li>
+          <li>ตอบ <b>รับครบตามที่คลังส่งทุกรายการ?</b>: ได้ครบ แตะ <b>รับครบ</b></li>
+          <li>มีที่ไม่ครบ แตะ <b>มีรายการไม่ครบ</b> เลือกรายการ แก้ช่อง <b>รับจริง</b> และเลือกสาเหตุ</li>
+          <li>ปลาทั้งตัว: กรอกจำนวนตัวที่ได้รับ เป็นจำนวนเต็ม</li>
+          <li>ติ๊ก <b>ตรวจสภาพและจำนวนครบแล้ว</b></li>
+          <li>แตะ <b>บันทึกรับของ</b> แล้วแตะ <b>บันทึกรับของ</b> ในคำถาม</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นปุ่มบันทึกจางอยู่ → อ่านข้อความใต้ปุ่ม แล้วกรอกส่วนที่ขาด</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>บันทึกผิดใบ</dt><dd>แตะ <b>ยกเลิกใบรับของ</b> ที่ใบนั้น และพิมพ์เหตุผล</dd></div>
+          <div><dt>ของที่ซื้อเอง</dt><dd>แตะ <b>บันทึกของที่รับเอง</b> ท้ายหน้า ใส่รายการ แตะ <b>+ เพิ่ม</b> แล้ว <b>บันทึกรับของ</b></dd></div>
+          <div><dt>ไม่ได้บันทึกรับของ</dt><dd>ส่วนต่างสิ้นเดือนจะขึ้น “นับได้มากกว่าระบบ” ซึ่งไม่จริง ให้บันทึกทุกใบ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-pack" data-d="brn" data-icon="scale" data-when="ตอนรับของ เมื่อแพ็คไม่ตรงกับในระบบ" data-kw="ขนาดแพ็คไม่ตรง แพ็ค กล่อง ขนาด" data-go="branchstock|recv" hidden>
+        <h3>แจ้งขนาดแพ็คไม่ตรง</h3>
+        <ol>
+          <li>ในฟอร์มรับของ แตะ <b>ขนาดแพ็คไม่ตรง</b> ที่รายการนั้น</li>
+          <li>เลือกหน่วย แล้วกรอกจำนวนที่มีจริง (ข้อความ “ในระบบ” บอกค่าเดิม)</li>
+          <li>แตะ <b>ส่งให้ฝ่ายวิเคราะห์</b> แล้วถ่ายรูปฉลากส่งทางไลน์</li>
+          <li>รับของต่อตามปกติ</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ฝ่ายวิเคราะห์ไม่ใช้ค่าที่แจ้ง</dt><dd>อ่านเหตุผลที่บรรทัด “แจ้งขนาดแพ็ค” ของใบรับของในประวัติ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-claim" data-d="brn" data-icon="ret" data-when="พบของขาดหรือเสียหลังรับของ" data-kw="แจ้งของขาด/เสีย ของเสีย ของขาด เคลม รูป ไลน์" data-go="branchstock|recv" hidden>
+        <h3>แจ้งของขาด/เสีย (พบภายหลัง)</h3>
+        <ol>
+          <li>แตะ <b>รับของ</b> เลื่อนลงไปที่การ์ด <b>แจ้งของขาด/เสีย</b></li>
+          <li>ที่ใบที่รับแล้ว แตะ <b>แจ้งของขาด/เสีย</b></li>
+          <li>พิมพ์ชื่อในช่อง <b>ค้นหาของที่จะแจ้ง</b> แล้วแตะ <b>เลือก</b></li>
+          <li>ใส่จำนวน (ไม่เกินที่รับ) และเลือก <b>สาเหตุ</b></li>
+          <li>แตะ <b>ส่งแจ้งของขาด/เสีย</b> แล้วแตะ <b>ส่งแจ้ง</b></li>
+          <li>ส่งรูปถ่ายทางไลน์ถึงประสานงานขาย</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>พบตอนรับของ</dt><dd>แจ้งในฟอร์มรับของเลย ด้วย <b>มีรายการไม่ครบ</b></dd></div>
+          <div><dt>แจ้งผิด</dt><dd>เรื่องที่ยังรอพิจารณา แตะ <b>ยกเลิกเรื่องนี้</b></dd></div>
+          <div><dt>ขึ้น “ไม่อนุมัติ”</dt><dd>แตะเพื่ออ่านเหตุผล</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-var" data-d="brn" data-icon="diff" data-when="รายวันดูได้ทุกวัน · สิ้นเดือนหลังส่งผลนับ" data-kw="ส่วนต่าง ส่วนต่างการใช้ เหตุผล เบิกมากกว่าปกติ แจ้งว่าบันทึกรับของครบ" data-go="branchstock|var" hidden>
+        <h3>ดูส่วนต่างและให้เหตุผล</h3>
+        <ol>
+          <li>แตะ <b>ส่วนต่างการใช้</b> ที่หน้าแรก มี 2 แถบ: <b>รายวัน</b> · <b>สิ้นเดือน</b></li>
+          <li><b>รายวัน</b>: แตะวันเพื่อดูรายการที่เบิกมากหรือน้อยกว่า <b>ที่สาขาใช้ปกติ</b></li>
+          <li><b>สิ้นเดือน</b>: เลือกเหตุผลของรายการที่ระบบถาม แล้วแตะ <b>บันทึก</b></li>
+          <li>บันทึกรับของครบแล้ว แตะ <b>แจ้งว่าบันทึกรับของครบ</b> แล้วแตะ <b>ใช่ ครบแล้ว</b></li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นป้ายเตือนของแพงหลายวันติดกัน → ตรวจว่าใบตัดเบิกกรอกครบ และตรวจของเสียหรือของหาย</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ขึ้น “ยังไม่มีค่าปกติให้เทียบ”</dt><dd>ใบตัดเบิกย้อนหลังยังไม่พอ หรือยอดขายวันนั้นยังไม่เข้า</dd></div>
+          <div><dt>รายการ “ข้อมูลไม่ครบ”</dt><dd>ไม่ต้องตอบ</dd></div>
+          <div><dt>ไม่เห็นปุ่ม แจ้งว่าบันทึกรับของครบ</dt><dd>ปุ่มขึ้นที่หน้า นับของสิ้นเดือน หลังส่งผลนับสิ้นเดือน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-count" data-d="brn" data-icon="count" data-when="วันที่ 1 ของทุกเดือน · ก่อนรับของ" data-kw="นับของ นับของสิ้นเดือน ส่งผลนับ ปิดเดือน นับครั้งแรก" data-go="branchstock|count" hidden>
+        <h3>นับของสิ้นเดือน</h3>
+        <ol>
+          <li>แตะ <b>นับของสิ้นเดือน</b> ที่หน้าแรก</li>
+          <li>แตะโซน แล้วนับทีละโซน ใส่จำนวนตามหน่วยในแถว (ไม่มีของ ใส่ 0)</li>
+          <li>รายการที่มาเป็นกล่องของแพ็ค ใส่ช่อง <b>กล่อง</b> และ <b>แพ็ค</b> ระบบรวมให้</li>
+          <li>ติ๊ก <b>เฉพาะรายการที่ยังไม่ได้นับ</b> เพื่อดูว่าเหลืออะไร</li>
+          <li>นับครบแล้ว แตะ <b>ส่งผลนับ</b> แล้วแตะ <b>ส่งผลนับ</b> ในคำถาม</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็น “ยังไม่ได้นับ N รายการ ปิดเดือนต้องนับของครบทุกรายการ” → แตะ <b>กลับไปนับ</b> ช่องว่างถือว่ายังไม่ได้นับ</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>นับไม่เสร็จในรอบเดียว</dt><dd>แตะ <b>บันทึกไว้ก่อน</b> แล้วกลับมานับต่อ</dd></div>
+          <div><dt>ส่งแล้วนับผิด</dt><dd>แก้ไม่ได้ ให้นับใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-brn-excel" data-d="brn" data-icon="upload" data-when="เมื่อสะดวกกรอกในคอมพิวเตอร์" data-kw="Excel แบบฟอร์ม นำเข้าไฟล์ ดาวน์โหลดแบบฟอร์ม" hidden>
+        <h3>กรอกด้วยแบบฟอร์ม Excel</h3>
+        <ol>
+          <li>ที่หน้าตัดเบิก สั่งของ หรือรับของ แตะ <b>ดาวน์โหลดแบบฟอร์ม</b></li>
+          <li>กรอกในไฟล์ แล้วแตะ <b>นำเข้าไฟล์</b></li>
+          <li>ตรวจตารางที่ขึ้นมา</li>
+          <li>แตะ <b>บันทึกไว้ก่อน</b> หรือปุ่มส่งของหน้านั้น</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ตัดเบิกหลายวันในไฟล์เดียว</dt><dd>ได้ครั้งละไม่เกิน 7 วัน</dd></div>
+        </dl></details>
+      </article>
+
+      <!-- ═══ คลัง (wh) — docs/pilot/warehouse_guide.html ═══ -->
+      <article class="mt" id="mt-wh-open" data-d="wh" data-icon="inbox" data-when="ทุกวันที่มีใบสั่งซื้อ" data-kw="คิวใบสั่งซื้อ งานของฉันวันนี้ รอยืนยันยอดส่ง แจ้งเตือน" data-go="orderhub|queue" hidden>
+        <h3>เปิดคิวใบสั่งซื้อของวัน</h3>
+        <ol>
+          <li>หน้าแรก การ์ด <b>งานของฉันวันนี้</b> แตะ <b>ไปที่งาน</b> (หรือ <b>คลัง</b> → <b>คิวใบสั่งซื้อ</b>)</li>
+          <li>ตัวกรองเริ่มที่ <b>รอยืนยันยอดส่ง</b></li>
+          <li>แตะที่ใบเพื่อเปิดรายการ ใบเรียงตามวันส่ง</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>หาใบที่ส่งแล้วไม่เจอ</dt><dd>แตะตัวกรอง <b>คลังจัดส่งแล้ว</b></dd></div>
+          <div><dt>อยากได้การแจ้งเตือน 08:00</dt><dd>บนโทรศัพท์ <b>ฉัน</b> → <b>เปิดการแจ้งเตือน</b> ในการ์ด <b>แจ้งเตือนตอนเช้า</b></dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-wh-confirm" data-d="wh" data-icon="truck" data-when="ภายใน 14:00 ของวันตัดรอบ" data-kw="ยืนยันยอดส่ง ส่งจริง เลขที่ PO ส่งไม่ตรง" data-go="orderhub|queue" hidden>
+        <h3>ยืนยันยอดส่ง</h3>
+        <ol>
+          <li>เปิดใบ ช่อง <b>ส่งจริง</b> ตั้งต้นเท่าที่สาขาสั่ง</li>
+          <li>ส่งตามที่สาขาสั่งทั้งหมด แตะ <b>ส่งตามที่สาขายืนยันทั้งหมด</b></li>
+          <li>ส่งไม่ตรง: แก้ช่อง <b>ส่งจริง</b> แล้วเลือกเหตุผล</li>
+          <li>ใส่ <b>เลขที่ PO</b></li>
+          <li>แตะ <b>ยืนยันยอดส่ง</b> แล้วแตะ <b>ยืนยันยอดส่ง</b> ในคำถาม</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นข้อความสีแดงใต้รายการ → แก้ช่องนั้นก่อน ระบบไม่บันทึกจนกว่าจะแก้ครบ</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ใบมีป้าย “ส่งช้า (มีค่าปรับ)”</dt><dd>สาขาส่งหลัง 13:15 ยังทำตามปกติ</dd></div>
+          <div><dt>ใบมีป้าย “ล่าช้า · ส่ง …”</dt><dd>ประสานงานขายเลื่อนรอบส่งนี้ ส่งตามวันใหม่ในป้าย</dd></div>
+          <div><dt>ป้าย “สาขาแก้ไข N รายการ”</dt><dd>สาขาสั่งต่างจากยอดแนะนำเกิน 20% มีเหตุผลแนบ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-wh-edit" data-d="wh" data-icon="doc" data-when="หลังยืนยัน ก่อนสาขาบันทึกรับของ" data-kw="แก้ไข บันทึกการแก้ไข แก้ยอดส่ง" data-go="orderhub|queue" hidden>
+        <h3>แก้ไขหลังยืนยัน</h3>
+        <ol>
+          <li>แตะตัวกรอง <b>คลังจัดส่งแล้ว</b> แล้วแตะใบที่ต้องแก้</li>
+          <li>แก้ช่อง <b>ส่งจริง</b> หรือเลขที่ PO และเลือกเหตุผล</li>
+          <li>แตะ <b>บันทึกการแก้ไข</b> แล้วแตะ <b>บันทึกการแก้ไข</b> ในคำถาม</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>แก้ไม่ได้</dt><dd>สาขาบันทึกรับของแล้ว ติดต่อประสานงานขาย</dd></div>
+        </dl></details>
+      </article>
+
+      <!-- ═══ ประสานงานขาย (ss) — docs/pilot/salessupport_guide.html ═══ -->
+      <article class="mt" id="mt-ss-today" data-d="ss" data-icon="brief" data-when="ทุกเช้า ก่อนเริ่มงาน" data-kw="หน้างาน งานของฉันวันนี้ ไปที่งาน งานค้าง ตรวจคงเหลือตามระบบ รับทราบแล้ว" data-go="supplyhome" hidden>
+        <h3>เปิดหน้างาน</h3>
+        <ol>
+          <li>หน้าแรก การ์ด <b>งานของฉันวันนี้</b> แตะ <b>ดูทั้งหมด</b></li>
+          <li>แตะ <b>ไปที่งาน →</b> ระบบเปิดหน้าที่ต้องทำ พร้อมเดือนและสาขา</li>
+          <li>สาขาที่ยังไม่ส่งใบตัดเบิก: เปิด <b>งานของฝ่ายอื่น</b> แตะ <b>ดูรายการ →</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>งาน “ตรวจคงเหลือตามระบบ: สาขา · วัตถุดิบ”</dt><dd>ตรวจใบตัดเบิกและใบรับของของรายการนั้นกับสาขา แล้วกด <b>รับทราบแล้ว</b></dd></div>
+          <div><dt>งานที่ทำเสร็จหายไป</dt><dd>ซ่อนไว้ ดูที่ตัวกรอง <b>เสร็จแล้ว</b></dd></div>
+          <div><dt>บันทึกครั้งแรกบนเครื่องใหม่</dt><dd>ผู้ดูแลระบบกรอกรหัสปลดล็อกในหน้าต่างยืนยันครั้งเดียว ห้ามส่งรหัสทางแชต</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-queue" data-d="ss" data-icon="inbox" data-when="ทุกวัน" data-kw="คิวใบสั่งซื้อ คีย์บัญชีแล้ว สรุปรวมตามวันส่ง PO ไดกิโตะ Excel" data-go="orderhub|queue" hidden>
+        <h3>ออก PO และคีย์บัญชี</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>คิวใบสั่งซื้อ</b> เลือกสถานะและช่วง <b>ตัดรอบ ตั้งแต่ ถึง</b></li>
+          <li>แตะ <b>สรุปรวมตามวันส่ง</b> เพื่อดูยอดรวมรายวัตถุดิบแยกสาขา</li>
+          <li>แตะ <b>ดาวน์โหลดสรุปรวมตามวันส่ง (Excel)</b> ใช้ออก PO และคีย์บัญชี</li>
+          <li>ติ๊กใบที่คีย์เสร็จ (หรือ <b>เลือกทั้งหมดที่แสดง</b>) แล้วแตะ <b>คีย์บัญชีแล้ว</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ทำเครื่องหมายผิด</dt><dd>เลือกใบ แตะ <b>ยกเลิกคีย์บัญชี</b></dd></div>
+          <div><dt>ติ๊กใบไม่ได้</dt><dd>ทำได้เฉพาะใบที่คลังจัดส่งแล้วหรือสาขารับแล้ว</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-claims" data-d="ss" data-icon="ret" data-when="เมื่อสาขาแจ้งเคลม" data-kw="เคลม เคลมสินค้า อนุมัติ ไม่อนุมัติ ของขาด ของเสีย ใบรับของที่สาขายกเลิก" data-go="orderhub|claims" hidden>
+        <h3>พิจารณาเคลม</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>เคลมสินค้า</b> เลือก <b>รอพิจารณา</b></li>
+          <li>แตะแถวเพื่อดูรายการ ตรวจกับรูปที่สาขาส่งทางไลน์</li>
+          <li>อนุมัติ: ตรวจช่อง <b>อนุมัติ</b> (ลดได้) แล้วแตะ <b>อนุมัติ</b> สองครั้ง</li>
+          <li>ไม่อนุมัติ: พิมพ์ <b>หมายเหตุถึงสาขา</b> แล้วแตะ <b>ไม่อนุมัติ</b> สองครั้ง</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>อนุมัติผิด</dt><dd>ตัดสินแล้วแก้ไม่ได้ แจ้งผู้ดูแลระบบ</dd></div>
+          <div><dt>สาขายกเลิกใบรับของ</dt><dd>ดูเหตุผลที่ <b>ใบรับของที่สาขายกเลิก 7 วันล่าสุด</b> ท้ายหน้า</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-issues" data-d="ss ops" data-icon="doc" data-when="ทุกเช้า" data-kw="ใบตัดเบิกสาขา เปิดแก้ไข ยังไม่ส่ง ส่งช้า ตาม สาขา" data-go="orderhub|issues" hidden>
+        <h3>ตามใบตัดเบิกและเปิดแก้ไข</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ใบตัดเบิกสาขา</b> เลือกเดือน <b>สาขา</b> และช่วง <b>ตั้งแต่ ถึง</b></li>
+          <li>กรองสถานะ <b>ยังไม่ส่ง</b> แล้วตามสาขา</li>
+          <li>สาขาขอแก้: พิมพ์ <b>เหตุผลที่เปิดแก้ไข (จำเป็น)</b> แตะ <b>เปิดให้สาขาแก้ไข</b> แล้ว <b>เปิดแก้ไข</b></li>
+          <li>ส่งบัญชี: <b>ดาวน์โหลดใบตัดเบิกสาขา (Excel)</b> และ <b>ดาวน์โหลดบันทึกความล่าช้า (Excel)</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ปุ่ม เปิดให้สาขาแก้ไข จางอยู่</dt><dd>ใบยังไม่ส่ง สาขาแก้เองได้</dd></div>
+          <div><dt>เปิดแก้ไขไม่ได้</dt><dd>บัญชีบันทึกใบสรุปตัดเบิกของเดือนนั้นแล้ว ให้บัญชียกเลิกการบันทึกก่อน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-adoption" data-d="ss ops" data-icon="store" data-when="ทุกสัปดาห์" data-kw="การใช้งานทุกสาขา ใครยังไม่ใช้ สีแดง เหลือง เขียว ตรงวัน ตรงเวลา" data-go="orderhub|adoption" hidden>
+        <h3>ดูว่าสาขาไหนยังไม่ใช้ระบบ</h3>
+        <ol>
+          <li><b>ปฏิบัติการ</b> → <b>การใช้งานทุกสาขา</b> (7 วันล่าสุด สาขาที่ต้องตามอยู่บนสุด)</li>
+          <li>อ่าน <b>ใบตัดเบิกตรงวัน</b> · <b>ส่งใบสั่งซื้อตรงเวลา</b> · <b>รับของบันทึกแล้ว</b></li>
+          <li>สีแดง (ต่ำกว่า 60%) ติดต่อสาขาก่อน</li>
+          <li>แตะแถวของสาขาเพื่อเปิดใบตัดเบิกของสาขานั้น</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>สาขาไม่อยู่ในตาราง</dt><dd>สาขายังไม่มีบัญชีผู้ใช้ สร้างที่ ตั้งค่า → ผู้ใช้งาน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-issuevar" data-d="ss ops" data-icon="diff" data-when="ทุกวัน" data-kw="ผลต่างตัดเบิกรายวัน เบิกเกิน เบิกต่ำกว่าปกติ ของหาย ของเสีย" data-go="orderhub|issuevar" hidden>
+        <h3>ดูสาขาที่เบิกเกินหรือต่ำกว่าปกติ</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ผลต่างตัดเบิกรายวัน</b> เลือก <b>สาขา</b></li>
+          <li>ดูมูลค่าที่เบิกเทียบ <b>ที่สาขาใช้ปกติ</b> และ <b>เฉลี่ยทุกสาขา</b></li>
+          <li>แตะวันเพื่อดูรายการ</li>
+          <li>แตะ <b>ดาวน์โหลดผลต่างตัดเบิกรายวัน (Excel)</b> เมื่อต้องส่งต่อ</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นป้าย “เบิกต่ำกว่าปกติต่อเนื่อง” → ถามสาขาว่ากรอกใบตัดเบิกครบหรือไม่ · เบิกเกินติดต่อกัน 3 วันขาย → ตรวจของเสียหรือของหาย</p>
+      </article>
+
+      <article class="mt" id="mt-ss-persales" data-d="ss" data-icon="bar" data-when="เมื่อสงสัยว่าสาขาซื้อจากภายนอก" data-kw="ใช้วัตถุดิบต่อยอดขาย 100000 ค่ากลาง ซื้อจากภายนอก" data-go="orderhub|persales" hidden>
+        <h3>ดูการใช้วัตถุดิบต่อยอดขาย</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ใช้วัตถุดิบต่อยอดขาย</b> เลือก <b>สาขา</b> และ <b>ช่วงเวลา</b></li>
+          <li>ดูปริมาณต่อยอดขาย ฿100,000 เทียบค่ากลางของสาขาอื่น</li>
+          <li>รายการที่มีป้าย “ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก” ถามสาขา</li>
+          <li>แตะ <b>ดาวน์โหลด Excel</b> เมื่อต้องส่งต่อ</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ss-fc" data-d="ss" data-icon="trend" data-when="เมื่อต้องการดูยอดแนะนำของรอบ" data-kw="ยอดแนะนำรายรอบ คำนวณยอดแนะนำ บันทึกยอดแนะนำ" data-go="bomcenter|fc" hidden>
+        <h3>คำนวณยอดแนะนำรายรอบ</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ยอดแนะนำรายรอบ</b> เลือก <b>สาขา</b> <b>รอบ</b> และ <b>วันที่จะสั่ง (ก่อนตัดรอบ)</b></li>
+          <li>แตะ <b>คำนวณยอดแนะนำ</b></li>
+          <li>ต้องการเก็บเป็นฐานเทียบ แตะ <b>บันทึกยอดแนะนำ</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ที่มาขึ้น “ใบตัดเบิกยังไม่พอ (n/14 วัน)”</dt><dd>สาขากรอกช่อง <b>สั่ง</b> เองจนกว่าจะมีใบตัดเบิกที่ส่งแล้ว 14 วัน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-pricefile" data-d="ss" data-icon="upload" data-when="สัปดาห์แรกของเดือนถัดไป" data-kw="ไฟล์ราคา ส่งไฟล์ราคา รายงานจ่ายสินค้าภายใน ราคา ต้นเดือน" data-go="bomcenter|pricefile" hidden>
+        <h3>ส่งไฟล์ราคาประจำเดือน</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ไฟล์ราคา</b> เลือกเดือน</li>
+          <li>แตะ <b>ส่งไฟล์ราคา</b> เลือกไฟล์ “รายงานจ่ายสินค้าภายใน”</li>
+          <li>พิมพ์ <b>หมายเหตุ</b> ถึงฝ่ายวิเคราะห์ (ไม่บังคับ)</li>
+          <li>แตะ <b>ส่งไฟล์ราคา</b> ในคำถาม</li>
+          <li>ดูผลที่ <b>ไฟล์ที่ส่งแล้ว</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ไม่มีไฟล์ตามรูปแบบ</dt><dd>แตะ <b>ดาวน์โหลดแม่แบบไฟล์ราคา (Excel)</b></dd></div>
+          <div><dt>ถูกส่งกลับ</dt><dd>แก้ไฟล์ตามเหตุผล แล้วส่งใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="manualCloseSteps" data-d="ss acc ana ops mgmt" data-icon="lock" data-when="ต้นเดือนถัดไป · หน้างานบอกว่าถึงขั้นไหนและรอใคร" data-kw="ปิดเดือน ปิดงวดเดือน 5 ขั้น ใบสรุปตัดเบิก สิ้นเดือน" data-go="orderhub|central" hidden>
+        <h3>ปิดงวดเดือน (5 ขั้น)</h3>
+        <ol>
+          <li>นำเข้ารายงานไดกิโตะ กรุ๊ปประจำเดือน: ประสานงานขาย ที่ <b>ประสานงานขาย</b> → <b>นำเข้าข้อมูลปิดงวด</b></li>
+          <li>จับคู่รหัสเดิมกับรหัสสินค้าของไดกิโตะ กรุ๊ป: ฝ่ายวิเคราะห์และประสานงานขาย ในหน้าเดียวกัน</li>
+          <li>ใบตรวจนับต้นงวดและปลายงวด: สาขานับในแอป หรือประสานงานขายนำเข้าไฟล์ (ต้องนับครบทุกรายการ)</li>
+          <li>แจ้งว่าบันทึกรับของครบและระบุเหตุผลของส่วนต่าง: สาขา ที่ <b>สาขา</b> → <b>ส่วนต่างการใช้</b> (ประสานงานขายทำแทนได้)</li>
+          <li>ดาวน์โหลดใบสรุปตัดเบิกและบันทึกเข้าระบบบัญชี: บัญชี ที่ <b>บัญชี</b> → <b>ใบสรุปตัดเบิก</b></li>
+        </ol>
+        <p class="mt-if">ปิดงวดเดือนในโหมดสต๊อกมี 5 ขั้น จบที่ใบสรุปตัดเบิก · ถ้าเห็นขั้นใด “รอขั้นตอนก่อนหน้า” → ดูว่าขั้นก่อนหน้ารอใคร แล้วตามคนนั้น</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ไฟล์ใบตรวจนับนำเข้าไม่ได้</dt><dd>ยังมีรายการว่าง ใส่ 0 ถ้าไม่มีของ (ปิดเดือนต้องนับของครบทุกรายการ)</dd></div>
+          <div><dt>สาขาแจ้งเหตุผลทางโทรศัพท์</dt><dd>ประสานงานขายทำแทนที่ <b>สาขา</b> → <b>ส่วนต่างการใช้</b> เลือกสาขานั้น</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-central" data-d="ss" data-icon="recv" data-when="ปิดงวด ขั้นที่ 1 · ไฟล์เดียวต่อเดือน" data-kw="นำเข้ารายงานไดกิโตะ กรุ๊ป นำเข้าข้อมูลปิดงวด ใบรับของ ขั้นที่ 1 จับคู่รหัส" data-go="orderhub|central" hidden>
+        <h3>นำเข้ารายงานไดกิโตะ กรุ๊ป</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>นำเข้าข้อมูลปิดงวด</b> เลือกเดือนที่จะปิด</li>
+          <li>ที่ขั้นที่ 1 แตะ <b>นำเข้าไฟล์รายงานไดกิโตะ กรุ๊ป</b> เลือกไฟล์</li>
+          <li>อ่านตัวอย่าง แล้วติ๊กสาขาที่จะบันทึกใบรับของ</li>
+          <li>แตะ <b>นำเข้ารายงานไดกิโตะ กรุ๊ป</b> แล้วแตะ <b>นำเข้ารายงาน</b></li>
+          <li>ขั้นที่ 2: จับคู่รหัสในหน้าเดียวกัน รายการที่ไม่แน่ใจถามครัว</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ติ๊กสาขาไม่ได้</dt><dd>สาขานั้นบันทึกรับของเองครบแล้ว (กันบันทึกซ้ำ)</dd></div>
+          <div><dt>มีรหัสที่ทะเบียนไม่รู้จัก</dt><dd>เลือกรายการละรหัสว่าเป็นรหัสใหม่ของวัตถุดิบเดิม หรือวัตถุดิบใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-count" data-d="ss" data-icon="count" data-when="ปิดงวด ขั้นที่ 3 · เมื่อสาขายังนับในกระดาษ" data-kw="ใบตรวจนับ นำเข้าไฟล์ใบตรวจนับ แม่แบบ นับของ" data-go="orderhub|central" hidden>
+        <h3>นำเข้าใบตรวจนับแทนสาขา</h3>
+        <ol>
+          <li>ที่การ์ด “ใบตรวจนับต้นงวดและปลายงวด” เลือก <b>สาขา</b> และ <b>วันที่ตรวจนับ</b></li>
+          <li>แตะ <b>ดาวน์โหลดแม่แบบใบตรวจนับ (Excel)</b> ส่งให้สาขากรอก</li>
+          <li>แตะ <b>นำเข้าไฟล์ใบตรวจนับ</b> เลือกไฟล์ที่กรอกแล้ว อ่านตัวอย่าง</li>
+          <li>แตะ <b>นำเข้าใบตรวจนับ</b> ในคำถาม</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>นำเข้าแล้วพบว่าผิด</dt><dd>แก้ไม่ได้ ให้นำเข้าเป็นวันที่ใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-cal" data-d="ss" data-icon="cal" data-when="ก่อนเริ่มใช้ และเมื่อสาขาเปลี่ยนวันส่งประจำ" data-kw="รอบส่งของสาขา วันส่ง รอบ 1 รอบ 2 แซลมอนสด บันทึกรอบส่ง" data-go="bomcenter|cal" hidden>
+        <h3>ตั้งวันส่งประจำของสาขา</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>รอบส่งของสาขา</b> (ใช้บนคอมพิวเตอร์)</li>
+          <li>เลือกวันส่ง รอบ 1 · รอบ 2 · แซลมอนสด ของแต่ละสาขา</li>
+          <li>แตะ <b>บันทึกรอบส่ง</b> มีผลตั้งแต่รอบถัดไป</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>แก้หลายสาขาพร้อมกัน</dt><dd>การ์ด <b>ไฟล์รอบส่งของสาขา</b>: <b>ดาวน์โหลดแม่แบบรอบส่งของสาขา (Excel)</b> แก้ แล้ว <b>นำเข้าไฟล์รอบส่งของสาขา</b></dd></div>
+          <div><dt>เลื่อนเพียงรอบเดียว</dt><dd>ใช้ “เลื่อนรอบส่ง” ด้านล่าง วันส่งประจำไม่เปลี่ยน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-reschedule" data-d="ss" data-icon="clock" data-when="เมื่อรอบส่งรอบใดรอบหนึ่งต้องเลื่อน" data-kw="เลื่อนรอบส่ง ล่าช้า เลื่อนวันส่ง รถขนส่งไม่พร้อม ของจากผู้ขายมาช้า วันหยุด ยกเลิกการเลื่อน" data-go="bomcenter|cal" hidden>
+        <h3>เลื่อนรอบส่ง</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>รอบส่งของสาขา</b> การ์ด <b>เลื่อนรอบส่ง</b> แตะ <b>เลื่อนรอบส่ง</b></li>
+          <li>เลือก <b>รอบ</b> และ <b>วันส่งตามปกติ</b></li>
+          <li>เลือก <b>เลื่อนเป็น</b> (หลังวันส่งปกติ ไม่เกิน 6 วัน) และ <b>เหตุผล</b></li>
+          <li>ติ๊กสาขา (หรือ <b>เลือกทั้งหมด</b>)</li>
+          <li>แตะ <b>บันทึกและแจ้งสาขา</b> แล้วยืนยัน</li>
+        </ol>
+        <p class="mt-if">สาขาได้รับการแจ้งเตือนทันที เห็นประกาศสีเหลืองที่หน้าสั่งของและหน้างาน และใบสั่งซื้อของรอบนั้นติดป้าย “ล่าช้า”</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>เลือกเหตุผล อื่น ๆ</dt><dd>ต้องพิมพ์ <b>รายละเอียด</b></dd></div>
+          <div><dt>ไม่มีสาขาให้เลือก</dt><dd>ไม่มีสาขาที่ส่งรอบนั้นในวันที่เลือก ตรวจ <b>วันส่งตามปกติ</b></dd></div>
+          <div><dt>ต้องเปลี่ยนวันหรือยกเลิก</dt><dd>ที่แถวนั้น แตะ <b>แก้ไข</b> หรือ <b>ยกเลิกการเลื่อน</b> (ต้องระบุเหตุผล)</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-events" data-d="ss" data-icon="cal" data-when="ล่วงหน้าก่อนโปรโมชันหรืองานใหญ่ของจังหวัด" data-kw="ปฏิทินเทศกาลและวันหยุด โปรโมชัน ลูกค้าเพิ่ม เทศกาล" data-go="bomcenter|events" hidden>
+        <h3>ใส่ช่วงเทศกาลหรือโปรโมชัน</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>ปฏิทินเทศกาลและวันหยุด</b></li>
+          <li>กรอก <b>ชื่อ</b> <b>ตั้งแต่</b> <b>ถึง</b> และ <b>สาขา</b></li>
+          <li>ใส่ <b>ลูกค้าเพิ่มจากวันปกติ (%)</b> (เว้นว่าง = ใช้ปีก่อน)</li>
+          <li>แตะ <b>เพิ่ม</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>วันหยุดราชการ</dt><dd>แสดงไว้แล้ว ไม่ต้องเพิ่มซ้ำ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-zones" data-d="ss" data-icon="box" data-when="เมื่อสาขาจัดของต่างจากโซนเดิม" data-kw="โซนจัดเก็บ เพิ่มโซน บันทึกโซน" data-go="bomcenter|zones" hidden>
+        <h3>แก้โซนจัดเก็บ</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>โซนจัดเก็บ</b></li>
+          <li>พิมพ์ชื่อโซนใหม่ แตะ <b>+ เพิ่มโซน</b> หรือเปลี่ยนชื่อในช่องชื่อ</li>
+          <li>เรียงลำดับโดยลากแถวหรือกดลูกศร</li>
+          <li>แตะ <b>บันทึกโซน</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ลบโซนไม่ได้</dt><dd>โซนยังมีวัตถุดิบ เปลี่ยนชื่อโซนหรือย้ายวัตถุดิบก่อน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ss-codereq" data-d="ss" data-icon="ret" data-when="เมื่อระบบอื่นเปลี่ยนรหัสของวัตถุดิบเดิม" data-kw="แจ้งเปลี่ยนรหัสสินค้า รหัสใหม่ รหัสเดิม ระบบบัญชี ระบบคลัง" data-go="bomcenter|codereq" hidden>
+        <h3>แจ้งเปลี่ยนรหัสสินค้า</h3>
+        <ol>
+          <li><b>ประสานงานขาย</b> → <b>แจ้งเปลี่ยนรหัสสินค้า</b> กรอก <b>รหัสใหม่</b> และเลือก <b>ระบบ</b></li>
+          <li>ใส่ชื่อตามระบบอื่น แล้วแตะ <b>ค้นหาวัตถุดิบที่ใกล้เคียง</b> แตะวัตถุดิบที่ตรง</li>
+          <li>ตรวจ <b>รหัสเดิม</b> แล้วแตะ <b>ส่งให้ฝ่ายวิเคราะห์</b> สองครั้ง</li>
+          <li>ดูผลที่ <b>คำขอที่ส่งแล้ว</b></li>
+        </ol>
+      </article>
+
+      <!-- ═══ บัญชี (acc) — docs/pilot/accounting_guide.html ═══ -->
+      <article class="mt" id="mt-acc-open" data-d="acc" data-icon="doc" data-when="ต้นเดือนถัดไป · เมื่อสาขาแจ้งว่าบันทึกรับของครบ" data-kw="ใบสรุปตัดเบิก ปิดงวดเดือน พร้อมบันทึก รอสาขาส่ง" data-go="bomcenter|issue" hidden>
+        <h3>เปิดใบสรุปตัดเบิก</h3>
+        <ol>
+          <li>หน้าแรก การ์ด <b>งานของฉันวันนี้</b> แตะ <b>ไปที่งาน</b> (หรือ <b>บัญชี</b> → <b>ใบสรุปตัดเบิก</b>)</li>
+          <li>เลือก <b>ปิดงวดเดือน</b> ตัวกรองเริ่มที่ <b>ยังไม่เสร็จ</b></li>
+          <li>แตะชื่อสาขาเพื่ออ่านป้ายสถานะของงวด</li>
+        </ol>
+        <p class="mt-if">ถ้าเห็นป้าย <b>ขาดใบตัดเบิก N วัน</b> หรือผลต่างเกินเกณฑ์ → ถามประสานงานขายก่อนบันทึก</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>สาขาขึ้น <b>รอสาขาส่ง</b></dt><dd>สาขายังไม่แจ้งว่าบันทึกรับของครบ ดาวน์โหลดยังไม่ได้</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-acc-book" data-d="acc" data-icon="calc" data-when="เดือนละครั้งต่อสาขา" data-kw="ดาวน์โหลด บันทึกเข้าระบบบัญชีแล้ว Excel ล็อก" data-go="bomcenter|issue" hidden>
+        <h3>ดาวน์โหลดและบันทึกเข้าระบบบัญชี</h3>
+        <ol>
+          <li>ที่แถวสาขา แตะ <b>ดาวน์โหลด</b> (หรือ <b>ดาวน์โหลดทุกสาขาที่พร้อม</b>)</li>
+          <li>คีย์ตัวเลขเข้าระบบบัญชีให้เสร็จ</li>
+          <li>แตะ <b>บันทึกเข้าระบบบัญชีแล้ว</b> แล้วแตะ <b>บันทึกเข้าระบบบัญชีแล้ว</b> ในคำถาม</li>
+          <li>แถวย้ายไปตัวกรอง <b>บันทึกแล้ว</b> งวดนั้นล็อก</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ขึ้น “อ่านอย่างเดียว”</dt><dd>ผู้ดูแลระบบกรอกรหัสปลดล็อกครั้งเดียวที่เครื่องนี้ ห้ามส่งรหัสทางแชต</dd></div>
+          <div><dt>รหัสในไฟล์ต่างจากทะเบียน</dt><dd>ไฟล์มีคอลัมน์ <b>รหัสในทะเบียน</b> ท้ายตาราง</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-acc-undo" data-d="acc" data-icon="lock" data-when="เมื่อต้องแก้ตัวเลขหลังบันทึก" data-kw="ยกเลิกการบันทึก ปลดล็อก แก้ไขหลังบันทึก" data-go="bomcenter|issue" hidden>
+        <h3>แก้ไขหลังบันทึกบัญชี</h3>
+        <ol>
+          <li>เลือกตัวกรอง <b>บันทึกแล้ว</b></li>
+          <li>แตะ <b>ยกเลิกการบันทึก</b> ที่แถวของสาขา แล้วแตะ <b>ยกเลิกการบันทึกบัญชี</b></li>
+          <li>รอประสานงานขายแก้ แล้วดาวน์โหลดและบันทึกใหม่</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-acc-price" data-d="acc" data-icon="tag" data-when="เมื่อต้องการดูราคาซื้อของเดือน" data-kw="ราคารายเดือน ราคาซื้อ ดูอย่างเดียว" data-go="bomcenter|price" hidden>
+        <h3>ดูราคารายเดือน</h3>
+        <ol>
+          <li><b>บัญชี</b> → <b>ราคารายเดือน</b> เลือก <b>เดือน</b></li>
+          <li>ดูราคาซื้อจริงเฉลี่ยและแหล่งที่มาของราคา (ดูอย่างเดียว)</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ราคาไม่ถูก</dt><dd>ส่งไฟล์ราคาซื้อจริงให้ประสานงานขาย เพื่อส่งต่อให้ฝ่ายวิเคราะห์นำเข้า</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-acc-pnl" data-d="acc ana mgmt" data-icon="bar" data-when="ต้นเดือน หลังเดือนจบ" data-kw="P&amp;L รายสาขา กำไรขาดทุน ค่าแรง ค่าใช้จ่ายคงที่ Prime Cost" data-go="pnlbranch" hidden>
+        <h3>ดู P&amp;L รายสาขา</h3>
+        <ol>
+          <li>เปิด <b>P&amp;L รายสาขา</b> เลือกช่วงเวลาที่แถบบนของหน้า (<b>เดือน</b> แล้ว ‹ ›)</li>
+          <li>แตะชื่อสาขาเพื่อดูรายได้ → ต้นทุน → กำไรขั้นต้น → ค่าใช้จ่ายคงที่ → กำไรดำเนินงาน</li>
+          <li>ดู <b>ต้นทุนหลัก (ต้นทุนอาหาร % + ค่าแรง %)</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ค่าแรง % ว่าง</dt><dd>ผู้บริหารกรอกที่ ตั้งค่า → <b>ค่าใช้จ่ายคงที่</b> (ครั้งเดียวต่อสาขา)</dd></div>
+        </dl></details>
+      </article>
+
+      <!-- ═══ ฝ่ายวิเคราะห์ (ana) ═══ -->
+      <article class="mt" id="mt-ana-month" data-d="ana" data-icon="cal" data-when="ต้นเดือน" data-kw="ลำดับงานต้นเดือน ไฟล์ราคา ราคารายเดือน ต้นทุนต่อจาน" data-go="supplyhome" hidden>
+        <h3>งานต้นเดือนตามลำดับ</h3>
+        <ol>
+          <li>ดูงานที่ <b>หน้างาน</b></li>
+          <li><b>ราคารายเดือน</b>: ตรวจและนำเข้าไฟล์ที่ประสานงานขายส่ง</li>
+          <li><b>ต้นทุนต่อจาน</b>: นำเข้าต้นทุนของเดือน</li>
+          <li>ตอบงานรหัสใหม่และขนาดแพ็คที่สาขาแจ้ง</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ana-price" data-d="ana" data-icon="tag" data-when="เมื่อประสานงานขายส่งไฟล์ราคา" data-kw="ราคารายเดือน ดูตัวอย่าง ส่งกลับ นำเข้าไฟล์ราคา" data-go="bomcenter|price" hidden>
+        <h3>นำเข้าราคารายเดือน</h3>
+        <ol>
+          <li><b>ฝ่ายวิเคราะห์</b> → <b>ราคารายเดือน</b></li>
+          <li>ที่ไฟล์ที่รอตรวจ แตะ <b>ดูตัวอย่าง</b></li>
+          <li>ถูกต้อง ยืนยันการนำเข้า · ไม่ถูกต้อง แตะ <b>ส่งกลับ</b> พร้อมเหตุผล</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ยังไม่มีไฟล์ของเดือน</dt><dd>แตะ <b>ยกราคาเดือนก่อนมาใช้</b> (ของที่ไม่มีราคาใช้ราคาเดือนก่อน)</dd></div>
+          <div><dt>มีรหัสที่ทะเบียนไม่รู้จัก</dt><dd>เลือกรายการละรหัสว่าเป็นรหัสใหม่ของวัตถุดิบเดิม หรือวัตถุดิบใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="manualDishCost" data-d="ana" data-icon="coin" data-when="ทุกเดือน" data-kw="ต้นทุนต่อจาน นำเข้า แม่แบบ รหัส POS ต้นทุนเมนู เมนูไม่มีต้นทุน" data-go="bomcenter|dishcost" hidden>
+        <h3>นำเข้าต้นทุนต่อจาน</h3>
+        <ol>
+          <li><b>ฝ่ายวิเคราะห์</b> → <b>ต้นทุนต่อจาน</b> เลือก <b>ต้นทุนของเดือน</b></li>
+          <li>แตะ <b>ดาวน์โหลดแม่แบบ</b> กรอก รหัส POS · ชื่อเมนู · ต้นทุนต่อจาน (บาท) · หมายเหตุ</li>
+          <li>แตะ <b>นำเข้าไฟล์</b> ตรวจรายการ: รหัสไม่พบ · ค่าไม่ถูกต้อง · เปลี่ยนเกิน 30% · ขายแต่ไม่มีต้นทุน</li>
+          <li>แตะ <b>บันทึก</b> ในคำถามยืนยัน</li>
+        </ol>
+        <p class="mt-if">งาน “นำเข้าต้นทุนต่อจานเดือน…” ที่หน้างานหายเมื่อทุกเมนูที่ขายมีต้นทุน</p>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>เดือนที่ไม่นำเข้า</dt><dd>ใช้ต้นทุนของเดือนก่อนหน้า แยกตามรหัส</dd></div>
+          <div><dt>แก้รายการเดียว</dt><dd>แก้ในตารางได้ทีละแถว มีบันทึกผู้ทำและเวลา</dd></div>
+          <div><dt>รหัสแพ็กเกจ</dt><dd>ไม่รับ ใส่ต้นทุนที่รหัสเมนู</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ana-codes" data-d="ana" data-icon="db" data-when="เมื่อมีงาน “ตรวจรหัสใหม่ที่ประสานงานขายแจ้ง”" data-kw="รหัสใหม่ที่รออนุมัติ ทะเบียนวัตถุดิบ รหัสในระบบอื่น ใช้ ไม่ใช้" data-go="bomcenter|ing" hidden>
+        <h3>อนุมัติรหัสใหม่ของวัตถุดิบเดิม</h3>
+        <ol>
+          <li><b>ฝ่ายวิเคราะห์</b> → <b>ทะเบียนวัตถุดิบ</b> การ์ด “รหัสใหม่ที่รออนุมัติ”</li>
+          <li>ตรงกัน กด “ใช้” · ไม่ตรง กด “ไม่ใช้” พร้อมเหตุผล</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ต้องการดูหรือเลิกใช้รหัสเก่า</dt><dd>ใต้รหัสของแต่ละแถว ดู “รหัสในระบบอื่น” (รหัสที่เลิกใช้ไม่ถูกลบ)</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ana-pack" data-d="ana" data-icon="scale" data-when="เมื่อสาขาแจ้งขนาดแพ็คไม่ตรง" data-kw="ขนาดบรรจุที่สาขาแจ้ง ขนาดแพ็ค หน่วยและการแปลง ใช้ค่านี้" data-go="bomcenter|conv" hidden>
+        <h3>ตรวจขนาดแพ็คที่สาขาแจ้ง</h3>
+        <ol>
+          <li><b>ฝ่ายวิเคราะห์</b> → <b>หน่วยและการแปลง</b> การ์ด “ขนาดบรรจุที่สาขาแจ้ง”</li>
+          <li>ตรวจกับรูปฉลากที่สาขาส่งทางไลน์</li>
+          <li>ตรง กด “ใช้ค่านี้” · ไม่ตรง กด “ไม่ใช้” พร้อมเหตุผลที่สาขาอ่านได้</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ana-coverage" data-d="ana" data-icon="pie" data-when="หลังนำเข้าต้นทุนต่อจาน" data-kw="ความครอบคลุมต้นทุน เมนูไม่มีต้นทุน ต้นทุนอาหารเป็นค่าต่ำสุด" data-go="coverage" hidden>
+        <h3>หาเมนูที่ยังไม่มีต้นทุน</h3>
+        <ol>
+          <li>เปิด <b>ความครอบคลุมต้นทุน</b></li>
+          <li>ดูรายได้ที่มีและไม่มีต้นทุน และเมนูที่ยังไม่มีต้นทุน</li>
+          <li>เติมต้นทุนของเมนูเหล่านั้นในไฟล์ต้นทุนต่อจานเดือนถัดไป</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ana-tier" data-d="ana mgmt" data-icon="tag" data-when="รายเดือน" data-kw="วิเคราะห์ระดับราคา ระดับราคาบุฟเฟ่ต์ 459 629 789 999 1299 ต้นทุนต่อหัว" data-go="pricetier" hidden>
+        <h3>ดูต้นทุนตามระดับราคาบุฟเฟ่ต์</h3>
+        <ol>
+          <li>เปิด <b>วิเคราะห์ระดับราคา</b> เลือกช่วงเวลาที่แถบบนของหน้า</li>
+          <li>ดูลูกค้า ยอดขายต่อหัว และต้นทุนของแต่ละระดับราคา</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ต้นทุนดูต่ำผิดปกติ</dt><dd>ต้นทุนเป็นค่าต่ำสุด เพราะบางจานยังไม่มีต้นทุน ดู ความครอบคลุมต้นทุน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ana-hv" data-d="ana mgmt" data-icon="gem" data-when="รายสัปดาห์หรือรายเดือน" data-kw="High Value Product Monitor แซลมอน ทูน่า กุ้งหวาน หอยเชลล์ ปลาไหล ของแพง" data-go="hvmonitor" hidden>
+        <h3>ดูต้นทุนวัตถุดิบหลัก 8 กลุ่ม</h3>
+        <ol>
+          <li>เปิด <b>High Value Product Monitor</b> <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-manual-hvmonitor" title="คำอธิบาย">?</button><template id="hlp-manual-hvmonitor" data-title="High Value Product Monitor"><p>แซลมอน · ทูน่า · ฮามาจิ · กุ้งหวาน · หอยเชลล์ · ปลาไหล · หอยนางรม · เนื้อ ตามช่วงเวลาและสาขาของแถบบน · บรรทัดแรกบอกต้นทุนที่เปลี่ยนเป็นบาท แยกเป็น ราคา · กิน · ลูกค้า · ปุ่ม <b>ทั้งหมด</b> แสดงหนึ่งแถวต่อวัตถุดิบ เรียงตามบาทที่เปลี่ยน พร้อมสาขาที่ดัน · เลือกวัตถุดิบเพื่อดูรายสาขา เรียงตามบาทที่เปลี่ยน · มุมมอง <b>จำนวนจาน</b> แสดงจานต่อหัวและลูกค้า ไม่มีจำนวนเงิน เลือกเทียบสัปดาห์ได้ · แตะแถวของสาขาเพื่อดูเมนูของกลุ่มที่สาขานั้น</p></template></li>
+          <li>อ่านบรรทัดแรก: ต้นทุนที่เปลี่ยนเป็นบาท แยก ราคา · กิน · ลูกค้า</li>
+          <li>เลือกวัตถุดิบเพื่อดูรายสาขา แตะแถวของสาขาเพื่อดูเมนู</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ana-lossbill" data-d="ana" data-icon="cancel" data-when="เมื่อกำไรต่อบิลลดลง" data-kw="P&amp;L ต่อบิล บิลขาดทุน กำไรต่อบิล กำไรต่อหัว" data-go="pnlbill" hidden>
+        <h3>หาบิลขาดทุน</h3>
+        <ol>
+          <li>เปิด <b>P&amp;L ต่อบิล</b> เลือกช่วงเวลาและสาขา</li>
+          <li>แตะแถบในกราฟการกระจายกำไรเพื่อดูบิลในช่วงนั้น</li>
+          <li>ดู <b>บิลขาดทุนทั้งหมด</b> แตะ <b>CSV</b> เมื่อต้องส่งต่อ</li>
+        </ol>
+      </article>
+
+      <!-- ═══ ครัว (kit) ═══ -->
+      <article class="mt" id="mt-kit-ing" data-d="kit" data-icon="db" data-when="เมื่อต้องการดูข้อมูลวัตถุดิบ" data-kw="ทะเบียนวัตถุดิบ ดูอย่างเดียว ดาวน์โหลดทะเบียน" data-go="bomcenter|ing" hidden>
+        <h3>ดูทะเบียนวัตถุดิบ</h3>
+        <ol>
+          <li><b>ครัว</b> → <b>ทะเบียนวัตถุดิบ</b> (ดูอย่างเดียว)</li>
+          <li>ค้นหาด้วยชื่อหรือรหัส</li>
+          <li>ต้องการไฟล์ แตะ <b>ดาวน์โหลดทะเบียนวัตถุดิบ (Excel)</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ข้อมูลผิด</dt><dd>แจ้งฝ่ายวิเคราะห์ ครัวแก้ไม่ได้</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-kit-dish" data-d="kit" data-icon="coin" data-when="รายเดือน" data-kw="ต้นทุนต่อจาน ต้นทุนเมนู เดือนก่อน เปลี่ยน" data-go="bomcenter|dishcost" hidden>
+        <h3>ดูต้นทุนต่อจานของเมนู</h3>
+        <ol>
+          <li><b>ครัว</b> → <b>ต้นทุนต่อจาน</b> เลือก <b>ต้นทุนของเดือน</b></li>
+          <li>ดูต้นทุนต่อจาน เทียบเดือนก่อน และจานที่ขาย</li>
+          <li>ต้องการไฟล์ แตะ <b>ดาวน์โหลด Excel</b></li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-kit-target" data-d="kit mkt" data-icon="target" data-when="เมื่อวางแผนปรับเมนู" data-kw="เป้าลดต้นทุน เมนูเสิร์ฟเยอะ ต้นทุนสูง วิเคราะห์เมนู" data-go="menuefficiency" hidden>
+        <h3>หาเมนูที่ควรลดต้นทุน</h3>
+        <ol>
+          <li>เปิด <b>เป้าลดต้นทุน</b></li>
+          <li>ดูเมนูที่เสิร์ฟเยอะและต้นทุนสูง และวัตถุดิบที่ควรเจาะ</li>
+          <li>ดูยอดขายและกำไรของเมนูนั้นต่อที่ <b>วิเคราะห์เมนู</b></li>
+        </ol>
+      </article>
+
+      <!-- ═══ ผู้บริหาร (mgmt) ═══ -->
+      <article class="mt" id="mt-mgmt-yesterday" data-d="mgmt ops mkt" data-icon="brief" data-when="ทุกเช้า" data-kw="ยอดขายเมื่อวาน สรุปประจำวัน อันดับสาขา เมนูเด่น เงินรั่ว" data-go="home" hidden>
+        <h3>ดูยอดขายเมื่อวาน</h3>
+        <ol>
+          <li>เปิด <b>สรุปประจำวัน</b></li>
+          <li>อ่าน <b>สิ่งที่ต้องทำวันนี้</b> และ <b>จับเงินรั่ว / ผิดปกติ</b></li>
+          <li>ดู <b>อันดับสาขาเมื่อวาน</b> แตะสาขาเพื่อเจาะรายละเอียด</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ตัวเลขยังเป็นของเก่า</dt><dd>กด Ctrl + Shift + R เพื่อโหลดหน้าใหม่ ข้อมูล POS เข้าทุก 30 นาที</dd></div>
+          <div><dt>ไม่มีวันนี้</dt><dd>หน้ารายวันแสดงวันที่ปิดยอดแล้วเท่านั้น วันที่ยังขายอยู่ไม่แสดง</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-below" data-d="mgmt ops" data-icon="store" data-when="ทุกวัน หรือเมื่อยอดรวมตก" data-kw="สาขาต่ำกว่าปกติ ยอดขายรายวัน เทียบช่วงก่อน เทียบปีก่อน แผนภาพความร้อน" data-go="dailysales" hidden>
+        <h3>ดูว่าสาขาไหนต่ำกว่าปกติ</h3>
+        <ol>
+          <li>เปิด <b>ยอดขายรายวัน</b> เลือก <b>วัน</b> · <b>สัปดาห์</b> · <b>เดือน</b> ที่แถบบนของหน้า</li>
+          <li>ดู <b>ยอดขายรายสาขา</b> เทียบช่วงก่อนและปีก่อน</li>
+          <li>ดูหลายเดือน: <b>ภาพรวมและตัวชี้วัด</b> → แผนภาพความร้อน สาขา × ช่วงเวลา</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>เดือนนี้ดูต่ำกว่าเดือนก่อนมาก</dt><dd>เดือนที่ยังไม่จบเทียบถึงวันที่ปิดยอดล่าสุด แตะ ? ข้างตัวเลขเพื่อดูช่วงที่เทียบ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-fc" data-d="mgmt ana acc" data-icon="coin" data-when="รายเดือน" data-kw="ต้นทุนอาหาร food cost 58 เป้า GP รายสาขา ในเป้า" data-go="gpbranch" hidden>
+        <h3>ดูต้นทุนอาหารเทียบเป้า 58%</h3>
+        <ol>
+          <li>เปิด <b>GP รายสาขา</b> เลือกเดือนที่แถบบนของหน้า</li>
+          <li>ดูต้นทุนอาหาร % ของแต่ละสาขา (ไม่เกิน 58% = ในเป้า)</li>
+          <li>แตะแถวใน <b>ตารางสรุป</b> เพื่อดูรายเดือนของสาขานั้น</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ต้นทุนอาหารต่ำผิดปกติ</dt><dd>บางเมนูยังไม่มีต้นทุน ตัวเลขเป็นค่าต่ำสุด ดู ความครอบคลุมต้นทุน</dd></div>
+          <div><dt>หน้าต่าง ๆ แสดง GP ไม่ตรงกัน</dt><dd>ทุกหน้าใช้ต้นทุนสูตรเดียวกัน ถ้าไม่ตรงให้แจ้งผู้ดูแลระบบ</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-report" data-d="mgmt" data-icon="doc" data-when="ทุกวัน · ทุกสัปดาห์ · สิ้นเดือน" data-kw="รายงานผู้บริหาร PDF Excel พิมพ์ ส่งออก รายวัน รายสัปดาห์ รายเดือน รายปี" data-go="mgtreport" hidden>
+        <h3>ดาวน์โหลดรายงานผู้บริหาร (PDF / Excel)</h3>
+        <ol>
+          <li><b>ผู้บริหาร</b> → <b>รายงานผู้บริหาร</b></li>
+          <li>เลือก <b>รายวัน</b> · <b>รายสัปดาห์</b> · <b>รายเดือน</b> · <b>รายปี</b> แล้วเลือกช่วง</li>
+          <li>เลือกภาษา <b>ไทย</b> หรือ <b>EN</b></li>
+          <li>แตะ <b>พิมพ์ / ส่งออก PDF</b> หรือ <b>ส่งออก Excel</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>PDF ไม่มีสีพื้น</dt><dd>ในกล่องพิมพ์เปิด “Background graphics” และตั้ง Margins = Default</dd></div>
+          <div><dt>บนโทรศัพท์</dt><dd>แตะ <b>เปิด PDF</b> · <b>สรุปผู้บริหาร</b> · <b>อ่านฉบับเต็มบนจอ</b></dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-phone" data-d="mgmt" data-icon="gauge" data-when="ทุกเช้า บนโทรศัพท์" data-kw="โทรศัพท์ มือถือ สรุป ตรวจวันนี้ ยอดขาย กำไร สาขา ส่วนลด" hidden>
+        <h3>ดูสรุปบนโทรศัพท์</h3>
+        <ol>
+          <li>เปิดแอปบนโทรศัพท์ หน้า <b>สรุป</b> แสดงเดือนนี้ถึงวันที่ปิดยอดล่าสุด</li>
+          <li>อ่าน <b>ตรวจวันนี้</b>: แตะชื่อสาขาเพื่อดูรายละเอียดของสาขา</li>
+          <li>แตะ <b>ยอดขาย</b> · <b>สาขา</b> · <b>เมนู</b> · <b>กำไร</b> · <b>ส่วนลด</b> เพื่อดูแต่ละเรื่อง</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-mgmt-msg" data-d="mgmt ops" data-icon="msg" data-when="เมื่อตัวเลขสีแดงขึ้นที่ไอคอน" data-kw="ข้อความจากเจ้าของสาขา ตอบ เจ้าของสาขา ปิดหัวข้อ แฟรนไชส์" data-go="fmsg" hidden>
+        <h3>ตอบข้อความจากเจ้าของสาขา</h3>
+        <ol>
+          <li>เปิด <b>ข้อความจากเจ้าของสาขา</b> เลือกหัวข้อจากรายการ</li>
+          <li>พิมพ์คำตอบ แล้วแตะ <b>ส่งคำตอบ</b></li>
+          <li>ตอบครบแล้ว แตะ <b>ปิดหัวข้อ</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>เจ้าของสาขาถามต่อในหัวข้อที่ปิดแล้ว</dt><dd>แตะ <b>เปิดหัวข้ออีกครั้ง</b></dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-target" data-d="mgmt" data-icon="target" data-when="เมื่อต้องการเป้าต่างจากปีก่อน" data-kw="ตั้งเป้ารายสาขา เป้าหมายรายเดือน เป้ายอดขาย ลูกค้า" data-go="settings" hidden>
+        <h3>ตั้งเป้ารายสาขา</h3>
+        <ol>
+          <li>เปิด <b>ตั้งค่า</b> (ส่วนล่างของแถบไอคอน) แล้วแตะ <b>เป้าหมายรายเดือน</b></li>
+          <li>พิมพ์เป้ารายได้และลูกค้าของสาขาที่ต้องการ (ดูค่าแนะนำได้ที่ <b>แนะนำเป้า (จากผลย้อนหลัง)</b>)</li>
+          <li>แตะ <b>บันทึกเป้าหมาย</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ไม่ได้ตั้งเป้า</dt><dd>เป้าคือยอดจริงของสาขาในเดือนเดียวกันของปีก่อน (เว้นว่างหรือ 0 = กลับไปอัตโนมัติ)</dd></div>
+          <div><dt>สาขาใหม่ไม่มีเป้า</dt><dd>ยังไม่มีข้อมูลปีก่อน พิมพ์เป้าเอง</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-policy" data-d="mgmt" data-icon="pct" data-when="เมื่อนโยบายเปลี่ยน" data-kw="เป้าต้นทุนอาหาร เพดานส่วนลด 2.5 58 การตั้งค่าส่วนตัว" data-go="settings" hidden>
+        <h3>ตั้งเป้าต้นทุนอาหารและเพดานส่วนลด</h3>
+        <ol>
+          <li>เปิด <b>ตั้งค่า</b> แล้วแตะ <b>การตั้งค่าส่วนตัว</b></li>
+          <li>แก้ <b>เป้าต้นทุนอาหาร (% ของรายได้)</b> (ค่าเริ่มต้น 58) และ <b>เพดานส่วนลด (นโยบาย)</b> (2.5)</li>
+          <li>แตะ <b>บันทึกการตั้งค่า</b></li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-mgmt-users" data-d="mgmt" data-icon="users" data-when="เมื่อมีพนักงานใหม่หรือเปลี่ยนหน้าที่" data-kw="จัดการผู้ใช้ สิทธิ์ เพิ่มผู้ใช้ บันทึกสิทธิ์ ใช้ค่าตั้งต้นของระบบ รหัสผ่าน" data-go="settings" hidden>
+        <h3>จัดการผู้ใช้และสิทธิ์</h3>
+        <ol>
+          <li>เปิด <b>ตั้งค่า</b> แล้วแตะ <b>ผู้ใช้งาน</b></li>
+          <li>เพิ่มบัญชี: กรอกข้อมูล แล้วแตะ <b>+ เพิ่มผู้ใช้</b></li>
+          <li>แก้สิทธิ์ของบทบาทในตาราง แล้วแตะ <b>บันทึกสิทธิ์</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ตั้งสิทธิ์ผิดจนสับสน</dt><dd>แตะ <b>ใช้ค่าตั้งต้นของระบบ</b> แล้วบันทึก</dd></div>
+          <div><dt>พนักงานลาออก</dt><dd>ใช้แท็บ <b>ปิดใช้งาน</b></dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-mgmt-usage" data-d="mgmt" data-icon="users" data-when="ทุกวันจันทร์" data-kw="การใช้งานจริง ใครยังไม่ใช้ ยังไม่เคยเข้าใช้ login ล่าสุด" data-go="settings" hidden>
+        <h3>ดูว่าใครยังไม่ใช้แอป</h3>
+        <ol>
+          <li>เปิด <b>ตั้งค่า</b> แล้วแตะ <b>การใช้งานจริง</b></li>
+          <li>ดูตารางการเข้าใช้รายคน: ใช้งานอยู่ · เคยเข้าแต่เงียบ · ยังไม่เคยเข้าใช้</li>
+          <li>ติดต่อคนที่ยังไม่เคยเข้าใช้หรือหายไปเกิน 14 วัน</li>
+        </ol>
+      </article>
+
+      <!-- ═══ การตลาด (mkt) ═══ -->
+      <article class="mt" id="mt-mkt-menu" data-d="mkt kit" data-icon="book" data-when="รายเดือน" data-kw="วิเคราะห์เมนู เมนูขายดี Top 60 เมนูทำเงิน ควรดัน ควรแก้" data-go="menu" hidden>
+        <h3>ดูเมนูขายดีและเมนูที่ควรดัน</h3>
+        <ol>
+          <li>เปิด <b>วิเคราะห์เมนู</b> เลือกช่วงเวลาที่แถบบนของหน้า</li>
+          <li>ดู Top 60 เมนู ยอดขายและเทียบเดือนก่อน</li>
+          <li>ดูกลุ่ม “เมนูไหนควรดัน เมนูไหนควรแก้”</li>
+          <li>กรองตามหมวด แตะ <b>เปิดแบบกรองหมวด →</b></li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-mkt-action" data-d="mkt" data-icon="count" data-when="เมื่อวางแผนเมนูใหม่" data-kw="ปรับเมนู โอกาสเมนู ดัน แก้ ตัด รักษา เมนูที่ควรฟื้น" data-go="menuactionboard" hidden>
+        <h3>เลือกเมนูที่ควรปรับ</h3>
+        <ol>
+          <li>เปิด <b>ปรับเมนู</b> ดูเมนูแต่ละกลุ่ม</li>
+          <li>เปิด <b>โอกาสเมนู</b> ดูเมนูที่ขายดีที่สาขาอื่นแต่ยังไม่ขายที่นี่</li>
+          <li>เทียบ 2 ช่วงเวลาที่ <b>เทียบเมนู A/B</b></li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-mkt-feedback" data-d="mkt" data-icon="msg" data-when="ทุกวัน" data-kw="เสียงลูกค้า รีวิว ตอบรีวิว กล่องงาน ต้องตอบ คำบ่น" data-go="feedback" hidden>
+        <h3>ตอบรีวิวลูกค้า</h3>
+        <ol>
+          <li>เปิด <b>เสียงลูกค้า</b></li>
+          <li>ดู <b>กล่องงาน — ต้องตอบ</b> แล้วตอบรีวิวที่ค้าง</li>
+          <li>ดูสรุปช่วง: แตะ <b>วันนี้</b> · <b>สัปดาห์นี้</b> · <b>เดือนนี้</b></li>
+          <li>ต้องการรายงาน แตะ <b>สร้างรายงาน</b></li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-mkt-buffet" data-d="mkt" data-icon="users" data-when="รายเดือน" data-kw="ลูกค้าและบุฟเฟ่ต์ ยอดต่อหัว บุฟเฟ่ต์เด็ก ช่วงเวลา ชั่วโมงพีค ช่องทาง Grab LINE MAN" data-go="buffetperf" hidden>
+        <h3>ดูลูกค้า บุฟเฟ่ต์ และช่วงเวลาขายดี</h3>
+        <ol>
+          <li>เปิด <b>ลูกค้าและบุฟเฟ่ต์</b>: ลูกค้าจริง ต้นทุนอาหาร ยอดต่อหัว</li>
+          <li>เปิด <b>ช่วงเวลา</b>: ชั่วโมงพีค วัน × ชั่วโมง</li>
+          <li>เปิด <b>ช่องทางและประเภทลูกค้า</b>: หน้าร้าน Grab LINE MAN กลับบ้าน</li>
+        </ol>
+      </article>
+
+      <!-- ═══ ปฏิบัติการ (ops) ═══ -->
+      <article class="mt" id="mt-ops-discount" data-d="ops mgmt acc" data-icon="pct" data-when="ทุกสัปดาห์" data-kw="ส่วนลดเกินเพดาน ส่วนลด 2.5 ส่วนลดที่ต้องระวัง คูปอง แคชเชียร์ บิล" data-go="discounts" hidden>
+        <h3>ดูส่วนลดเกินเพดาน</h3>
+        <ol>
+          <li>เปิด <b>ส่วนลด</b> เลือกช่วงเวลาที่แถบบนของหน้า</li>
+          <li>ดู <b>สาขาที่ให้ส่วนลดเกินเพดาน</b> (เพดาน 2.5% ของยอดขาย)</li>
+          <li>ดู <b>ส่วนลดที่ต้องระวัง</b> แตะตัวเลขเพื่อเปิดบิลรายใบ</li>
+          <li>ดูรายแคชเชียร์ที่ <b>พนักงาน</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ชื่อแคชเชียร์ไม่ตรงคน</dt><dd>หลายบัญชี POS ใช้ร่วมกันในสาขา ใช้ดูเป็นรายสาขา ไม่ใช่รายคน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-ops-cash" data-d="ops acc" data-icon="cash" data-when="ทุกสัปดาห์" data-kw="เงินสดขาด/เกิน บิลยกเลิก เงินสด ยกเลิกบิล" data-go="cashctl" hidden>
+        <h3>ดูเงินสดขาด/เกิน และบิลยกเลิก</h3>
+        <ol>
+          <li>เปิด <b>เงินสดขาด/เกิน</b> ดูรายสาขาและวันที่ขาดหนักสุด</li>
+          <li>เปิด <b>บิลยกเลิก</b> ดูตามเหตุผลและรายสาขา</li>
+          <li>แตะสาขาเพื่อเจาะรายวันหรือรายบิล</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-ops-comp" data-d="ops" data-icon="count" data-when="ทุกสัปดาห์" data-kw="ตรวจสอบการสั่ง สาขาสั่งตามยอดแนะนำ ส่งจริง รับจริง ผลของการสั่งจริง" data-go="orderhub|comp" hidden>
+        <h3>ตรวจว่าสาขาสั่งตามยอดแนะนำ</h3>
+        <ol>
+          <li><b>ปฏิบัติการ</b> → <b>ตรวจสอบการสั่ง</b></li>
+          <li>เทียบ ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง ของแต่ละสาขา</li>
+          <li>ดูตาราง “ผลของการสั่งจริง”: รายการที่หมดก่อนรอบถัดไป</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>งาน “ทบทวนการตรวจนับ: สาขา” ที่หน้างาน</dt><dd>อบรมสาขาแล้วกด <b>รับทราบแล้ว</b></dd></div>
+        </dl></details>
+      </article>
+
+      <!-- ═══ เจ้าของสาขา (own) — docs/pilot/owner_guide.html ═══ -->
+      <article class="mt" id="mt-own-start" data-d="own" data-icon="key" data-when="ครั้งแรกที่ใช้ · ทำครั้งเดียว" data-kw="เริ่มใช้ own_ รหัสผ่าน หน้าจอหลัก" hidden>
+        <h3>เริ่มใช้ครั้งแรก</h3>
+        <ol>
+          <li>เข้าสู่ระบบด้วยชื่อผู้ใช้ own_… และรหัสผ่านเริ่มต้น แล้วตั้งรหัสผ่านใหม่ทันที</li>
+          <li>เมนูของเบราว์เซอร์ → <b>เพิ่มไปยังหน้าจอหลัก</b></li>
+          <li>หน้า <b>ร้านของฉัน</b> เปิดขึ้นทันที เลือก <b>เดือน</b> เพื่อดูย้อนหลัง</li>
+        </ol>
+      </article>
+
+      <article class="mt" id="mt-own-month" data-d="own" data-icon="store" data-when="ทุกสัปดาห์ หรือต้นเดือน" data-kw="ร้านของฉัน สรุปของเดือนนี้ ดี ควรดู ต้องแก้ ยอดขาย เป้า กำไรขั้นต้น" data-go="franchise" hidden>
+        <h3>ดูผลของร้านประจำเดือน</h3>
+        <ol>
+          <li>เปิด <b>ร้านของฉัน</b> เลือก <b>เดือน</b></li>
+          <li>อ่านการ์ด “สรุปของเดือนนี้”: ดี · ควรดู · ต้องแก้</li>
+          <li>เลื่อนลงดู ยอดขาย · เป้ายอดขาย · กำไรขั้นต้นและต้นทุนอาหาร · วัตถุดิบ · วินัยสาขา</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ต้นทุนอาหารดูต่ำ</dt><dd>เป็นค่าต่ำสุด เพราะบางจานยังไม่มีต้นทุน (ดูป้ายใต้ตัวเลข)</dd></div>
+          <div><dt>ข้อมูลวันล่าสุดยังไม่ครบ</dt><dd>ตัวเลขปรับเองเมื่อได้รับข้อมูลใหม่</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-own-ask" data-d="own" data-icon="msg" data-when="เมื่อมีคำถามถึงสำนักงานใหญ่" data-kw="ติดต่อสำนักงานใหญ่ ส่งคำถามใหม่ สอบถามเรื่องนี้ ตอบกลับ" data-go="franchise" hidden>
+        <h3>ส่งคำถามถึงสำนักงานใหญ่</h3>
+        <ol>
+          <li>ที่การ์ด “ติดต่อสำนักงานใหญ่” กด <b>ส่งคำถามใหม่</b></li>
+          <li>เลือกหัวข้อ พิมพ์ข้อความ แล้วกด <b>ส่ง</b></li>
+          <li>ถามเรื่องในการ์ดสรุป: กด <b>สอบถามเรื่องนี้</b> ข้างรายการนั้น</li>
+          <li>เมื่อปุ่ม <b>หน้าแรก</b> มีตัวเลขสีแดง แตะหัวข้อเพื่ออ่านคำตอบ</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>หาหัวข้อเก่าไม่เจอ</dt><dd>สำนักงานใหญ่ปิดหัวข้อแล้ว ดูที่ตัวกรอง <b>ปิดแล้ว</b></dd></div>
+          <div><dt>ส่งผิด</dt><dd>แก้หรือลบไม่ได้ ส่งข้อความใหม่เพื่อแก้</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-own-notify" data-d="own" data-icon="clock" data-when="ทำครั้งเดียวต่อเครื่อง" data-kw="แจ้งเตือนทุกเช้า 08:30 เปิดการแจ้งเตือน ส่งทดสอบ" data-go="franchise" hidden>
+        <h3>รับแจ้งเตือนทุกเช้า</h3>
+        <ol>
+          <li>เปิดร้านของฉันจากไอคอนบนหน้าจอหลัก</li>
+          <li>ที่การ์ด “รับแจ้งเตือนทุกเช้า” ท้ายหน้า กด <b>เปิดการแจ้งเตือน</b> แล้วกดอนุญาต</li>
+          <li>กด <b>ส่งทดสอบ</b> เพื่อดูว่าได้รับจริง</li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>ไม่เห็นการ์ดบน iPhone</dt><dd>เพิ่มไปยังหน้าจอหลักก่อน แล้วเปิดจากไอคอน</dd></div>
+          <div><dt>ต้องการหยุด</dt><dd>กด <b>ปิด</b> ที่การ์ดเดียวกัน</dd></div>
+        </dl></details>
+      </article>
+
+      <article class="mt" id="mt-own-download" data-d="own" data-icon="doc" data-when="เมื่อต้องการไฟล์หรือฉบับกระดาษ" data-kw="ดาวน์โหลดรายงานเดือนนี้ Excel พิมพ์ A4" data-go="franchise" hidden>
+        <h3>ดาวน์โหลดหรือพิมพ์รายงานของร้าน</h3>
+        <ol>
+          <li>เลือก <b>เดือน</b> ที่หัวหน้า</li>
+          <li>กด <b>ดาวน์โหลดรายงานเดือนนี้</b> ได้ Excel 5 แผ่นงาน</li>
+          <li>ฉบับกระดาษ: ใช้คำสั่งพิมพ์ของเบราว์เซอร์ ได้หน้า A4</li>
+        </ol>
+      </article>
+
+      <!-- ═══ ทุกแผนกที่ทำงานบนคอมพิวเตอร์ ═══ -->
+      <article class="mt" id="mt-all-find" data-d="mgmt mkt ops ana kit ss wh acc" data-icon="gauge" data-when="เมื่อหาหน้าไม่เจอ" data-kw="หาหน้า ค้นหา Ctrl+K หน้ารายงานทั้งหมด แผนก" hidden>
+        <h3>หาหน้าที่ต้องการ</h3>
+        <ol>
+          <li><b>หน้าแรก</b> → แตะไอคอนแผนก → เลือกหน้า</li>
+          <li>หรือแตะ <b>ค้นหา</b> (กด / หรือ Ctrl + K) แล้วพิมพ์ชื่อหน้าหรือชื่อสาขา</li>
+          <li>หน้าที่ไม่อยู่ในแผนกใด เปิดจาก <b>หน้ารายงานทั้งหมด</b></li>
+        </ol>
+        <details class="mt-pr"><summary>ถ้าเจอปัญหา</summary><dl>
+          <div><dt>หน้าที่ต้องใช้ไม่ขึ้นเลย</dt><dd>บัญชีนี้ไม่มีสิทธิ์ แจ้งผู้ดูแลระบบ</dd></div>
+          <div><dt>บนโทรศัพท์</dt><dd>ค้นหาที่ไอคอนแว่นขยายมุมขวาบน · ตั้งค่าและคู่มืออยู่ที่ <b>ฉัน</b></dd></div>
+        </dl></details>
+      </article>
     </div>
-  </div>
 
-  <!-- What's new — 2026-06-02 feature drop -->
-  <div class="card p-5 mb-4" style="border:1px solid #059669">
-    <h3 class="font-bold text-base mb-1 text-slate-800">อัปเดต 2026-06-02 — ฟีเจอร์ใหม่</h3>
-    <p class="text-xs text-slate-500 mb-3">เพิ่ม drill-down บิล/ชั่วโมง, แยกแคชเชียร์รายสาขา, Forecast มือโปร, รื้อ Analysis Report เป็นรายเดือน, P&amp;L waterfall, โปรไฟล์รายสาขา</p>
-    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">Drill-down บิลส่วนลด</p>
-        แท็บ <b>พนักงาน (Staff)</b> · <b>Discounts</b> · รายงาน §9 — คลิกการ์ด/แถว/แท่งกราฟ/กลุ่ม%/ค่าลดยอดฮิต เพื่อเปิดบิลรายใบจริง (ไฮไลต์แดง = ส่วนลดเกิน p95 ผิดปกติ). ใน Discounts คลิกได้ <b>ทุกตัวเลข</b>.
+    <!-- ── folded reference ─────────────────────────────────────────────── -->
+    <details class="man-fold" id="manGlossary">
+      <summary>คำศัพท์</summary>
+      <div class="man-body">
+        <dl class="man-gl">
+          <div><dt>ตัดเบิก · ใบตัดเบิก</dt><dd>ของที่ครัวใช้ (เบิกใช้) และที่ทิ้ง (ของเสีย) ของแต่ละวัน ส่งทุกวัน</dd></div>
+          <div><dt>ของที่ควรเหลือ (ตามระบบ)</dt><dd>ยกมา + รับเข้า − เบิกใช้ − ของเสีย จากใบตัดเบิกที่ส่งแล้ว (หน้าสำนักงานเรียก คงเหลือตามระบบ)</dd></div>
+          <div><dt>จำนวนที่ควรสั่ง</dt><dd>ที่คาดว่าจะใช้ถึงรอบส่งถัดไป หักของที่ควรเหลือ ต้องมีใบตัดเบิกที่ส่งแล้วอย่างน้อย 14 วันใน 8 สัปดาห์ (หน้าสำนักงานเรียก ยอดแนะนำ)</dd></div>
+          <div><dt>รอบส่งของ · เวลาส่งสุดท้าย</dt><dd>รอบ 1 · รอบ 2 · แซลมอนสด ส่งใบสั่งซื้อก่อน 13:15 สองวันก่อนวันส่ง (หน้าสำนักงานเรียก ตัดรอบ) คลังยืนยันยอดส่งภายใน 14:00</dd></div>
+          <div><dt>ล่าช้า</dt><dd>รอบส่งที่ประสานงานขายเลื่อนไปวันหลัง ป้ายบอกวันส่งใหม่และเหตุผล</dd></div>
+          <div><dt>ส่งช้า (มีค่าปรับ)</dt><dd>สาขาส่งใบสั่งซื้อหลังเวลาส่งสุดท้าย · ใบตัดเบิกที่ส่งหลังวันที่ของใบ</dd></div>
+          <div><dt>ส่วนต่าง</dt><dd>นับจริง เทียบของที่ควรเหลือ หรือยอดเบิก เทียบที่สาขาใช้ปกติ (หน้าสำนักงานเรียก ผลต่าง)</dd></div>
+          <div><dt>ที่สาขาใช้ปกติ · เฉลี่ยทุกสาขา</dt><dd>ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขาย · ค่ากลางของสาขาอื่นต่อยอดขาย ฿100,000</dd></div>
+          <div><dt>ของแพง · ปานกลาง · ถูก</dt><dd>กลุ่มมูลค่าของวัตถุดิบ ช่วงที่ยอมรับ ±5% · ±10% · ±20%</dd></div>
+          <div><dt>นับครั้งแรก · นับสิ้นเดือน</dt><dd>นับของครบทุกรายการ วันที่ 1 ของเดือน ใส่ 0 ถ้าไม่มีของ (หน้าสำนักงานเรียก ต้นงวด · ปลายงวด)</dd></div>
+          <div><dt>ปิดงวดเดือน</dt><dd>ปิดงวดเดือนในโหมดสต๊อกมี 5 ขั้น จบที่ใบสรุปตัดเบิก (โหมดเต็มระบบมี 9 ขั้น)</dd></div>
+          <div><dt>ใบสรุปตัดเบิก</dt><dd>ตัวเลขวัตถุดิบที่ใช้จริงของสาขาในเดือน ที่บัญชีบันทึกเข้าระบบบัญชีแล้วล็อกงวด</dd></div>
+          <div><dt>ไดกิโตะ กรุ๊ป</dt><dd>บริษัทที่สาขาสั่งของ ไฟล์ราคาและรายงานประจำเดือนมาจากที่นี่</dd></div>
+          <div><dt>หน้างาน · งานของฉันวันนี้</dt><dd>รายการงานของบทบาทนั้น เปิดจากหน้าแรก แตะ <b>ไปที่งาน</b> งานที่เสร็จซ่อนไว้ ดูที่ตัวกรอง <b>เสร็จแล้ว</b></dd></div>
+          <div><dt>รหัสปลดล็อก</dt><dd>บันทึกจริงของประสานงานขาย บัญชี และผู้บริหาร ต้องกรอกครั้งเดียวต่อเบราว์เซอร์ (ปุ่ม “อ่านอย่างเดียว” · โทรศัพท์: ฉัน → การบันทึกข้อมูล) สาขา คลัง ฝ่ายวิเคราะห์ และครัวไม่ต้องปลดล็อก</dd></div>
+          <div><dt>รายได้</dt><dd>ยอดขายไม่รวม VAT ทุกหน้า · ค่าบริการแยกเป็นรายได้ต่างหาก · ข้อมูล POS เข้าทุก 30 นาที</dd></div>
+          <div><dt>ต้นทุนต่อจาน</dt><dd>ต้นทุนเมนูที่ฝ่ายวิเคราะห์นำเข้ารายเดือน ใช้ในทุกรายงาน (POS ไม่มีต้นทุนวัตถุดิบ)</dd></div>
+          <div><dt>GP (กำไรขั้นต้น)</dt><dd>รายได้ − ต้นทุนอาหาร เป็น % ของรายได้ ทุกหน้าใช้ต้นทุนสูตรเดียวกัน</dd></div>
+          <div><dt>ต้นทุนอาหาร % (food cost)</dt><dd>เป้า ไม่เกิน 58% = ในเป้า · เป็นค่าต่ำสุดเมื่อบางจานยังไม่มีต้นทุน</dd></div>
+          <div><dt>เพดานส่วนลด</dt><dd>2.5% ของยอดขาย เกินเพดาน = ควรดู · เกิน 2 เท่า = ต้องแก้</dd></div>
+          <div><dt>เป้ารายสาขา</dt><dd>ยอดจริงของสาขาในเดือนเดียวกันของปีก่อน เว้นแต่ผู้บริหารพิมพ์เป้าเอง</dd></div>
+          <div><dt>ระดับราคาบุฟเฟ่ต์</dt><dd>ตั้งแต่ 1 ก.ย. 2026 ราคา NET 459 · 629 · 789 · 999 · 1,299 ราคาที่ไม่ตรงนับเป็นโปรฯ/ส่วนลด</dd></div>
+          <div><dt>ช่วงเวลาและการเทียบ <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-manual-period" title="คำอธิบาย">?</button></dt><dd>ช่วงที่ยังไม่จบนับถึงวันที่ปิดยอดล่าสุด และเทียบจำนวนวันเท่ากัน<template id="hlp-manual-period" data-title="การเทียบช่วงเวลา"><p>ทุกตัวเลขยอดขายและต้นทุนใช้ช่วงเวลาแบบเดียวกัน: <b>วัน</b> · <b>สัปดาห์</b> (จันทร์ถึงอาทิตย์) · <b>เดือน</b> · <b>ปี</b> และ <b>กำหนดเอง</b> ในหน้าที่มี</p><p>ช่วงที่ยังไม่จบนับถึง <b>วันที่ปิดยอดล่าสุด</b> (ไม่รวมวันที่ยังขายอยู่) และเทียบกับจำนวนวันเท่ากัน · <b>เทียบช่วงก่อน</b> = ช่วงก่อนหน้า (สัปดาห์: วันเดียวกันของสัปดาห์ก่อน · เดือน: วันที่ 1 ถึงวันเดียวกันของเดือนก่อน) · <b>เทียบปีก่อน</b> = วันเดียวกันของปีก่อน (สัปดาห์และวัน: ย้อนหลัง 364 วัน ให้ตรงวันในสัปดาห์) · ช่วงที่จบแล้วเทียบเต็มช่วง</p><p>ตัวอย่าง: 1–23 ต.ค. 2569 เทียบ 1–23 ก.ย. 2569 · 1–23 ต.ค. 2568 · สัดส่วน (GP % · ต้นทุนอาหาร %) เทียบเป็น <b>จุด</b> · ไม่มีข้อมูลฐานแสดง —</p><p><b>หน้ายอดขาย</b>: ตัวเลขหลักทุกตัวแสดง <b>เทียบช่วงก่อน</b> และ <b>เทียบปีก่อน</b> (แตะ ? ข้างตัวเลขเพื่อดูช่วงวันที่ที่เทียบ) · <b>แถบบนเป็นตัวเลือกช่วงเวลาเพียงอันเดียว</b> ช่วงที่หน้ากำลังแสดงอยู่ข้างชื่อหน้า · ปุ่ม <b>วัน</b> แสดงเฉพาะหน้าที่ดูรายวันได้ (ยอดขายรายวัน) · ปุ่ม ‹ › เลื่อนวัน สัปดาห์ เดือน หรือปี · รายงานผู้บริหารมี <b>รายปี</b> และเลือกสัปดาห์หรือเดือนที่ยังไม่จบได้ (ถึงวันที่ปิดยอดล่าสุด) · หน้าที่ข้อมูลเก็บเป็นรายเดือน (เช่น ประเภทลูกค้า เงินสดขาด/เกิน บิลยกเลิก) แสดงเฉพาะปุ่ม เดือน และเดือนที่ยังไม่จบของข้อมูลรายเดือนจะไม่แสดงการเปรียบเทียบ</p><p><b>หน้าต้นทุน</b> (ต้นทุน/หัว · GP รายสาขา · P&amp;L · ยอดซื้อวัตถุดิบ และหน้าอื่น): ต้นทุนขาย กำไรขั้นต้น ต้นทุนอาหาร % และต้นทุน/หัว ใช้ช่วงจากแถบบนและเทียบแบบเดียวกัน (ต้นทุนลด = ดี) · ต้นทุนรายวันมีเฉพาะช่วงที่ระบบเก็บไว้ (ประมาณ 120 วันล่าสุด) · ต้นทุนรายสัปดาห์ในหน้า GP รายสาขาเป็น <b>ประมาณการ</b> (เฉลี่ยจากเดือน) · ใบเบิก ราคาวัตถุดิบ และต้นทุนต่อจานเก็บเป็นรายเดือน จึงเลือกได้เฉพาะเดือนและปี</p><p><b>ช่วงกราฟ</b> (3 · 6 · 12 เดือน · ทั้งหมด · รายไตรมาส · เทียบรายปี) เป็นตัวเลือกของกราฟแนวโน้มในหน้าภาพรวมยอดขาย</p></template></dd></div>
+          <div><dt>ดี · ควรดู · ต้องแก้</dt><dd>ระดับของแต่ละเรื่องเทียบเกณฑ์ ใช้ทั้งหน้าร้านของฉันและสรุปบนโทรศัพท์</dd></div>
+        </dl>
       </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">แคชเชียร์ — แยก/รวมสาขา</p>
-        แท็บ <b>พนักงาน</b> มีปุ่ม <b>แยกสาขา / รวมทุกสาขา</b> (ดีฟอลต์แยก) — บัญชี POS ที่ใช้ร่วม (เช่น Manager) แตกเป็นรายสาขา. คลิกแถวดูบิลส่วนลดของบัญชีนั้น.
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">เจาะชั่วโมง (Time &amp; Flow)</p>
-        การ์ด "สรุปชั่วโมงพีค" และแท่ง "Revenue by Hour" — <b>คลิกเพื่อเจาะ</b>ดูชั่วโมงนั้นแยกรายสาขา + รายวันในสัปดาห์. มีปุ่ม <b>เฉลี่ย/วัน ↔ รวมทั้งช่วง</b>.
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">P&amp;L รายสาขา — Waterfall</p>
-        แท็บ <b>P&amp;L รายสาขา</b> คลิกชื่อสาขา → เห็น<b>งบกำไรขาดทุน</b> (รายได้→ต้นทุน→GP→ค่าใช้จ่ายคงที่→กำไรดำเนินงาน) + <b>แนวโน้มกำไรรายเดือน</b>.
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">Management Report — Daily | Weekly | Monthly</p>
-        รายงานสรุปผู้บริหารหน้าเดียว (พิมพ์/PDF ได้) สลับได้ 3 โหมดจากปุ่มบนหัวรายงาน: <b>Daily</b> = วันล่าสุดที่จบแล้ว (เลือกวันย้อนหลังได้ เทียบวันเดียวกันสัปดาห์ก่อน), <b>Weekly</b> = สัปดาห์เต็ม จ.–อา. ล่าสุด (เลือกสัปดาห์ได้ เทียบสัปดาห์ก่อน), <b>Monthly</b> = <b>เดือนที่จบแล้ว</b>เท่านั้น (เลือกเดือนย้อนหลังได้ เทียบ<b>เดือนก่อน MoM</b> + <b>เดือนเดียวกันปีก่อน YoY</b>). ทุกโหมดมี TL;DR + บทสรุปผู้บริหาร, KPI, Action Items, จังหวะเดือน, แนวโน้ม 8 ช่วง, อันดับสาขา, เรดาร์จุดรั่ว, ต้นทุนเมนู/หัว, ชั่วโมงพีค, โต๊ะหมุนเวียน, ช่องทางชำระเงิน, Buffet Tiers + สลับ <b>EN ⇄ ไทย</b> + <b>Export Excel</b> / <b>Print PDF</b>. ใช้ filter สาขา/กลุ่มจากแถบบนได้ (ช่วงเวลา global ไม่มีผล — รายงานมี picker ของตัวเอง).
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">Monthly Report (เดิม Analysis Report) — รายเดือน</p>
-        รายงานรายเดือน<b>ยุบรวมเข้ากับ Management Report แล้ว</b> (เมนูเดียว ไม่ซ้ำ): เปิด <b>Management Report → กดปุ่ม Monthly</b> — แบบสรุปง่ายสไตล์เดียวกับ Daily/Weekly, เลือกเดือนที่จบแล้วจาก picker, เทียบ<b>เดือนก่อน (MoM)</b> + <b>เดือนเดียวกันปีก่อน (YoY)</b>, Export Excel/PDF ได้เหมือนเดิม. <b>ฉบับเต็มแบบเดิม</b> (ยอดสะสม/Top 60/โปรไฟล์รายสาขา) ยังอยู่ — กดปุ่ม <b>ฉบับเต็ม (แบบเดิม)</b> ที่โชว์เฉพาะโหมด Monthly (และหน้าเดิมมีปุ่ม แบบสรุปง่าย กลับมาเช่นกัน). เอกสารทดสอบ: <code>docs/UAT_SIGNOFF_MONTHLY_REPORT_2026-07-20.md</code> <b>⚠ เอกสารทุกไฟล์ใต้ <code>/docs</code> ต้อง login ก่อนเปิด</b> (ทุก role ที่ active เปิดได้ — ถ้าเปิดลิงก์แล้วเจอหน้า "เข้าสู่ระบบ" ให้ login ที่หน้าแรกก่อนแล้วเปิดลิงก์ซ้ำ)
-      </div>
-      <div class="border border-slate-200 rounded-lg p-3">
-        <p class="font-bold text-slate-700 mb-1">Forecast &amp; Action Items (§10)</p>
-        พยากรณ์<b>รายสาขา</b> + scorecard (MoM/YoY/เทียบเป้า) + Scenario (ดีสุด/ฐาน/แย่สุด) + Action items ผูก<b>เงิน + เจ้าภาพ</b>. สาขาที่เพิ่งเปิดขึ้น ; โคราช2 ปิดตั้งแต่ 2025-12 (ดูได้ที่ footnote).
-      </div>
-    </div>
-    <p class="text-[11px] text-slate-400 mt-2">หมายเหตุ: ชื่อ "แคชเชียร์" เป็นบัญชี POS (บางอันเป็น role กลาง) · เป้ายอดขายยังไม่ได้ตั้ง (ตั้งที่ Settings → Targets) · YTD ปีก่อนเทียบไม่ได้เพราะข้อมูลเริ่ม พ.ค. 2025</p>
-  </div>
+    </details>
 
-  <!-- Business Analysis Report link -->
-  <a href="/docs/BUSINESS_ANALYSIS_2026-06.html" target="_blank" class="card p-4 mb-4" style="display:block;text-decoration:none;background:#16294d;color:#fff">
-    <div class="flex items-center gap-3">
-      <span style="font-size:30px"></span>
-      <div class="flex-1">
-        <div class="font-bold text-base">รายงานวิเคราะห์ธุรกิจ (Business Analysis Report) →</div>
-        <div class="text-xs" style="opacity:.9">รายงานผู้บริหารฉบับเต็ม: บทสรุป · รายสาขา · บุฟเฟ่ต์ · ความเสี่ยงวัตถุดิบ · ข้อเสนอเชิงกลยุทธ์ · เปิดในแท็บใหม่/พิมพ์เป็น PDF ได้ · ต้อง login (เอกสารใต้ /docs ทุกไฟล์)</div>
-        <div class="text-[11px] mt-1" style="opacity:.8">สร้างใหม่ทุกเดือน: <code style="background:rgba(255,255,255,.15);padding:1px 5px;border-radius:3px">python backend/gen_analysis_report.py</code></div>
+    <details class="man-fold" id="manMapFold">
+      <summary>แผนที่เมนูตามแผนก</summary>
+      <div class="man-body">
+        <!-- แผนที่เมนูตามแผนก (PR-D5, 2026-10-21): drawn at run time from DEPARTMENTS (js/18-launcher.js renderManualDeptMap, called by TABS.manual.load), so it never drifts from the menu -->
+        <div class="card p-5 mb-4" id="manualDeptMap">
+          <style>
+            #manualDeptMap .mdm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 12px; align-items: start; }
+            #manualDeptMap .mdm-card { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; background: var(--bg-card); }
+            #manualDeptMap .mdm-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--dt); border-bottom: 1px solid var(--border-soft); }
+            #manualDeptMap .mdm-badge { width: 40px; height: 40px; border-radius: var(--r-md); background: var(--bg-card); color: var(--dk); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
+            #manualDeptMap .mdm-name { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
+            #manualDeptMap .mdm-duty { margin: 0; font-size: 13px; color: var(--text-secondary); }
+            #manualDeptMap .mdm-who { margin: 0; padding: 6px 12px 0; font-size: 12px; color: var(--text-secondary); }
+            #manualDeptMap .mdm-pages { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 12px; }
+            #manualDeptMap .mdm-pg { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border-soft); border-radius: 999px; font-size: 13px; color: var(--text-primary); text-decoration: none; }
+            #manualDeptMap a.mdm-pg:hover { border-color: var(--border-control); background: var(--bg-subtle); }
+            #manualDeptMap a.mdm-pg svg { color: var(--dk); flex: 0 0 auto; }
+            #manualDeptMap .mdm-pg.is-off { color: var(--text-muted); border-style: dashed; }
+            #manualDeptMap a.mdm-pg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+            #manualDeptMap .mdm-how { margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 6px 24px; font-size: 13px; }
+            #manualDeptMap .mdm-how > div { display: flex; gap: 10px; align-items: baseline; }
+            #manualDeptMap .mdm-how dt { flex: 0 0 8.5em; font-weight: 700; color: var(--text-primary); }
+            #manualDeptMap .mdm-how dd { margin: 0; color: var(--text-secondary); }
+            @media (max-width: 700px) { #manualDeptMap a.mdm-pg { min-height: 44px; } #manualDeptMap .mdm-how > div { flex-direction: column; gap: 0; } #manualDeptMap .mdm-how dt { flex: none; } }
+          </style>
+          <h3 class="mdm-name" style="margin-bottom:8px">แผนที่เมนูตามแผนก</h3>
+          <dl class="mdm-how">
+            <div><dt>หาหน้า</dt><dd>หน้าแรก → แตะไอคอนแผนก → เลือกหน้า · หรือแตะ <b>ค้นหา</b> (กด / หรือ Ctrl + K) · พิมพ์ชื่อสาขา แล้วเลือกสาขา เพื่อแสดงข้อมูลของสาขานั้น</dd></div>
+            <div><dt>งานที่รอ</dt><dd>วงกลมแดงที่ไอคอนคือจำนวนงานที่รอการทำของบัญชีนี้</dd></div>
+            <div><dt>งานที่เสร็จแล้ว</dt><dd>ซ่อนไว้ · ตัวกรอง <b>ยังไม่เสร็จ</b> (เริ่มต้น) · <b>เสร็จแล้ว</b> · <b>ทั้งหมด</b></dd></div>
+            <div><dt>ผลและคำอธิบาย</dt><dd>ผลการบันทึกเป็นข้อความที่มุมล่างของจอ · คำอธิบายอยู่หลังปุ่ม <b>?</b></dd></div>
+            <div><dt>โทรศัพท์</dt><dd>แถบล่างของแต่ละบทบาท: หน้าแรก · หน้างานประจำวันของบทบาทนั้น · ฉัน (สาขา: หน้าแรก · ตัดเบิก · สั่งของ · รับของ · ฉัน) · ค้นหาหน้าที่ไอคอนแว่นขยายมุมขวาบน</dd></div>
+            <div><dt>พอดีจอ / แตะง่าย</dt><dd>ปุ่ม ⤢ สลับการแสดงผลของหน้านั้น: <b>พอดีจอ</b> ย่อหน้าแบบคอมพิวเตอร์ให้พอดีจอ · <b>แตะง่าย</b> ตัวอักษรใหญ่ ปุ่มใหญ่ · เครื่องจำค่าของแต่ละหน้า</dd></div>
+            <div><dt>การ์ดรายการ</dt><dd>ในโหมดแตะง่าย ตารางแสดงเป็นการ์ด 1 ใบต่อ 1 แถว · <b>ปุ่มเรียง</b> เรียงตามชื่อหรือตัวเลขหลัก · <b>ปุ่มกรอง</b> แสดงเฉพาะสถานะหรือกลุ่มที่เลือก · แตะการ์ดเพื่อดูทุกคอลัมน์</dd></div>
+            <div><dt>เครื่องมือ</dt><dd>ตั้งค่าและคู่มือการใช้งานอยู่ส่วนล่างของแถบไอคอน (โทรศัพท์: ฉัน) · หน้าที่ไม่อยู่ในแผนกใดอยู่ที่ <b>หน้ารายงานทั้งหมด</b></dd></div>
+          </dl>
+          <div id="manualDeptMapBody" class="mdm-grid"></div>
+        </div>
+
+        <p style="margin:0;font-weight:700">แผนกของแต่ละบทบาท</p>
+        <table id="manualSupplyRoles" class="man-roles">
+          <thead><tr><th>บทบาท</th><th>แผนกของตนเอง (และหน้าในแผนก)</th><th>คู่มือฉบับสั้น</th></tr></thead>
+          <tr data-role="branch"><td>สาขา</td><td><b class="chip">สาขา</b> (<i class="pg">ตัดเบิก</i> · <i class="pg">สั่งของ</i> · <i class="pg">รับของ</i> · <i class="pg">ส่วนต่างการใช้</i> · <i class="pg">นับของสิ้นเดือน</i>)</td><td><a href="/docs/pilot/branch_guide.html" target="_blank">คู่มือสาขา</a></td></tr>
+          <tr data-role="warehouse"><td>คลัง</td><td><b class="chip">คลัง</b> (<i class="pg">คิวใบสั่งซื้อ</i>)</td><td><a href="/docs/pilot/warehouse_guide.html" target="_blank">คู่มือคลัง</a></td></tr>
+          <tr data-role="salessupport"><td>ประสานงานขาย</td><td><b class="chip">ประสานงานขาย</b> (<i class="pg">คิวใบสั่งซื้อ</i> · <i class="pg">เคลมสินค้า</i> · <i class="pg">ยอดแนะนำรายรอบ</i> · <i class="pg">ใบตัดเบิกสาขา</i> · <i class="pg">ผลต่างตัดเบิกรายวัน</i> · <i class="pg">ใช้วัตถุดิบต่อยอดขาย</i> · <i class="pg">ไฟล์ราคา</i> · <i class="pg">นำเข้าข้อมูลปิดงวด</i> · <i class="pg">รอบส่งของสาขา</i> · <i class="pg">ปฏิทินเทศกาลและวันหยุด</i> · <i class="pg">โซนจัดเก็บ</i> · <i class="pg">แจ้งเปลี่ยนรหัสสินค้า</i>)</td><td><a href="/docs/pilot/salessupport_guide.html" target="_blank">คู่มือประสานงานขาย</a></td></tr>
+          <tr data-role="operation"><td>ฝ่ายปฏิบัติการ</td><td><b class="chip">ปฏิบัติการ</b> (<i class="pg">สรุปประจำวัน</i> · <i class="pg">ภาพรวมและตัวชี้วัด</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">แนวโน้ม</i> · <i class="pg">รายงานปฏิบัติการ</i> · <i class="pg">ส่วนลด</i> · <i class="pg">เงินสดขาด/เกิน</i> · <i class="pg">บิลยกเลิก</i> · <i class="pg">พนักงาน</i> · <i class="pg">ตรวจสอบการสั่ง</i> · <i class="pg">ใบตัดเบิกสาขา</i> · <i class="pg">ผลต่างตัดเบิกรายวัน</i> · <i class="pg">การใช้งานทุกสาขา</i> · <i class="pg">ข้อความจากเจ้าของสาขา</i>)</td><td>—</td></tr>
+          <tr data-role="analyst"><td>ฝ่ายวิเคราะห์</td><td><b class="chip">ฝ่ายวิเคราะห์</b> (<i class="pg">ไฟล์ราคา</i> · <i class="pg">ราคารายเดือน</i> · <i class="pg">ต้นทุนต่อจาน</i> · <i class="pg">ทะเบียนวัตถุดิบ</i> · <i class="pg">หน่วยและการแปลง</i> · <i class="pg">ภาพรวมและตัวชี้วัด</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">แนวโน้ม</i> · <i class="pg">GP รายสาขา</i> · <i class="pg">P&L รายสาขา</i> · <i class="pg">ส่วนลด</i> และต้นทุน กำไร เมนู อีก 14 หน้าในแผนกเดียวกัน)</td><td>—</td></tr>
+          <tr data-role="innovation"><td>ครัว</td><td><b class="chip">ครัว</b> (<i class="pg">ทะเบียนวัตถุดิบ</i> · <i class="pg">ต้นทุนต่อจาน</i> · <i class="pg">วิเคราะห์เมนู</i> · <i class="pg">เป้าลดต้นทุน</i>) · ทะเบียนวัตถุดิบและต้นทุนต่อจานดูอย่างเดียว</td><td>—</td></tr>
+          <tr data-role="accounting"><td>บัญชี</td><td><b class="chip">บัญชี</b> (<i class="pg">ใบสรุปตัดเบิก</i> · <i class="pg">ราคารายเดือน</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">GP รายสาขา</i> · <i class="pg">P&L รายสาขา</i> · <i class="pg">P&L เชิงลึก</i> · <i class="pg">เงินสดขาด/เกิน</i> · <i class="pg">ส่วนลด</i>) · ราคารายเดือนดูอย่างเดียว</td><td><a href="/docs/pilot/accounting_guide.html" target="_blank">คู่มือบัญชี</a></td></tr>
+          <tr data-role="management"><td>ผู้บริหาร</td><td><b class="chip">ผู้บริหาร</b> · <b class="chip">การตลาด</b> · <b class="chip">ปฏิบัติการ</b> · <b class="chip">ฝ่ายวิเคราะห์</b> · <b class="chip">ครัว</b> · <b class="chip">ประสานงานขาย</b> · <b class="chip">คลัง</b> · <b class="chip">บัญชี</b> · <b class="chip">สาขา</b> (เห็นทุกแผนก ทุกหน้า ดู แผนที่เมนูตามแผนก)</td><td>—</td></tr>
+          <tr data-role="franchise"><td>เจ้าของสาขา</td><td><b class="chip">เจ้าของสาขา</b> (<i class="pg">ร้านของฉัน</i>) · หน้าเดียว ไม่มีช่องเลือกสาขา</td><td><a href="/docs/pilot/owner_guide.html" target="_blank">คู่มือเจ้าของสาขา</a></td></tr>
+        </table>
       </div>
-    </div>
-  </a>
+    </details>
 
-  <!-- แผนที่เมนูตามแผนก (PR-D5, 2026-10-21): drawn at run time from DEPARTMENTS (js/18-launcher.js renderManualDeptMap, called by TABS.manual.load), so it never drifts from the menu -->
-  <div class="card p-5 mb-4" id="manualDeptMap">
-    <style>
-      #manualDeptMap .mdm-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 12px; align-items: start; }
-      #manualDeptMap .mdm-card { border: 1px solid var(--border); border-radius: var(--r-lg); overflow: hidden; background: var(--bg-card); }
-      #manualDeptMap .mdm-head { display: flex; align-items: center; gap: 10px; padding: 10px 12px; background: var(--dt); border-bottom: 1px solid var(--border-soft); }
-      #manualDeptMap .mdm-badge { width: 40px; height: 40px; border-radius: var(--r-md); background: var(--bg-card); color: var(--dk); display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
-      #manualDeptMap .mdm-name { margin: 0; font-size: 15px; font-weight: 700; color: var(--text-primary); }
-      #manualDeptMap .mdm-duty { margin: 0; font-size: 13px; color: var(--text-secondary); }
-      #manualDeptMap .mdm-who { margin: 0; padding: 6px 12px 0; font-size: 12px; color: var(--text-secondary); }
-      #manualDeptMap .mdm-pages { display: flex; flex-wrap: wrap; gap: 6px; padding: 8px 12px 12px; }
-      #manualDeptMap .mdm-pg { display: inline-flex; align-items: center; gap: 6px; min-height: 32px; padding: 0 10px; border: 1px solid var(--border-soft); border-radius: 999px; font-size: 13px; color: var(--text-primary); text-decoration: none; }
-      #manualDeptMap a.mdm-pg:hover { border-color: var(--border-control); background: var(--bg-subtle); }
-      #manualDeptMap a.mdm-pg svg { color: var(--dk); flex: 0 0 auto; }
-      #manualDeptMap .mdm-pg.is-off { color: var(--text-muted); border-style: dashed; }
-      #manualDeptMap a.mdm-pg:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
-      #manualDeptMap .mdm-how { margin: 0 0 14px; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 330px), 1fr)); gap: 6px 24px; font-size: 13px; }
-      #manualDeptMap .mdm-how > div { display: flex; gap: 10px; align-items: baseline; }
-      #manualDeptMap .mdm-how dt { flex: 0 0 8.5em; font-weight: 700; color: var(--text-primary); }
-      #manualDeptMap .mdm-how dd { margin: 0; color: var(--text-secondary); }
-      @media (max-width: 700px) { #manualDeptMap a.mdm-pg { min-height: 44px; } #manualDeptMap .mdm-how > div { flex-direction: column; gap: 0; } #manualDeptMap .mdm-how dt { flex: none; } }
-    </style>
-    <h3 class="font-bold text-base mb-1 text-slate-800">แผนที่เมนูตามแผนก</h3>
-    <p class="text-xs text-slate-500 mb-3">10 แผนก ไอคอนและชื่อเดียวกับหน้าแรก · แตะชื่อหน้าเพื่อเปิด · ผู้บริหารเห็นทุกแผนก บทบาทอื่นเห็นแผนกของตนก่อน แล้วตามด้วยแผนกที่มีหน้าที่เปิดได้ · หน้าที่บัญชีนี้เปิดไม่ได้เป็นเส้นประ</p>
-    <dl class="mdm-how">
-      <div><dt>หาหน้า</dt><dd>หน้าแรก → แตะไอคอนแผนก → เลือกหน้า · หรือแตะ <b>ค้นหา</b> (กด / หรือ Ctrl + K) · พิมพ์ชื่อสาขา เช่น อุดรธานี แล้วเลือกสาขา เพื่อแสดงข้อมูลของสาขานั้น</dd></div>
-      <div><dt>งานที่รอ</dt><dd>วงกลมแดงที่ไอคอนคือจำนวนงานที่รอการทำของบัญชีนี้</dd></div>
-      <div><dt>งานที่เสร็จแล้ว</dt><dd>ซ่อนไว้ · ตัวกรอง <b>ยังไม่เสร็จ</b> (เริ่มต้น) · <b>เสร็จแล้ว</b> · <b>ทั้งหมด</b></dd></div>
-      <div><dt>ผลและคำอธิบาย</dt><dd>ผลการบันทึกเป็นข้อความที่มุมล่างของจอ · คำอธิบายอยู่หลังปุ่ม <b>?</b></dd></div>
-      <div><dt>โทรศัพท์</dt><dd>แถบล่างของแต่ละบทบาท: หน้าแรก · หน้างานประจำวันของบทบาทนั้น · ฉัน (สาขา: หน้าแรก · ตัดเบิก · สั่งของ · รับของ · ฉัน) · ค้นหาหน้าที่ไอคอนแว่นขยายมุมขวาบน</dd></div>
-      <div><dt>พอดีจอ / แตะง่าย</dt><dd>ปุ่ม ⤢ บนแถบบนสลับการแสดงผลของหน้านั้น: <b>พอดีจอ</b> แสดงหน้าแบบคอมพิวเตอร์ย่อให้พอดีจอ (ถ่างสองนิ้วเพื่อขยาย แตะสองครั้งที่ตารางหรือกราฟเพื่อดูขนาดจริง แตะแถวเพื่อดูรายละเอียด) · <b>แตะง่าย</b> แสดงแบบมือถือ ตัวอักษรใหญ่ ปุ่มใหญ่ · เครื่องจำค่าที่เลือกของแต่ละหน้า</dd></div>
-      <div><dt>การ์ดรายการ</dt><dd>ในโหมดแตะง่าย ตารางที่ใช้ทุกวันแสดงเป็นการ์ด 1 ใบต่อ 1 แถว: สถานะ ชื่อ และตัวเลขหลัก 3 ตัว · <b>ปุ่มเรียง</b> ด้านบนเรียงตามชื่อหรือตัวเลขหลัก (แตะซ้ำเพื่อกลับลำดับ) · <b>ปุ่มกรอง</b> แสดงเฉพาะสถานะหรือกลุ่มที่เลือก · รายการที่เสร็จแล้วซ่อนไว้ตามตัวกรองสถานะ · แตะการ์ดเพื่อดูทุกคอลัมน์และปุ่มของแถวนั้น</dd></div>
-      <div><dt>เครื่องมือ</dt><dd>ตั้งค่าและคู่มือการใช้งานอยู่ส่วนล่างของแถบไอคอน (โทรศัพท์: ฉัน) · หน้าที่ไม่อยู่ในแผนกใดอยู่ที่ <b>หน้ารายงานทั้งหมด</b></dd></div>
-    </dl>
-    <div id="manualDeptMapBody" class="mdm-grid"></div>
-  </div>
-
-  <!-- Quick start -->
-  <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">Quick Start (เริ่มต้นใช้งาน)</h3>
-    <ol class="list-decimal list-inside space-y-2 text-sm text-slate-700">
-      <li><b>เลือกช่วงเวลา</b> ที่แถบบน — <b>สัปดาห์ · เดือน · ปี · กำหนดเอง</b> แล้วกด ‹ › เพื่อเลื่อนช่วง · ช่วงที่บันทึกไว้อยู่ที่ปุ่ม ★ ช่วงที่บันทึก · ช่วงที่ยังไม่จบเทียบแบบถึงวันที่ปิดยอดล่าสุด <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-manual-period" title="คำอธิบาย">?</button><template id="hlp-manual-period" data-title="การเทียบช่วงเวลา"><p>ทุกตัวเลขยอดขายและต้นทุนใช้ช่วงเวลาแบบเดียวกัน: <b>วัน</b> · <b>สัปดาห์</b> (จันทร์ถึงอาทิตย์) · <b>เดือน</b> · <b>ปี</b> และ <b>กำหนดเอง</b> ในหน้าที่มี</p><p>ช่วงที่ยังไม่จบนับถึง <b>วันที่ปิดยอดล่าสุด</b> (ไม่รวมวันที่ยังขายอยู่) และเทียบกับจำนวนวันเท่ากัน · <b>เทียบช่วงก่อน</b> = ช่วงก่อนหน้า (สัปดาห์: วันเดียวกันของสัปดาห์ก่อน · เดือน: วันที่ 1 ถึงวันเดียวกันของเดือนก่อน) · <b>เทียบปีก่อน</b> = วันเดียวกันของปีก่อน (สัปดาห์และวัน: ย้อนหลัง 364 วัน ให้ตรงวันในสัปดาห์) · ช่วงที่จบแล้วเทียบเต็มช่วง</p><p>ตัวอย่าง: 1–23 ต.ค. 2569 เทียบ 1–23 ก.ย. 2569 · 1–23 ต.ค. 2568 · สัดส่วน (GP % · ต้นทุนอาหาร %) เทียบเป็น <b>จุด</b> · ไม่มีข้อมูลฐานแสดง —</p><p><b>หน้ายอดขาย</b>: ตัวเลขหลักทุกตัวแสดง <b>เทียบช่วงก่อน</b> และ <b>เทียบปีก่อน</b> (แตะ ? ข้างตัวเลขเพื่อดูช่วงวันที่ที่เทียบ) · <b>แถบบนเป็นตัวเลือกช่วงเวลาเพียงอันเดียว</b> ช่วงที่หน้ากำลังแสดงอยู่ข้างชื่อหน้า · ปุ่ม <b>วัน</b> แสดงเฉพาะหน้าที่ดูรายวันได้ (ยอดขายรายวัน) · ปุ่ม ‹ › เลื่อนวัน สัปดาห์ เดือน หรือปี · รายงานผู้บริหารมี <b>รายปี</b> และเลือกสัปดาห์หรือเดือนที่ยังไม่จบได้ (ถึงวันที่ปิดยอดล่าสุด) · หน้าที่ข้อมูลเก็บเป็นรายเดือน (เช่น ประเภทลูกค้า เงินสดขาด/เกิน บิลยกเลิก) แสดงเฉพาะปุ่ม เดือน และเดือนที่ยังไม่จบของข้อมูลรายเดือนจะไม่แสดงการเปรียบเทียบ</p><p><b>หน้าต้นทุน</b> (ต้นทุน/หัว · GP รายสาขา · P&amp;L · ต้นทุน BoM · ยอดซื้อวัตถุดิบ และหน้าอื่น): ต้นทุนขาย กำไรขั้นต้น ต้นทุนอาหาร % และต้นทุน/หัว ใช้ช่วงจากแถบบนและเทียบแบบเดียวกัน (ต้นทุนลด = ดี) · แถบบนเปิดที่ <b>เดือนนี้</b> ถึงวันที่ปิดยอดล่าสุด · ต้นทุนรายวันมีเฉพาะช่วงที่ระบบเก็บไว้ (ประมาณ 120 วันล่าสุด) ช่วงฐานที่เก่ากว่านั้น และการเทียบปีก่อนของรายสัปดาห์ แสดง — พร้อมเหตุผลใน ? · ปีที่ข้อมูลปีก่อนไม่ครบแสดง — พร้อมเดือนที่ข้อมูลเริ่ม (เช่น ข้อมูลปีก่อนเริ่ม พ.ค. 2568) · ต้นทุนรายสัปดาห์ในหน้า GP รายสาขาเป็น <b>ประมาณการ</b> (เฉลี่ยจากเดือน) · ใบเบิก ราคาวัตถุดิบ และต้นทุนต่อจานเก็บเป็นรายเดือน จึงเลือกได้เฉพาะเดือนและปี</p><p><b>ช่วงกราฟ</b> (3 · 6 · 12 เดือน · ทั้งหมด · รายไตรมาส · เทียบรายปี) เป็นตัวเลือกของกราฟแนวโน้มในหน้าภาพรวมยอดขาย กราฟสิ้นสุดที่ช่วงที่เลือกบนแถบบน</p></template></li>
-      <li><b>เลือกสาขา</b> ที่ topbar — หรือเลือก "ทุกสาขา" สำหรับภาพรวม</li>
-      <li>เปิด <b>หน้าแรก</b> เห็นไอคอนของแผนก แตะแผนกของตน แล้วเลือกหน้า หน้าอื่นของแผนกเดียวกันอยู่ที่แถบไอคอนด้านบนของหน้า · หาหน้าไม่เจอ แตะ <b>ค้นหา</b> (หรือกด / หรือ Ctrl + K) หรือเปิด <b>หน้ารายงานทั้งหมด</b></li>
-      <li>ดูข้อมูลภาพรวมที่ <b>ผู้บริหาร → ภาพรวมและตัวชี้วัด</b> (เดือนไม่เต็มเทียบแบบ MTD อัตโนมัติ)</li>
-      <li>วิเคราะห์ลึก:
-        <ul class="list-disc list-inside ml-6 mt-1 space-y-1 text-xs text-slate-600">
-          <li><b>กำไร/ขาดทุนรายสาขา:</b> ผู้บริหาร → GP รายสาขา / P&L รายสาขา</li>
-          <li><b>กำไร/ขาดทุนรายบิล + บิลขาดทุน:</b> ฝ่ายวิเคราะห์ → P&L ต่อบิล</li>
-          <li><b>เมนูเสิร์ฟเยอะ vs ต้นทุน (หาเป้าลดต้นทุน):</b> การตลาด → ลูกค้าและบุฟเฟ่ต์</li>
-          <li><b>ต้นทุนรายเมนู + จำลอง:</b> ฝ่ายวิเคราะห์ → ต้นทุนตามสูตร / ตัวจำลอง</li>
+    <details class="man-fold" id="manDocs">
+      <summary>เอกสารและสไลด์ฝึกอบรม</summary>
+      <div class="man-body">
+        <ul class="man-docs">
+          <li>สไลด์ฝึกอบรมแยกตามแผนก: <a href="/docs/sop/training/Oshinei_BoM_training_brn.pdf" target="_blank">สาขา</a> · <a href="/docs/sop/training/Oshinei_BoM_training_wh.pdf" target="_blank">คลัง</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ss.pdf" target="_blank">ประสานงานขาย</a> · <a href="/docs/sop/training/Oshinei_BoM_training_acc.pdf" target="_blank">บัญชี</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ana.pdf" target="_blank">ฝ่ายวิเคราะห์</a> · <a href="/docs/sop/training/Oshinei_BoM_training_kit.pdf" target="_blank">ครัว</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ops.pdf" target="_blank">ปฏิบัติการ</a> · <a href="/docs/sop/training/Oshinei_BoM_training_mgmt.pdf" target="_blank">ผู้บริหาร</a> · <a href="/docs/sop/training/Oshinei_BoM_training_own.pdf" target="_blank">เจ้าของสาขา</a> · <a href="/docs/sop/Oshinei_BoM_training_deck.pdf" target="_blank">PDF ชุดเต็ม</a></li>
+          <li>คู่มือฉบับสั้นบนโทรศัพท์: <a href="/docs/pilot/branch_guide.html" target="_blank">สาขา</a> · <a href="/docs/pilot/warehouse_guide.html" target="_blank">คลัง</a> · <a href="/docs/pilot/salessupport_guide.html" target="_blank">ประสานงานขาย</a> · <a href="/docs/pilot/accounting_guide.html" target="_blank">บัญชี</a> · <a href="/docs/pilot/owner_guide.html" target="_blank">เจ้าของสาขา</a></li>
+          <li>บัตรงานพนักงานสาขา (A4 หนึ่งหน้าต่องาน): <a href="/docs/pilot/cards/card_issue.pdf" target="_blank">ตัดเบิก</a> · <a href="/docs/pilot/cards/card_order.pdf" target="_blank">สั่งของ</a> · <a href="/docs/pilot/cards/card_receive.pdf" target="_blank">รับของและแจ้งของขาด/เสีย</a> · <a href="/docs/pilot/cards/card_count.pdf" target="_blank">นับของสิ้นเดือน</a></li>
+          <li>คู่มือการทำงานฉบับเต็ม (WP-SCM-001 ตาม ISO 9001 และ COSO): <a href="/docs/sop/WP-SCM-001_ingredient_order_procedure.pdf" target="_blank">PDF</a> · <a href="/docs/sop/WP-SCM-001_ingredient_order_procedure.html" target="_blank">หน้าเว็บ</a></li>
+          <li>รายงานวิเคราะห์ธุรกิจ มิ.ย. 2026: <a href="/docs/BUSINESS_ANALYSIS_2026-06.html" target="_blank">เปิด</a></li>
+          <li>เอกสารทุกไฟล์ใต้ /docs ต้องเข้าสู่ระบบก่อน ถ้าเปิดแล้วเจอหน้า “เข้าสู่ระบบ” ให้เข้าสู่ระบบที่หน้าแรกแล้วเปิดลิงก์ซ้ำ</li>
         </ul>
-      </li>
-      <li>แก้ unit_cost: <b>ตั้งค่า</b> (แถบไอคอนด้านซ้าย ส่วนล่าง เครื่องมือ) <b>→ Cost Management → Cost Recalibration</b></li>
-      <li><b>งานวัตถุดิบและใบสั่งซื้อ</b> (ฝ่ายวิเคราะห์ · ครัว · ประสานงานขาย · คลัง · บัญชี · สาขา): การ์ด <b>งานของฉันวันนี้</b> ที่หน้าแรกแสดงงานที่ต้องทำพร้อมปุ่ม "ไปที่งาน" แตะ <b>ดูทั้งหมด</b> เปิด <b>หน้างาน</b> (โทรศัพท์: หน้าแรก → <b>งานของฉันวันนี้</b>) · ดูตัวอย่างได้ทุกหน้า · บันทึกจริงต้องกรอกรหัสปลดล็อกครั้งเดียวที่ปุ่ม “อ่านอย่างเดียว” ปลายขวาของแถวตำแหน่งหน้า (โทรศัพท์: ฉัน → การบันทึกข้อมูล) · สาขา คลัง ฝ่ายวิเคราะห์ และครัวไม่ต้องปลดล็อก</li>
-    </ol>
-  </div>
+      </div>
+    </details>
 
-  <!-- Tabs reference — the groups of หน้ารายงานทั้งหมด (TAB_CLUSTERS in js/01-core.js; PR-D5: the menu is by department, see manualDeptMap above) -->
-  <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-1 text-slate-800">หน้าทั้งหมด — แต่ละกลุ่มตอบคำถามอะไร</h3>
-    <p class="text-xs text-slate-500 mb-3">กลุ่มเดียวกับ <b>หน้ารายงานทั้งหมด</b> (หน้าแรก → หน้ารายงานทั้งหมด) จัดตามคำถามที่ใช้บ่อย · ทุกแท็บเดิมยังอยู่ครบ · แต่ละกลุ่มบอกแผนกที่เปิดหน้านั้นได้</p>
-
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">รายงานผู้บริหาร</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>Management Report</b> — รายวัน · รายสัปดาห์ · รายเดือน ในหน้าเดียว พิมพ์/Excel ได้ · โหมด Monthly = รายงานประจำเดือน (ฉบับเต็มกดปุ่มในหน้า)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>หน้าสรุปบนมือถือ › ยอดขาย › รายเดือน</b> — แสดง 12 เดือนที่ปิดแล้วและเดือนปัจจุบัน (สะสม) เรียงต่อกัน พร้อมแผนภูมิแท่งและ % เทียบเดือนก่อน ของรายได้ ลูกค้า รายได้/หัว และ GP % ตัวเลขทุกเดือนเท่ากับรายงานผู้บริหารของเดือนนั้น · เดือนปัจจุบันเทียบกับฐานปกติตามวันในสัปดาห์ของเดือนก่อน ไม่เทียบกับทั้งเดือน · แตะเดือนใดก็ได้เพื่อดูสรุปของเดือนนั้น</div>
+    <details class="man-fold" id="manNews">
+      <summary>มีอะไรใหม่</summary>
+      <div class="man-body">
+        <ul class="man-new">
+          <li><b>2026-10-30 · คู่มือแบบงาน:</b> คู่มือนี้เป็นงานตามแผนก ค้นหางานได้ เปิดงานแล้วเห็นขั้นตอนที่กดตามได้</li>
+          <li><b>2026-10-29 · เลื่อนรอบส่ง:</b> ประสานงานขายเลื่อนรอบส่งรอบเดียวไปวันหลังได้ (ไม่เกิน 6 วัน ต้องมีเหตุผล) สาขาได้รับการแจ้งเตือน เห็นประกาศสีเหลือง และใบสั่งซื้อติดป้าย “ล่าช้า” จำนวนที่ควรสั่งคิดถึงวันส่งใหม่</li>
+          <li><b>2026-10-28 · หนึ่งแผนก หนึ่งหน้าจอ:</b> หน้าแรก แถบไอคอน และหน้าแรกบนโทรศัพท์แสดงเฉพาะแผนกของบัญชี ผู้บริหารเห็นทุกแผนก · หน้าอื่นที่มีสิทธิ์เปิดจาก ค้นหา หรือ หน้ารายงานทั้งหมด · รายงานผู้บริหารเป็นสิทธิ์ของผู้บริหาร · หน้าสิทธิ์มีปุ่ม <b>ใช้ค่าตั้งต้นของระบบ</b></li>
+          <li><b>2026-10-21 · เมนูตามแผนก:</b> หน้าแรกเป็นไอคอนแผนก · ค้นหา (/ หรือ Ctrl + K) · วงกลมแดงคือจำนวนงานที่รอ · งานที่เสร็จซ่อนไว้ ดูที่ตัวกรอง <b>เสร็จแล้ว</b> · คำอธิบายอยู่หลังปุ่ม <b>?</b></li>
+          <li><b>2026-10-13 · ปิดเดือนต้องนับครบ:</b> ปิดเดือนต้องนับของครบทุกรายการ ช่องว่างถือว่ายังไม่ได้นับ · แจ้งเตือนบนมือถือ 08:00 งานของวัน · 11:00 เตือนก่อนเวลาส่งสุดท้าย · 13:15 รายชื่อสาขาที่ส่งไม่ทัน · เวลาแสดงเป็นเวลาไทย</li>
+          <li><b>2026-10-07 · งานวัตถุดิบรวมเป็นชุดเดียว:</b> หน้างานแสดงงานของวันพร้อมปุ่ม “ไปที่งาน →” · เดือนและสาขาเลือกครั้งเดียวใช้ทุกหน้า · ดูตัวอย่างได้ทุกหน้า บันทึกจริงต้องใช้รหัสปลดล็อกครั้งเดียวต่อเบราว์เซอร์</li>
+          <li><b>2026-10-01 · จัดกลุ่มรายงานตามคำถาม:</b> รายงานผู้บริหารอยู่บนสุด · ส่วนลด &amp; เงิน เป็นกลุ่มของตนเอง · Top 60 ต้นทุน/หัว อยู่ในหน้า ต้นทุน/หัว · ไม่มีหน้าใดถูกซ่อนหรือลบ</li>
+          <li><b>2026-09-05 · เริ่มต้นใช้งานและเป้ารายสาขา:</b> ผู้ใช้ใหม่เห็นการ์ด “เริ่มต้นใช้งาน” · เป้ารายสาขาอัตโนมัติ = ยอดจริงของเดือนเดียวกันปีก่อน พิมพ์เองได้ · ตาราง <b>การเข้าใช้รายคน</b> ที่ ตั้งค่า → การใช้งานจริง และสรุปทุกวันจันทร์ · หน้าที่ยังไม่มีใครเปิดยังแสดงครบ (พักการซ่อนไว้จนทุกคนใช้งาน)</li>
+          <li><b>2026-07-20 · รวมกลุ่มหน้า:</b> ทุกหน้าเดิมยังอยู่ เปิดจากแผนกหรือหน้ารายงานทั้งหมด · “ต้องดูวันนี้” เป็นปุ่มในหน้าแรก</li>
+          <li><b>2026-06-05:</b> ต้นทุนหลัก = ต้นทุนอาหาร % + ค่าแรง % ใน P&amp;L รายสาขา (ใส่ค่าแรงที่ ตั้งค่า → ค่าใช้จ่ายคงที่) · Heavy-Eater Margin Tail และ Turn-Time ในผลงานบุฟเฟ่ต์ · เวลาปิดร้านและความสดของข้อมูล · คลิกสาขาเพื่อเจาะรายวันหรือรายบิลในเงินสดและบิลยกเลิก</li>
+          <li><b>2026-06-04:</b> เชื่อม Easy POS โดยตรง อัปเดตทุก 30 นาที · P&amp;L ต่อบิล (กำไรต่อบิล บิลขาดทุน ส่งออก CSV) · รายงานปฏิบัติการ · เดือนที่ยังไม่จบเทียบช่วงวันเท่ากัน</li>
+          <li><b>2026-06-02:</b> เจาะบิลส่วนลดจากทุกตัวเลขในหน้าส่วนลด · แคชเชียร์แยกหรือรวมสาขา · เจาะชั่วโมงพีค · งบกำไรขาดทุนรายสาขา · รายงานผู้บริหาร รายวัน · รายสัปดาห์ · รายเดือน (รายงานรายเดือนเดิมรวมเข้าโหมดรายเดือน ฉบับเต็มกดปุ่มในหน้า) · ผลงานบุฟเฟ่ต์ใช้จำนวนลูกค้าจริง</li>
+        </ul>
       </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">ยอดขาย <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ผู้บริหาร → ภาพรวมและตัวชี้วัด · ยอดขายรายวัน · แนวโน้ม · การตลาด → ช่วงเวลา · ช่องทางและประเภทลูกค้า · หน้าอื่นของกลุ่มอยู่ที่ หน้ารายงานทั้งหมด → ยอดขาย</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ภาพรวม & KPI</b> — เดือนล่าสุด + MoM, Master/แฟรนไชส์, heatmap สาขา × เดือน (สลับ "ยอดขาย" / "เทียบค่าปกติของสาขา"), แนวโน้มรายเดือน, สัดส่วนหมวด</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ยอดขายรายวัน</b> — รายสาขา วัน/สัปดาห์/เดือน เทียบเดือนก่อน/ปีก่อน + เมนูผิดปกติ</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>แนวโน้ม</b> — MoM, รายได้รายวันของเดือน (แถบเทา = เสาร์-อาทิตย์), รูปแบบวันในสัปดาห์, GP</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ช่วงเวลา</b> — ชั่วโมงพีค, วัน × ชั่วโมง, การหมุนโต๊ะ</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ช่องทาง & ประเภทลูกค้า</b> — หน้าร้าน / Grab / LINE MAN / กลับบ้าน / เครดิต รายสาขา</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เทียบ A/B · Insight เพิ่มเติม</b> — เทียบ 2 ช่วงเวลา · daypart, พยากรณ์, table turnover</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">ลูกค้า & บุฟเฟ่ต์ <span class="text-[11px] font-normal" style="color:var(--text-muted)">· การตลาด → ลูกค้าและบุฟเฟ่ต์ · บุฟเฟ่ต์เด็ก · หน้าอื่นของกลุ่มอยู่ที่ หน้ารายงานทั้งหมด → ลูกค้า & บุฟเฟ่ต์</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ผลงานบุฟเฟ่ต์</b> — pax จริง, food cost เทียบเป้า, seat util, cover/RevPASH, GP & P&L บุฟเฟ่ต์, BoM deep-dive, breakeven</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ลูกค้า & ยอด/หัว</b> — ยอดต่อหัว รายสาขา/ช่วงเวลา/ขนาดกลุ่ม, สัดส่วนระดับราคา</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>บุฟเฟ่ต์เด็ก</b> — covers / % / MoM รายสาขา</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">เสียงลูกค้า</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เสียงลูกค้า</b> — รีวิวทุกช่องทาง, sentiment, หัวข้อ, รายงาน, คิวงานที่ต้องตอบ</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">เมนู <span class="text-[11px] font-normal" style="color:var(--text-muted)">· การตลาด → วิเคราะห์เมนู · ปรับเมนู · โอกาสเมนู · เทียบเมนู A/B</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>วิเคราะห์เมนู</b> — เมนูขายดี, Top 60, persona · มุมมอง <b>Menu Engineering</b> (เมนูทำเงิน 4 กลุ่ม) อยู่ในหน้านี้ — ต้องการกรองตามหมวด กด "เปิดแบบกรองหมวด"</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ปรับเมนู</b> — เมนูที่ควรปรับ 4 กลุ่ม (ดัน/แก้/ตัด/รักษา)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>โอกาสเมนู</b> — เมนูที่ขายดีที่อื่นแต่ยังไม่ขายที่นี่, เมนูที่ควรฟื้น</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เทียบเมนู A/B</b> — เมนูขายดี 2 ช่วงเวลา, ต่อหัว, Pareto</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">ต้นทุน <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ผู้บริหาร → ต้นทุน · ฝ่ายวิเคราะห์ → ต้นทุนตามสูตร · ต้นทุนต่อหัว · ความครอบคลุมต้นทุน · วิเคราะห์วัตถุดิบ · เป้าลดต้นทุน · BoM รายสาขา · ตัวจำลอง</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ภาพรวม · BoM Cost</b> — margin ตามหมวด, ABC/Pareto, BoM ภาพรวม/รายสาขา/เปรียบเทียบ</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ต้นทุน/หัว</b> — ต้นทุน BoM ต่อหัว รายสาขา · มุมมองย่อย <b>Top 60 เมนู ต้นทุน/หัว</b> (Master/แฟรนไชส์) อยู่ในหน้าเดียวกัน</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>High Value Product Monitor</b> — ต้นทุนและจำนวนจานของวัตถุดิบหลัก 8 กลุ่ม ทุกสาขา <button type="button" class="ui-q" aria-label="คำอธิบาย" aria-haspopup="dialog" data-help="hlp-manual-hvmonitor" title="คำอธิบาย">?</button><template id="hlp-manual-hvmonitor" data-title="High Value Product Monitor"><p>แซลมอน · ทูน่า · ฮามาจิ · กุ้งหวาน · หอยเชลล์ · ปลาไหล · หอยนางรม · เนื้อ ตามช่วงเวลาและสาขาของแถบบน · บรรทัดแรกบอกต้นทุนที่เปลี่ยนเป็นบาท แยกเป็น ราคา · กิน · ลูกค้า · ปุ่ม <b>ทั้งหมด</b> แสดงหนึ่งแถวต่อวัตถุดิบ เรียงตามบาทที่เปลี่ยน พร้อมสาขาที่ดัน · เลือกวัตถุดิบเพื่อดูรายสาขา เรียงตามบาทที่เปลี่ยน · มุมมอง <b>จำนวนจาน</b> แสดงจานต่อหัวและลูกค้า ไม่มีจำนวนเงิน เลือกเทียบสัปดาห์ได้ · แตะแถวของสาขาเพื่อดูเมนูของกลุ่มที่สาขานั้น</p></template></div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>นักกินหนัก · วิเคราะห์วัตถุดิบ</b> — ต้นทุน/หัวต่อบิล, บิลกำไรแย่สุด · บิลที่มี vs ไม่มีวัตถุดิบ/เมนู</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เป้าลดต้นทุน · ความครอบคลุม</b> — เมนูเสิร์ฟเยอะ × ต้นทุน, วัตถุดิบที่ควรเจาะ · รายได้ที่มี/ไม่มีข้อมูลต้นทุน</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>BoM รายสาขา · Simulators</b> — รายได้/COGS/GP รายสาขา · จำลองต้นทุน, ความไว, what-if</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">กำไร <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ผู้บริหาร → GP รายสาขา · P&L รายสาขา · ฝ่ายวิเคราะห์ → กำไร SKU · เทียบสาขา · P&L เชิงลึก · P&L ต่อบิล · บัญชี → P&L รายสาขา · GP รายสาขา</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>GP รายสาขา</b> — GP / Food % / สถานะ รายสาขา, heatmap เดือน × สาขา</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>P&L รายสาขา · P&L ต่อบิล</b> — รายได้ → BoM → GP → ค่าใช้จ่ายคงที่ → กำไรดำเนินงาน, Prime Cost · กำไรต่อบิล, บิลขาดทุน</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>กำไร SKU · Benchmark</b> — แนวโน้ม GP, กำไรต่อบิล · KPI ข้ามสาขา, health score</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>P&amp;L เชิงลึก</b> — รายได้/COGS/GP รายเดือน, กำไรประมาณต่อบิล, ตารางเทียบ P&amp;L รายสาขา + เจาะสาขา <span style="color:var(--text-muted)">(กลับมาในแถบ กำไร 2026-10-01)</span></div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">ส่วนลด & เงิน <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ปฏิบัติการ → ส่วนลด · เงินสดขาด/เกิน · บิลยกเลิก · พนักงาน · บัญชี → ส่วนลด · เงินสดขาด/เกิน</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ส่วนลด</b> — ศูนย์เตือนส่วนลด, การรั่วไหลรายสาขา, คูปอง, แคชเชียร์ที่ให้ส่วนลดสูง</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>พนักงาน</b> — บิลส่วนลดผิดปกติ, รายได้/ส่วนลด % ต่อแคชเชียร์</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เงินสดขาด/เกิน · บิลยกเลิก</b> — เงินสดขาด/เกินรายเดือน, วันแย่สุด · บิลยกเลิก/ลบ ตามเหตุผลและสาขา</div>
-      </div>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">ปฏิบัติการ <span class="text-[11px] font-normal" style="color:var(--text-muted)">· ปฏิบัติการ → รายงานปฏิบัติการ · ความต้องการพิเศษ · ราคาและโซน · ปิดร้านและข้อมูล</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>รายงานปฏิบัติการ</b> — การชำระเงิน, ช่องทาง, void (มูลค่า BoM), โปรโมชัน/คูปอง</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เชิงลึก · ความต้องการพิเศษ</b> — Cohort, menu affinity · modifiers ฟรี 25 อันดับ (งานครัว)</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ราคา/โซน · ปิดร้าน/ข้อมูล</b> — ประวัติเปลี่ยนราคา, โซนโต๊ะ · ความสดของข้อมูล, เวลาปิดร้าน</div>
-      </div>
-    </div>
-    <div class="mb-3" id="manualSupply">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">วัตถุดิบและใบสั่งซื้อ <span class="text-[11px] font-normal" style="color:var(--text-muted)">· อยู่ในแผนก ฝ่ายวิเคราะห์ · ครัว · ประสานงานขาย · คลัง · บัญชี · สาขา · เปิด “หน้างาน” จาก หน้าแรก → งานของฉันวันนี้ → ดูทั้งหมด · แต่ละบทบาทเห็นเฉพาะหน้าของงานตน</span></p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>หน้างาน</b> — เปิดจาก หน้าแรก → งานของฉันวันนี้ → ดูทั้งหมด (โทรศัพท์: งานของฉัน) · ปุ่ม "ทั้งหมด · ยังไม่เสร็จ · รอตรวจ · เสร็จแล้ว" เหนือรายการกรองงานทุกส่วนของหน้า (เริ่มที่ "ยังไม่เสร็จ" และจำค่าที่เลือกไว้ในเครื่อง) · "รอตรวจ" คืองานที่รอคนอื่นตรวจหรือดำเนินการต่อ เช่น สูตรที่ครัวส่งตรวจแล้ว · "งานของฉัน" คือรายการงานของบทบาทนั้น แตะ "ไปที่งาน →" ระบบเปิดหน้าที่ต้องทำให้ พร้อมเดือนและสาขา · บทบาทที่ถือขั้นตอนปิดงวดเดือนเห็นขั้นตอนของตนเอง (ขั้นตอนของฝ่ายอื่นรวมเป็นบรรทัดเดียว) · "งานของฝ่ายอื่น" พับไว้ เปิดดูได้เฉพาะประสานงานขาย ฝ่ายวิเคราะห์ ฝ่ายปฏิบัติการ และผู้บริหาร · บนโทรศัพท์ ประสานงานขาย คลัง ครัว ฝ่ายปฏิบัติการ และบัญชีเปิดที่ หน้างานโดยตรง (หน้าสรุปของเจ้าของมีลิงก์ "หน้างาน →")</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>เดือนและสาขา</b> — ช่อง "เดือน" ช่องเดียวใช้ร่วมกันทุกหน้าของงานวัตถุดิบและใบสั่งซื้อ (จำค่าไว้) หน้างานของฝ่ายที่ปิดงวดเริ่มที่เดือนก่อน · รายชื่อสาขาในช่องเลือกมีเฉพาะสาขาที่มีข้อมูลในเดือนนั้น · บัญชีที่ผูกกับสาขาไม่มีช่องเลือกสาขา · วันที่แสดงเป็น 9/10/2026 และเวลาแสดงเป็นเวลาไทย</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>สถานะที่ใช้ทั้งระบบ</b> — ใบสั่งซื้อ: ยังไม่ส่ง · ส่งแล้ว (รอคลังจัดส่ง) · คลังจัดส่งแล้ว · สาขารับแล้ว · ยกเลิก และป้าย ส่งช้า (มีค่าปรับ) · มีเคลม · คีย์บัญชีแล้ว · ใบตัดเบิก: ยังไม่บันทึก · ยังไม่ส่ง · ส่งแล้ว · ส่งช้า · เคลม: รอประสานงานขายพิจารณา · อนุมัติแล้ว · ไม่อนุมัติ · ยกเลิก</div>
-        <div class="border border-slate-200 rounded-lg p-2.5" style="background:var(--accent-soft)"><b>รหัสปลดล็อก</b> — ดูตัวอย่างได้ทุกหน้า · บันทึกจริงของประสานงานขาย บัญชี และผู้บริหารต้องกรอกรหัสปลดล็อกครั้งเดียวต่อเบราว์เซอร์ ช่องรหัสปลดล็อกอยู่ในหน้าต่างยืนยันของการบันทึกครั้งแรก กรอกแล้วกดยืนยันครั้งเดียว บันทึกทันที (หรือกรอกก่อนที่ปุ่ม "อ่านอย่างเดียว" ปลายขวาของแถวตำแหน่งหน้า โทรศัพท์: ฉัน → การบันทึกข้อมูล) หลังจากนั้นปุ่มแสดง "แก้ไขได้" · <b>บัญชีสาขา คลัง ฝ่ายวิเคราะห์ และครัวไม่ต้องปลดล็อก</b> ส่งใบตัดเบิก สั่งของ รับของได้ทันที · บัญชีเจ้าของสาขาดูได้อย่างเดียว ส่งข้อความถึงสำนักงานใหญ่ได้โดยไม่ต้องปลดล็อก</div>
-      </div>
-      <p class="text-xs mb-2" style="color:var(--text-secondary)"><b>หน้าที่เก็บไว้จากระบบเดิม</b> (หน้ารายงานทั้งหมด → วัตถุดิบและใบสั่งซื้อ · ตั้งค่า ย้ายมารวมกัน ไม่ได้ลบ): <b>แผนสั่งวัตถุดิบ (ระบบเดิม)</b> แผนสั่งแบบก่อนมียอดแนะนำรายรอบ ใช้ดูเทียบเท่านั้น · <b>ยอดซื้อเทียบยอดขาย</b> ยอดซื้อวัตถุดิบของแต่ละสาขาเทียบกับยอดขาย ดูว่าสาขาซื้อมากหรือน้อยผิดปกติ · <b>ขนาดบรรจุ</b> · ปฏิทินเทศกาลและวันหยุดอยู่ที่ ประสานงานขาย → ปฏิทินเทศกาลและวันหยุด · หน้าที่ใช้ประจำคือ ประสานงานขาย → <b>ใช้วัตถุดิบต่อยอดขาย</b> และ ยอดแนะนำรายรอบ</p>
-      <p class="text-xs font-semibold text-slate-700 mt-2 mb-1">แต่ละบทบาท: แผนกที่เห็น และงานประจำ</p>
-      <table id="manualSupplyRoles" class="text-xs w-full" style="border-collapse:collapse">
-        <tr style="color:var(--text-muted)"><th class="text-left py-1 pr-2">บทบาท</th><th class="text-left py-1 pr-2">แผนกของตนเอง (และหน้าในแผนก)</th><th class="text-left py-1">งานประจำ</th></tr>
-        <tr class="border-t border-slate-200" data-role="branch"><td class="py-1 pr-2">สาขา</td><td class="py-1 pr-2"><b class="chip">สาขา</b> (<i class="pg">ตัดเบิก</i> · <i class="pg">สั่งของ</i> · <i class="pg">รับของ</i> · <i class="pg">ส่วนต่างการใช้</i> · <i class="pg">นับของสิ้นเดือน</i>) · บนโทรศัพท์ หน้าแรกมีรายการ “ต้องทำวันนี้” และปุ่มใหญ่ 5 ปุ่ม แถบล่างมี 5 ปุ่ม: หน้าแรก · ตัดเบิก · สั่งของ · รับของ · ฉัน (ส่วนต่างการใช้และนับของสิ้นเดือนเปิดจากปุ่มใหญ่ในหน้าแรก) · ปุ่ม ตัวอักษรใหญ่ ที่หัวหน้าสาขาขยายตัวอักษร ×1.15 (จำค่าไว้ในเครื่อง) · ฉัน: โหมดมืด เปลี่ยนรหัสผ่าน คู่มือการใช้งาน การ์ด ติดตั้ง Oshinei บนหน้าจอ (ช่วยเพิ่มไอคอนบนหน้าจอโฮม) การ์ด แจ้งเตือนตอนเช้า และออกจากระบบ</td><td class="py-1">เปิดหน้าแรก: รายการ “ต้องทำวันนี้” บอกงานที่ค้าง (ตัดเบิก · สั่งของ · รับของ) แตะแถวเพื่อไปที่งาน · รอบที่เวลาส่งสุดท้ายเป็นวันอื่นไม่นับเป็นงานของวันนี้ แสดงเป็น “ถัดไป: รอบ … ส่งก่อน …” และไม่มีตัวเลขแจ้งเตือน · ทุกวัน: ตัดเบิก แล้วแตะ "ส่งใบตัดเบิก" (รายการที่ว่างถือว่าไม่ได้เบิก · ลืมรายการหลังส่ง แตะ "เบิกเพิ่ม" ในวันเดียวกัน) · ตัดเบิก สั่งของ และรับของกรอกในแอปหรือใช้แบบฟอร์ม Excel ก็ได้ ผลเหมือนกัน: "ดาวน์โหลดแบบฟอร์ม" → กรอก → "นำเข้าไฟล์" → ตรวจตาราง → "บันทึกไว้ก่อน" หรือปุ่มส่ง (ตัดเบิกครั้งละไม่เกิน 7 วัน) · ทุกรอบ: สั่งของ แล้วแตะ "ส่งใบสั่งซื้อ" ก่อน 13:15 สองวันก่อนวันส่ง (แถวบนสุดบอก “ส่งใบสั่งซื้อภายใน พฤ. 15/10 เวลา 13:15” และเวลาที่เหลือ · คำถามที่ขึ้นมาบอกจำนวนรายการ มูลค่า และเทียบรอบก่อน · วันที่ยังไม่ทำใบตัดเบิก จำนวนที่ควรสั่งหักของที่ควรเหลือตามค่าเฉลี่ยใบตัดเบิกของสาขาในวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน · จำนวนที่ควรสั่งต้องมีใบตัดเบิกที่ส่งแล้วอย่างน้อย 14 วันใน 8 สัปดาห์ ยังไม่ครบหน้าจอขึ้น “ใบตัดเบิกยังไม่พอ (N/14 วัน) · กรอกยอดสั่งเอง” สาขานำร่องจึงกรอกเองประมาณ 2 สัปดาห์แรก (ถึง ~15 พ.ย. 2569) เมื่อมีสาขาของบริษัทครบ 14 วันตั้งแต่ 2 สาขา ใช้ค่ากลางของสาขาเหล่านั้นต่อยอดขาย ฿100,000 ตามยอดขายที่คาด) · ของมาถึง: รับของ ตอบ "รับครบ" หรือ "มีรายการไม่ครบ" แล้ว "บันทึกรับของ" · รับปลาทั้งตัว (รายการที่ขายเป็นน้ำหนักแต่ใช้เป็นตัว): กรอกน้ำหนักที่ชั่งได้และจำนวนตัวที่ได้รับ เป็นจำนวนเต็ม (น้ำหนักน้อยกว่าที่คลังส่งไม่เกิน 3% ไม่ต้องแจ้งของขาด เกินกว่านั้นเลือกสาเหตุที่ขาด) · ขนาดแพ็คไม่ตรงกับทะเบียน: แตะ "ขนาดแพ็คไม่ตรง" ที่รายการนั้น กรอกขนาดที่มีจริง แล้ว "ส่งให้ฝ่ายวิเคราะห์" (ไม่กระทบการรับของ) · บันทึกใบรับของผิด: "ยกเลิกใบรับของ" ต้องระบุเหตุผล (ประสานงานขายเห็นเหตุผลนั้น) · พบของเสียภายหลัง: "แจ้งของขาด/เสีย" · ส่วนต่าง: ให้เหตุผลเฉพาะรายการที่ต่างมากและเป็นเงินตั้งแต่ ฿500 (รายการ “ข้อมูลไม่ครบ” ไม่ถาม) · นับของ: วันที่ 1 ของเดือนนับครบทุกรายการ ใส่ 0 ถ้าไม่มีของ ช่องว่างถือว่ายังไม่ได้นับ จึงส่งผลนับไม่ได้จนกว่าจะครบ (ปิดเดือนต้องนับ 100%) · นับเสริมรายสัปดาห์ของแพงเป็นการตรวจเสริม ปิดไว้เป็นค่าเริ่มต้น ไม่ใช่การปิดเดือน · <a href="/docs/pilot/branch_guide.html" target="_blank" style="color:var(--accent)">คู่มือสาขา</a></td></tr>
-        <tr class="border-t border-slate-200" data-role="warehouse"><td class="py-1 pr-2">คลัง</td><td class="py-1 pr-2"><b class="chip">คลัง</b> (<i class="pg">คิวใบสั่งซื้อ</i>) · คิวใบสั่งซื้อมีตัวกรอง รอยืนยันยอดส่ง · คลังจัดส่งแล้ว · ทั้งหมด (เริ่มที่ รอยืนยันยอดส่ง)</td><td class="py-1">เปิดหน้าแรก → งานของฉันวันนี้ หรือ คลัง → คิวใบสั่งซื้อ · ภายใน 14:00 ของวันตัดรอบ: เปิดใบ ใส่ "ส่งจริง" พร้อมเหตุผลเมื่อไม่ตรงกับที่สาขาสั่ง ใส่เลขที่ PO แล้วแตะ "ยืนยันยอดส่ง" (คำถามที่ขึ้นมาบอกสาขา รอบ วันส่ง และจำนวนรายการ) · บนโทรศัพท์ แถบ "ยืนยันยอดส่ง" ติดขอบล่างของจอ และปุ่ม "ส่งตามที่สาขายืนยันทั้งหมด" เติมทุกรายการที่ไม่ได้พิมพ์เอง (ช่องเหตุผลขึ้นเมื่อส่งจริงต่างจากที่สาขายืนยัน) · แก้ไขได้ที่ "บันทึกการแก้ไข" จนกว่าสาขาจะรับของ · <a href="/docs/pilot/warehouse_guide.html" target="_blank" style="color:var(--accent)">คู่มือคลัง</a></td></tr>
-        <tr class="border-t border-slate-200" data-role="salessupport"><td class="py-1 pr-2">ประสานงานขาย</td><td class="py-1 pr-2"><b class="chip">ประสานงานขาย</b> (<i class="pg">คิวใบสั่งซื้อ</i> · <i class="pg">เคลมสินค้า</i> · <i class="pg">ยอดแนะนำรายรอบ</i> · <i class="pg">ใบตัดเบิกสาขา</i> · <i class="pg">ผลต่างตัดเบิกรายวัน</i> · <i class="pg">ใช้วัตถุดิบต่อยอดขาย</i> · <i class="pg">ไฟล์ราคา</i> · <i class="pg">นำเข้าข้อมูลปิดงวด</i> · <i class="pg">รอบส่งของสาขา</i> · <i class="pg">ปฏิทินเทศกาลและวันหยุด</i> · <i class="pg">โซนจัดเก็บ</i> · <i class="pg">แจ้งเปลี่ยนรหัสสินค้า</i>)</td><td class="py-1">ทุกเช้า: ตามสาขาที่ยังไม่ส่งใบตัดเบิก เปิดแก้ไขใบเมื่อสาขาขอ (ต้องระบุเหตุผล) · พิจารณาเคลม (อนุมัติ / ไม่อนุมัติ) และอ่านใบรับของที่สาขายกเลิกใน 7 วันล่าสุดพร้อมเหตุผลที่หน้าเคลมสินค้า · ดูการใช้งานของทุกสาขาที่ <i class="pg">การใช้งานทุกสาขา</i> (ใบตัดเบิกตรงวัน · ส่งใบสั่งซื้อตรงเวลา · รับของบันทึกแล้ว ของ 7 วันล่าสุด สีเขียว ≥ 90% · เหลือง 60–89% · แดงต่ำกว่า 60% หรือไม่มีการใช้งาน · สาขาที่ยังไม่เริ่มใช้ระบบแสดง “ยังไม่เริ่มใช้ระบบ” ไม่เป็นสีแดง และรอบก่อนวันเริ่มใช้ระบบไม่นับ) แตะที่สาขาเพื่อเปิดใบตัดเบิกของสาขานั้น · ดาวน์โหลด Excel ของคิวแล้วแตะ "คีย์บัญชีแล้ว" · ต้นเดือน: ส่งไฟล์ราคาให้ฝ่ายวิเคราะห์ · ปิดงวด: นำเข้ารายงานไดกิโตะ กรุ๊ป และผลตรวจนับจากแบบฟอร์ม · ตั้งรอบส่งและโซนจัดเก็บ · ปฏิทินเทศกาลและวันหยุด: เพิ่มช่วงโปรโมชันหรืองานของสาขาพร้อม % ที่ลูกค้าเพิ่มจากวันปกติ (เว้นว่าง = ใช้ปีก่อน) วันหยุดราชการแสดงอ่านอย่างเดียว · วันที่สาขายังไม่ทำใบตัดเบิก ยอดแนะนำหักคงเหลือตามค่าเฉลี่ยใบตัดเบิกของสาขาในวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน · ผลต่างตัดเบิกรายวันเทียบกับที่สาขาใช้ปกติและเฉลี่ยทุกสาขา มีป้าย “เบิกต่ำกว่าปกติต่อเนื่อง” (ต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขาย) และงานตรวจสอบสาขาที่เบิกต่ำกว่าปกติ · ยอดแนะนำรายรอบมีคอลัมน์ที่มา 3 แบบ: คิดจากใบตัดเบิก N วัน · จากเฉลี่ยทุกสาขา k สาขา · ใบตัดเบิกยังไม่พอ (n/14 วัน) · จำนวนที่ควรสั่งต้องมีใบตัดเบิกที่ส่งแล้วอย่างน้อย 14 วันใน 8 สัปดาห์ ยังไม่ครบหน้าจอขึ้น “ใบตัดเบิกยังไม่พอ (N/14 วัน) · กรอกยอดสั่งเอง” สาขานำร่องจึงกรอกเองประมาณ 2 สัปดาห์แรก (ถึง ~15 พ.ย. 2569) เมื่อมีสาขาของบริษัทครบ 14 วันตั้งแต่ 2 สาขา ใช้ค่ากลางของสาขาเหล่านั้นต่อยอดขาย ฿100,000 ตามยอดขายที่คาด · โหมดเต็มระบบ (Phase 2): สาขาใหม่ที่ขายไม่ถึง 14 วัน สาขาอ้างอิงเริ่มต้นคือ “ค่ากลางสาขาของบริษัท” เลือกสาขาอ้างอิงเป็นรายสาขาหรือ “ไม่ใช้” ได้ที่ <i class="pg">รอบส่งของสาขา</i> · ค่ากลางสาขาของบริษัท (4 สาขาที่เลือกไว้ ใช้เป็นเกณฑ์เทียบ ไม่ใช่ “เฉลี่ยทุกสาขา” ของโหมดสต๊อก ซึ่งใช้ทุกสาขาของบริษัทที่มีใบตัดเบิกครบ 14 วัน): ที่ <i class="pg">รอบส่งของสาขา</i> กรอบ “สาขาของบริษัทที่ใช้เป็นค่ากลาง” เลือกสาขาที่บริษัทดำเนินการเอง (ค่าเริ่มต้น อุบลราชธานี อุดรธานี โคราช1 สุรินทร์) ค่ากลางคือมัธยฐานของสาขาที่เลือก ใช้เป็นเกณฑ์เทียบ และตั้ง “ช่วงยอมรับสำหรับสต็อกต้นงวดและปลายงวด” (ค่าเริ่มต้น 15% ใช้ชั่วคราวจนกว่าจะมีผลตรวจนับปลายงวดครบทุกสาขา) · ดูปริมาณวัตถุดิบต่อยอดขาย ฿100,000 รายสาขา เทียบค่ากลาง และทั้งเครือที่ <i class="pg">ใช้วัตถุดิบต่อยอดขาย</i> สาขาที่ไม่อยู่ในค่ากลางและมีมูลค่าซื้อจากไดกิโตะ กรุ๊ปต่อยอดขาย ฿100,000 ต่ำกว่าค่ากลางเกินช่วงยอมรับมีป้าย “ต่ำกว่าค่ากลาง · อาจซื้อจากภายนอก” (ยอดซื้อมาจากไฟล์ราคารายสาขา ถ้าไม่มีใช้ใบสั่งซื้อที่คลังจัดส่งแล้ว) สาขาที่ไม่มียอดซื้อแสดงว่า “ยังไม่มียอดซื้อจากไดกิโตะ กรุ๊ป ในช่วงนี้” · รหัสสินค้าเปลี่ยนในระบบอื่น (บัญชี คลัง ผู้จำหน่าย): ที่ <i class="pg">แจ้งเปลี่ยนรหัสสินค้า</i> กรอกรหัสใหม่ เลือกระบบและวัตถุดิบเดิม (ใส่ชื่อตามระบบอื่นแล้วกด “ค้นหาวัตถุดิบที่ใกล้เคียง” เพื่อดูรายการแนะนำ) แล้วกด “ส่งให้ฝ่ายวิเคราะห์” รหัสในทะเบียนและสูตรไม่เปลี่ยน ทะเบียนเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น · ไฟล์ราคาและรายงานไดกิโตะ กรุ๊ปที่มีรหัสที่ทะเบียนไม่รู้จัก: เลือกรายการละรหัสว่าเป็นรหัสใหม่ของวัตถุดิบเดิม (ส่งเป็นคำขอให้ฝ่ายวิเคราะห์ และรหัสนั้นยังไม่ถูกนำเข้าในครั้งนั้น) หรือเป็นวัตถุดิบใหม่ ไม่มีรหัสใดถูกเพิ่มเอง · งาน “ตรวจคงเหลือตามระบบ: สาขา · วัตถุดิบ” ที่หน้างาน เกิดเมื่อสาขาสั่งน้อยกว่ายอดแนะนำเพราะของจริงมากกว่าคงเหลือตามระบบ ตั้งแต่ 3 รอบของรายการเดียวในเดือนเดียว ตรวจใบตัดเบิกและใบรับของของรายการนั้นกับสาขา แล้วกด “รับทราบแล้ว” · <a href="/docs/pilot/salessupport_guide.html" target="_blank" style="color:var(--accent)">คู่มือประสานงานขาย</a></td></tr>
-        <tr class="border-t border-slate-200" data-role="operation"><td class="py-1 pr-2">ฝ่ายปฏิบัติการ</td><td class="py-1 pr-2"><b class="chip">ปฏิบัติการ</b> (<i class="pg">สรุปประจำวัน</i> · <i class="pg">ภาพรวมและตัวชี้วัด</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">แนวโน้ม</i> · <i class="pg">รายงานปฏิบัติการ</i> · <i class="pg">ส่วนลด</i> · <i class="pg">เงินสดขาด/เกิน</i> · <i class="pg">บิลยกเลิก</i> · <i class="pg">พนักงาน</i> · <i class="pg">ตรวจสอบการสั่ง</i> · <i class="pg">ใบตัดเบิกสาขา</i> · <i class="pg">ผลต่างตัดเบิกรายวัน</i> · <i class="pg">การใช้งานทุกสาขา</i> · <i class="pg">ข้อความจากเจ้าของสาขา</i>) · ใช้วัตถุดิบต่อยอดขายเปิดได้จากค้นหา</td><td class="py-1">ดูว่าสาขาสั่งตามยอดแนะนำหรือไม่ (ยอดแนะนำ · สาขายืนยัน · ส่งจริง · รับจริง) ทำใบตัดเบิกครบหรือไม่ และเบิกเกินที่สาขาใช้ปกติหรือเฉลี่ยทุกสาขาติดต่อกันหรือไม่ · ดูปริมาณวัตถุดิบต่อยอดขาย ฿100,000 ของแต่ละสาขาที่ <i class="pg">ใช้วัตถุดิบต่อยอดขาย</i> · ปิดงวดเดือนจบที่ใบสรุปตัดเบิกและกระทบยอด (ระบบเทียบนับจริง) · ที่ <i class="pg">ตรวจสอบการสั่ง</i> ตาราง “ผลของการสั่งจริง” ต่อสาขาต่อเดือน: วันที่ของพอใช้เมื่อรอบส่งถัดไปถึง (มัธยฐาน) กับจำนวนรายการที่หมดก่อนรอบถัดไป มี Excel แผ่นงานที่ 3 และอยู่ที่ <i class="pg">ความพร้อมและผลนำร่อง</i> ข้างความแม่นยำของยอดแนะนำ · งาน “ทบทวนการตรวจนับ: สาขา” (สาขาให้เหตุผล “ตรวจนับผิด” ตั้งแต่ 3 รายการในเดือน) แสดงที่หน้างาน กด “รับทราบแล้ว” เมื่ออบรมแล้ว · <i class="pg">ข้อความจากเจ้าของสาขา</i>: อ่านและตอบคำถามของเจ้าของสาขาร่วมกับผู้บริหาร ปิดหรือเปิดหัวข้ออีกครั้งได้</td></tr>
-        <tr class="border-t border-slate-200" data-role="analyst"><td class="py-1 pr-2">ฝ่ายวิเคราะห์</td><td class="py-1 pr-2"><b class="chip">ฝ่ายวิเคราะห์</b> (<i class="pg">ไฟล์ราคา</i> · <i class="pg">ราคารายเดือน</i> · <i class="pg">ต้นทุนต่อจาน</i> · <i class="pg">ทะเบียนวัตถุดิบ</i> · <i class="pg">หน่วยและการแปลง</i> · <i class="pg">ภาพรวมและตัวชี้วัด</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">แนวโน้ม</i> · <i class="pg">GP รายสาขา</i> · <i class="pg">P&L รายสาขา</i> · <i class="pg">ส่วนลด</i> และต้นทุน กำไร เมนู อีก 14 หน้าในแผนกเดียวกัน) · งานกลางของวัตถุดิบ (คิวใบสั่งซื้อ ใบตัดเบิกสาขา ปิดงวดเดือน) เปิดได้จากค้นหาหรือหน้ารายงานทั้งหมด</td><td class="py-1">ต้นเดือน: ทำตามลำดับงานของแผนก ฝ่ายวิเคราะห์ (ไฟล์ราคา → ราคารายเดือน → ต้นทุนต่อจาน) · ที่ ราคารายเดือน แตะ "ดูตัวอย่าง" ของไฟล์ที่ประสานงานขายส่งมา แล้วนำเข้า หรือ "ส่งกลับ" พร้อมเหตุผล · บันไดหน่วย: ที่ <i class="pg">หน่วยและการแปลง</i> ตั้งหน่วยของวัตถุดิบได้ไม่เกิน 3 หน่วย แต่ละหน่วยเทียบกับหน่วยถัดลงไป (เช่น 1 กล่อง = 10 แพ็ค และ 1 แพ็ค = 1,000 กรัม) · ชนิด “เฉลี่ย” ใช้กับของที่แต่ละชิ้นหนักไม่เท่ากัน (1 ตัว ≈ 4.5 กิโลกรัม ช่วง 4–5) ผลที่ผ่านขั้นเฉลี่ยแสดงเครื่องหมาย ≈ · ดาวน์โหลดแม่แบบหน่วย (Excel) กรอก แล้วนำเข้า (ดูตัวอย่างก่อนบันทึก) · ค่าเฉลี่ยจากการรับจริง: ที่ <i class="pg">หน่วยและการแปลง</i> การ์ด “ค่าเฉลี่ยจากการรับจริง (90 วัน)” แสดงน้ำหนักเฉลี่ยต่อตัวจากจำนวนตัวที่สาขานับตอนรับ เสนอเมื่อรับอย่างน้อย 3 ครั้ง นับได้ 10 ตัวขึ้นไป และต่างจากค่าที่ใช้ตั้งแต่ 3% · “ใช้ค่านี้” หรือ “คงค่าเดิม” (ต้องระบุเหตุผล) ค่าเฉลี่ยเปลี่ยนเมื่อฝ่ายวิเคราะห์อนุมัติเท่านั้น และเดือนที่ประกาศใช้แล้วไม่เปลี่ยน · ขนาดบรรจุที่สาขาแจ้ง: การ์ด “ขนาดบรรจุที่สาขาแจ้ง” ตรวจกับฉลากแล้ว “ใช้ค่านี้” (ปรับบันไดหน่วย) หรือ “ไม่ใช้” พร้อมเหตุผลที่สาขาอ่านได้ · งานทั้งสองแสดงที่ หน้างาน · ใช้วัตถุดิบต่อยอดขาย: ที่ <i class="pg">ใช้วัตถุดิบต่อยอดขาย</i> ดูปริมาณวัตถุดิบต่อยอดขาย ฿100,000 (ไม่รวมภาษีมูลค่าเพิ่ม) รายสาขา เทียบกับช่วงก่อนหน้า มีไฟล์ Excel สองแผ่น (ต่อยอดขาย 100000 · เทียบสาขา) อ่านจากใบตัดเบิกที่ส่งแล้ว รายการที่แกว่งเกิน ±15% ต่อสัปดาห์ถือว่าใช้ไม่สม่ำเสมอ · เทียบค่ากลาง: หน้าเดียวกันแสดงแถว “ค่ากลางสาขาของบริษัท” (มัธยฐานของสาขาที่เลือกไว้ที่ รอบส่งของสาขา) “การใช้ตามสูตรเทียบค่ากลาง” ของทุกสาขาและทุกรายการ และ “ยอดซื้อเทียบค่ากลาง” ของทุกสาขา ส่วน “ทั้งเครือ” ยังอยู่เป็นผลรวมทุกสาขา · รหัสใหม่ของวัตถุดิบเดิม: รหัสในทะเบียนที่สูตรใช้ไม่เปลี่ยน รหัสใหม่จากระบบบัญชี คลัง หรือผู้จำหน่ายเป็น “รหัสในระบบอื่น” ของวัตถุดิบเดิม · ที่ <i class="pg">ทะเบียนวัตถุดิบ</i> การ์ด “รหัสใหม่ที่รออนุมัติ” แสดงคำขอจากประสานงานขาย กด “ใช้” (บันทึกเป็นรหัสในระบบอื่นและตั้งเป็นรหัสปัจจุบันของระบบนั้น สูตรไม่ต้องแก้) หรือ “ไม่ใช้” พร้อมเหตุผลที่ประสานงานขายอ่านได้ · ใต้รหัสของแต่ละแถวมี “รหัสในระบบอื่น” ใช้ดู เพิ่ม ตั้งเป็นรหัสปัจจุบัน หรือเลิกใช้ (รหัสที่เลิกใช้เก็บไว้ ไม่ลบ และไม่ใช้รับไฟล์เข้าอีก) ค้นหาด้วยรหัสในระบบอื่นได้ · ไฟล์ราคา รายงานไดกิโตะ กรุ๊ป และไฟล์ทะเบียนที่มีรหัสที่ทะเบียนไม่รู้จักไม่ถูกเพิ่มเอง: ระบบแสดงวัตถุดิบที่ชื่อใกล้เคียงสูงสุด 3 รายการ แล้วเลือกรายการละรหัสว่าเป็นรหัสใหม่ของวัตถุดิบเดิม (บันทึกทันที) หรือเป็นวัตถุดิบใหม่ · ไฟล์ที่ส่งให้ระบบบัญชี (ใบสั่งซื้อที่คลังจัดส่งแล้ว ใบตัดเบิก ใบสรุปตัดเบิก) แสดงรหัสที่ระบบบัญชีใช้อยู่ และมีคอลัมน์ “รหัสในทะเบียน” ท้ายตารางเมื่อรหัสต่างจากทะเบียน · งาน “ตรวจรหัสใหม่ที่ประสานงานขายแจ้ง” แสดงที่หน้างาน · การ์ด “ข้อมูลตั้งต้นที่ยังว่าง” ที่หน้างาน นับของสด / แช่เย็นที่ยังไม่มีอายุการเก็บ รายการที่ยังไม่มีขั้นต่ำการสั่ง และเนื้อสัตว์ / ผักที่สูญเสีย 0% เรียงตามมูลค่าที่ซื้อ แตะเพื่อเปิดทะเบียนวัตถุดิบเฉพาะกลุ่มนั้น กรอกอายุเก็บ ขั้นต่ำสั่ง ระยะส่ง และสูญเสีย % ในตารางได้ ระบบไม่เติมค่าให้ · ช่องทางสั่งที่เว้นว่างถือว่าสั่งจากไดกิโตะ กรุ๊ป (“สาขาซื้อเอง” = สาขาจัดซื้อเอง) · ยอดแนะนำไม่เกินอายุการเก็บ และสั่งให้พอเพิ่มเมื่อระยะส่งของรายการยาวกว่ามาตรฐานของรอบ · วันที่คลังส่งไม่ครบ (ผู้จำหน่ายสินค้าขาดหรือเปลี่ยนเป็นสินค้าทดแทน) ไม่นับในค่าเฉลี่ยของรายการ · บรรจุภัณฑ์ใหญ่ (ตั้งแต่ 5 กิโลกรัม หรือหน่วยย่อยตั้งแต่ 10) ปัดลงเมื่อเศษน้อยกว่า 20% และสำรองครอบคลุม ป้าย “ปัดลง (เหลือพอ)” · ที่ <i class="pg">รอบส่งของสาขา</i> การ์ด “เกณฑ์ผลต่างและการตรวจนับ” ตั้งผลต่างขั้นต่ำที่สาขาต้องให้เหตุผล (ค่าเริ่มต้น ฿500) และเปิดหรือปิดการตรวจนับหมุนเวียน</td></tr>
-        <tr class="border-t border-slate-200" data-role="innovation"><td class="py-1 pr-2">ครัว</td><td class="py-1 pr-2"><b class="chip">ครัว</b> (<i class="pg">ทะเบียนวัตถุดิบ</i> · <i class="pg">ต้นทุนต่อจาน</i> · <i class="pg">วิเคราะห์เมนู</i> · <i class="pg">เป้าลดต้นทุน</i>) · ทะเบียนวัตถุดิบและต้นทุนต่อจานดูอย่างเดียว</td><td class="py-1">ที่ ครัว → ทะเบียนวัตถุดิบ: ดูอย่างเดียว · ต้นทุนต่อจาน: ต้นทุนของเมนูตามราคาเดือนนี้ ใช้ดูผลของสูตร · หน้าสูตรของครัวอยู่ใน ภาคผนวก: ส่วนสูตร (Phase 2)</td></tr>
-        <tr class="border-t border-slate-200" data-role="accounting"><td class="py-1 pr-2">บัญชี</td><td class="py-1 pr-2"><b class="chip">บัญชี</b> (<i class="pg">ใบสรุปตัดเบิก</i> · <i class="pg">ราคารายเดือน</i> · <i class="pg">ยอดขายรายวัน</i> · <i class="pg">GP รายสาขา</i> · <i class="pg">P&L รายสาขา</i> · <i class="pg">P&L เชิงลึก</i> · <i class="pg">เงินสดขาด/เกิน</i> · <i class="pg">ส่วนลด</i>) · ราคารายเดือนดูอย่างเดียว</td><td class="py-1">ต้นเดือนถัดไป: ที่ บัญชี → ใบสรุปตัดเบิก เลือกเดือน ตัวกรองเริ่มที่ ยังไม่เสร็จ (พร้อมบันทึก และ รอสาขาส่ง) ที่แถวสาขา แตะ ดาวน์โหลด (หรือ ดาวน์โหลดทุกสาขาที่พร้อม) แล้วแตะ "บันทึกเข้าระบบบัญชีแล้ว" ซึ่งล็อกงวดนั้น แถวที่บันทึกแล้วซ่อนไว้ ดูที่ตัวกรอง บันทึกแล้ว (ยกเลิกการบันทึกที่ลิงก์ในแถว) · ไฟล์ Excel แสดงรหัสที่ระบบบัญชีใช้อยู่ ถ้ารหัสต่างจากทะเบียนจะมีคอลัมน์ “รหัสในทะเบียน” ท้ายตาราง · <a href="/docs/pilot/accounting_guide.html" target="_blank" style="color:var(--accent)">คู่มือบัญชี</a></td></tr>
-        <tr class="border-t border-slate-200" data-role="management"><td class="py-1 pr-2">ผู้บริหาร</td><td class="py-1 pr-2"><b class="chip">ผู้บริหาร</b> · <b class="chip">การตลาด</b> · <b class="chip">ปฏิบัติการ</b> · <b class="chip">ฝ่ายวิเคราะห์</b> · <b class="chip">ครัว</b> · <b class="chip">ประสานงานขาย</b> · <b class="chip">คลัง</b> · <b class="chip">บัญชี</b> · <b class="chip">สาขา</b> (เห็นทุกแผนก ทุกหน้า ดู แผนที่เมนูตามแผนก) · หน้าที่เก็บไว้จากระบบเดิมอยู่ที่ หน้ารายงานทั้งหมด</td><td class="py-1">ดูสถานะปิดงวดเดือน · ดูภาพรวมใบตัดเบิกและผลต่างของทุกสาขา · <i class="pg">ข้อความจากเจ้าของสาขา</i> (แผนกผู้บริหาร): อ่านและตอบคำถามของเจ้าของสาขาทุกสาขา กรองตามสาขาและสถานะ ปิดหัวข้อเมื่อตอบครบ เปิดอีกครั้งได้ · ตัวเลขสีแดงบนไอคอนคือจำนวนหัวข้อที่ยังไม่ได้อ่าน · เมื่อเจ้าของสาขาส่งข้อความ เครื่องของผู้บริหารที่เปิดรับการแจ้งเตือน “ข้อความจากเจ้าของสาขา” ได้รับแจ้ง</td></tr>
-        <tr class="border-t border-slate-200" data-role="franchise"><td class="py-1 pr-2">เจ้าของสาขา</td><td class="py-1 pr-2"><b class="chip">เจ้าของสาขา</b> (<i class="pg">ร้านของฉัน</i>) · หน้าเดียว ไม่มีช่องเลือกสาขา</td><td class="py-1">เข้าสู่ระบบแล้วเปิดหน้านี้ทันที · ดูผลของสาขาตนเองรายเดือน (ดูอย่างเดียว): สรุป ดี / ควรดู / ต้องแก้ · ยอดขาย · เป้ายอดขาย · ยอดขายรายวัน · กำไรขั้นต้น (ต้นทุนอาหารเป็นค่าต่ำสุด) · แนวโน้ม 12 เดือน · วัตถุดิบ · วินัยของสาขา · วัตถุดิบจากส่วนกลาง (ยอดสั่งและยอดที่คลังจัดส่งรายรอบ ยอดซื้อเทียบยอดขาย เคลมสินค้า ส่งหลังเวลาส่งสุดท้าย วัตถุดิบที่ใช้เกินสูตร 5 อันดับ) · เมนูขายดี · สัดส่วนการขาย (ประเภท ระดับราคาบุฟเฟ่ต์ ช่องทาง) · ช่วงเวลาขายดี (ชั่วโมง วัน×ชั่วโมง) · การควบคุม (ส่วนลดเทียบเพดาน บิลยกเลิก เงินสดขาด/เกิน เป็นจำนวนและบาทเท่านั้น) · เสียงลูกค้า (คะแนน รีวิวล่าสุด) · รับแจ้งเตือนทุกเช้า 08:30 บนเครื่องของตนเอง · <b>ติดต่อสำนักงานใหญ่</b> (การ์ดบนสุด): ส่งคำถามใหม่ เลือกหัวข้อ หรือกด สอบถามเรื่องนี้ ข้างรายการควรดู / ต้องแก้ อ่านคำตอบและตอบกลับ ตัวเลขสีแดงที่ปุ่มหน้าแรกคือคำตอบที่ยังไม่ได้อ่าน ข้อความที่ส่งแล้วแก้ไขหรือลบไม่ได้ วันละไม่เกิน 20 ข้อความ ไม่ต้องใช้รหัสปลดล็อก · ปุ่ม ดาวน์โหลดรายงานเดือนนี้ (Excel 5 แผ่นงาน รวมแผ่นวัตถุดิบ) · พิมพ์เป็น A4 จากเบราว์เซอร์ · <a href="/docs/pilot/owner_guide.html" target="_blank" style="color:var(--accent)">คู่มือเจ้าของสาขา</a></td></tr>
-      </table>
-      <p class="text-[11px] mt-1" style="color:var(--text-muted)">ใบสั่งซื้อและเคลมบนหน้าจอเรียกด้วยสาขา รอบ และวันส่ง เช่น “เชียงใหม่ · รอบ 2 (ส่ง 17/10)” ส่วนเคลมต่อท้ายว่า “แจ้ง 12/10 14:05” และ “ครั้งที่ 2” เมื่อใบสั่งซื้อเดียวกันมีเคลมตั้งแต่ 2 เรื่อง ไม่มีเลขที่ของระบบบนหน้าจอ · เลขที่ใบสั่งซื้อยังอยู่ในไฟล์ Excel ที่ใช้คีย์เข้าระบบบัญชี</p>
-      <p class="text-[11px] mt-1" style="color:var(--text-muted)">การแจ้งเตือนบนมือถือ (บัญชีสาขา คลัง ประสานงานขาย ฝ่ายปฏิบัติการ บัญชี): เปิดหน้างานบนมือถือ แตะ <b>เปิดการแจ้งเตือน</b> ในการ์ด “รับการแจ้งเตือนบนมือถือ” (iPhone ต้องเพิ่มระบบไปยังหน้าจอโฮมก่อน ทำครั้งเดียวต่อเครื่อง และใช้กับบัญชีสาขาที่เปิดใช้งานทุกบัญชี) · 08:00 ทุกเช้า สาขาได้รับงานของวันนี้ของสาขาตนเอง และฝ่ายอื่นได้รับงานค้างที่เป็นของฝ่าย (คลัง: ใบสั่งซื้อค้างคิว · ประสานงานขาย: เคลม ใบตัดเบิกที่ยังไม่ส่ง ใบสั่งซื้อที่ยังไม่คีย์บัญชี · ฝ่ายปฏิบัติการ: เบิกเกินปกติติดต่อกัน · บัญชี: ใบสรุปตัดเบิกที่รอบันทึก) · 11:00 สาขาที่ยังไม่ส่งใบสั่งซื้อของรอบที่ตัดรอบวันนี้ ได้รับการเตือนก่อนเวลา 13:15 อีก 2 ชั่วโมง · 13:15 ประสานงานขายได้รับรายชื่อสาขาที่ส่งไม่ทัน · แตะการแจ้งเตือนเพื่อเปิดหน้าที่เกี่ยวข้อง · ปิดเฉพาะชนิดนี้ได้ที่การ์ดเดียวกัน · Telegram เป็นช่องทางเสริมที่ผู้ดูแลระบบตั้งค่าเพิ่มได้ ขณะนี้ยังไม่ได้ตั้งค่า</p>
-      <p class="text-[11px] mt-1" style="color:var(--text-muted)">บัตรงานสำหรับพนักงานสาขา (พิมพ์ A4 หนึ่งหน้าต่อหนึ่งงาน): <a href="/docs/pilot/cards/card_issue.pdf" target="_blank" style="color:var(--accent)">ตัดเบิก</a> · <a href="/docs/pilot/cards/card_order.pdf" target="_blank" style="color:var(--accent)">สั่งของ</a> · <a href="/docs/pilot/cards/card_receive.pdf" target="_blank" style="color:var(--accent)">รับของและแจ้งของขาด/เสีย</a> · <a href="/docs/pilot/cards/card_count.pdf" target="_blank" style="color:var(--accent)">นับของสิ้นเดือน</a></p>
-      <p class="text-[11px] mt-1" style="color:var(--text-muted)">คู่มือฉบับสั้นของแต่ละบทบาทอยู่ที่ /docs/pilot/ · ปุ่มที่ไม่ใช่งานของบทบาทจะไม่แสดง บทบาทที่ต้องการสิทธิ์เพิ่ม แจ้งผู้ดูแลระบบ · คู่มือการทำงานฉบับเต็ม (WP-SCM-001 ตาม ISO 9001 และ COSO): <a href="/docs/sop/WP-SCM-001_ingredient_order_procedure.pdf" target="_blank" style="color:var(--accent)">PDF</a> · <a href="/docs/sop/WP-SCM-001_ingredient_order_procedure.html" target="_blank" style="color:var(--accent)">หน้าเว็บ</a> · สไลด์ฝึกอบรม (151 หน้า): <a href="/docs/sop/Oshinei_BoM_training_deck.pdf" target="_blank" style="color:var(--accent)">PDF ชุดเต็ม</a> · แยกตามแผนก: <a href="/docs/sop/training/Oshinei_BoM_training_brn.pdf" target="_blank" style="color:var(--accent)">สาขา</a> · <a href="/docs/sop/training/Oshinei_BoM_training_wh.pdf" target="_blank" style="color:var(--accent)">คลัง</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ss.pdf" target="_blank" style="color:var(--accent)">ประสานงานขาย</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ana.pdf" target="_blank" style="color:var(--accent)">ฝ่ายวิเคราะห์</a> · <a href="/docs/sop/training/Oshinei_BoM_training_kit.pdf" target="_blank" style="color:var(--accent)">ครัว</a> · <a href="/docs/sop/training/Oshinei_BoM_training_acc.pdf" target="_blank" style="color:var(--accent)">บัญชี</a> · <a href="/docs/sop/training/Oshinei_BoM_training_ops.pdf" target="_blank" style="color:var(--accent)">ปฏิบัติการ</a> · <a href="/docs/sop/training/Oshinei_BoM_training_mgmt.pdf" target="_blank" style="color:var(--accent)">ผู้บริหาร</a> · <a href="/docs/sop/training/Oshinei_BoM_training_own.pdf" target="_blank" style="color:var(--accent)">เจ้าของสาขา</a></p>
-    </div>
-    <div class="mb-3">
-      <p class="text-sm font-bold text-slate-700 mb-1.5">เครื่องมือ</p>
-      <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-xs">
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>คู่มือ</b> — หน้านี้</div>
-        <div class="border border-slate-200 rounded-lg p-2.5"><b>ตั้งค่า</b> — เป้า, ต้นทุน, สาขา, ชั่วโมงเปิด, วันปิด, การใช้งานจริง, ผู้ใช้ (admin)</div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Common workflows -->
-  <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">Workflow ที่ใช้บ่อย</h3>
-    <div class="space-y-3">
-      <div class="p-3 rounded-lg bg-emerald-50 border-l-4 border-emerald-500">
-        <p class="font-semibold text-emerald-900 text-sm">A. ลด Food Cost % ของเครือ</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>ไป <b>บุฟเฟ่ต์ → Buffet Performance → เมนูเสิร์ฟเยอะ×ต้นทุน</b> หาเมนูที่เสิร์ฟเยอะ+แพง (เป้าหลัก)</li>
-          <li>หรือดูที่ <b>เมนู&ต้นทุน → BoM Cost → ภาพรวม</b> ดู food cost % ตอนนี้</li>
-          <li>ไป <b>เครื่องมือ → Settings → Cost Management → Recalibration</b></li>
-          <li>ตั้ง Target food cost % = 65 → กด Refresh → ดู Suggested unit_cost</li>
-          <li>กด "Use all suggested" หรือแก้ทีละตัว → Save</li>
-          <li>กลับมาเช็คผลที่ <b>BoM Cost Analysis</b></li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-sky-50 border-l-4 border-sky-500">
-        <p class="font-semibold text-sky-900 text-sm">B. หา root cause ทำไมสาขาขาดทุน</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>สาขา&P&L → GP รายสาขา</b> → ดู ต้นทุนอาหาร % เทียบเป้า 58% (ตั้งค่า → ค่าเริ่มต้น)</li>
-          <li>เลือกสาขาที่ topbar → <b>P&L รายสาขา</b> → ดู 60 เมนูขับต้นทุน + top ingredients ของสาขานั้น</li>
-          <li>เทียบกับสาขาอื่น ที่ <b>เมนู&ต้นทุน → BoM Cost → เปรียบเทียบ</b></li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-fuchsia-50 border-l-4 border-fuchsia-500">
-        <p class="font-semibold text-fuchsia-900 text-sm">C. จำลอง "ถ้าลดราคาวัตถุดิบจะกำไรเพิ่มเท่าไร"</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>BoM Cost → Simulator</b></li>
-          <li>เลือก SKU ที่อยากปรับ (เช่น แซลมอน A0033)</li>
-          <li>แก้ "Scenario cost" → ดูตัวเลข KPI panel ขวาเปลี่ยนทันที (Live preview)</li>
-          <li>ใช้ปุ่ม "−10%" หรือ "ตั้งเป้า Food% = 60" เพื่อ bulk ปรับ</li>
-          <li>กด "Save scenario" ตั้งชื่อเก็บไว้ → เอาไปคุยกับผู้จำหน่าย</li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-rose-50 border-l-4 border-rose-500">
-        <p class="font-semibold text-rose-900 text-sm">D. หาลูกค้าที่ "กินจนขาดทุน" + คุมการหมุนโต๊ะ (ใหม่)</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>บุฟเฟ่ต์ → ผลงานบุฟเฟ่ต์ → กำไร & P&L</b> เลื่อนลงหา <b>Heavy-Eater Margin Tail</b></li>
-          <li>ดู <b>% หัวที่ขาดทุน</b> และ <b>มูลค่าที่เสียไป</b> — ตารางขนาดโต๊ะบอกว่ากลุ่มไหนเสี่ยง (เช่น โต๊ะ 1 คน ขาดทุนสูงสุด)</li>
-          <li>เลือกสาขาที่ topbar เพื่อเจาะเฉพาะสาขา → ดูสาขาที่ % ขาดทุนสูง</li>
-          <li>ที่ <b>Turn-Time & Table Throughput</b> หาสาขาธงแดง (นั่งนาน+กำไรต่ำ) → พิจารณาคุม portion วัตถุดิบแพง หรือกำหนดเวลานั่ง</li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-amber-50 border-l-4 border-amber-500">
-        <p class="font-semibold text-amber-900 text-sm">E. Export รายงาน Monthly Pack ส่งผู้บริหาร</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>กด <b>Export Monthly Pack</b> ที่ topbar (ข้าง Print)</li>
-          <li>เลือกเดือน + รูปแบบ (Excel หรือ PDF)</li>
-          <li>Excel: 6 sheets (Summary / P&L per Branch / Top 50 Cost Drivers / BoM Ingredients / Alerts / Action Items)</li>
-          <li>PDF: 10 หน้า มี charts embedded</li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-teal-50 border-l-4 border-teal-500" id="manualCloseSteps">
-        <p class="font-semibold text-teal-900 text-sm">F. ปิดงวดเดือน (ฝ่ายวิเคราะห์ · ประสานงานขาย · สาขา · บัญชี · ฝ่ายปฏิบัติการ)</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>นำเข้ารายงานไดกิโตะ กรุ๊ปประจำเดือน (รายงานและรายการรับของของเดือน) — ประสานงานขาย ที่ <b>ประสานงานขาย → นำเข้าข้อมูลปิดงวด</b> ไฟล์เดียว ดูตัวอย่าง ติ๊กสาขาที่จะบันทึกใบรับของ แล้วบันทึก · สาขาบันทึกรับของเองก็ได้</li>
-          <li>จับคู่รหัสเดิมกับรหัสสินค้าของไดกิโตะ กรุ๊ป — ฝ่ายวิเคราะห์และประสานงานขาย ในหน้าเดียวกัน</li>
-          <li>ใบตรวจนับต้นงวดและปลายงวด — สาขานับของในแอป หรือประสานงานขายนำเข้าไฟล์ใบนับของ นับครั้งแรกก่อนนับสิ้นเดือนเสมอ · ทุกเดือนปิดด้วยการนับของครบทุกรายการเท่านั้น (มติเจ้าของ 13/10/2026) ไฟล์หรือหน้าจอที่ยังมีรายการไม่ได้นับ ส่งไม่ได้ (บันทึกไว้ก่อนได้)</li>
-          <li>แจ้งว่าบันทึกรับของครบและระบุเหตุผลของส่วนต่าง — สาขา (ประสานงานขายหรือฝ่ายวิเคราะห์ทำแทนได้) ที่ <b>สาขา → ส่วนต่างการใช้</b> (แถบสิ้นเดือน)</li>
-          <li>ดาวน์โหลดใบสรุปตัดเบิกและบันทึกเข้าระบบบัญชี — บัญชี ที่ <b>บัญชี → ใบสรุปตัดเบิก</b> แล้วแตะ "บันทึกเข้าระบบบัญชีแล้ว" งวดนั้นล็อก</li>
-        </ol>
-        <p class="text-[11px] mt-1" style="color:var(--text-muted)">ปิดงวดเดือนในโหมดสต๊อกมี 5 ขั้น เหมือนกันทั้งในหน้าปิดงวดเดือนและหน้างาน จบที่ใบสรุปตัดเบิก · หน้างานแสดงว่าถึงขั้นไหนและรอใคร สถานะของแต่ละขั้น: เสร็จแล้ว · รอทำ · รอขั้นตอนก่อนหน้า · โหมดเต็มระบบมี 9 ขั้น (เพิ่มสูตรเวอร์ชันที่มีผลเป็นขั้นแรก และสรุปผลต่างรายเดือนเป็นขั้นท้าย ดู ภาคผนวก: ส่วนสูตร (Phase 2))</p>
-      </div>
-      <div class="p-3 rounded-lg bg-indigo-50 border-l-4 border-indigo-500" id="manualDishCost">
-        <p class="font-semibold text-indigo-900 text-sm">H. ต้นทุนต่อจานรายเดือน (ฝ่ายวิเคราะห์)</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li>ผู้นำเข้า: ฝ่ายวิเคราะห์ ที่ <b>ฝ่ายวิเคราะห์ → ต้นทุนต่อจาน</b> · ไม่มีขั้นประกาศใช้หรือรับทราบ</li>
-          <li>เมื่อ: ทุกเดือน เริ่มเดือน ก.ย. 2569 · หน้างานมีงาน “นำเข้าต้นทุนต่อจานเดือน…” พร้อมจำนวนเมนูที่ขายแต่ไม่มีต้นทุน งานหายเมื่อทุกเมนูที่ขายมีต้นทุน</li>
-          <li>เลือกเดือน แล้ว <b>ดาวน์โหลดแม่แบบ</b> กรอก รหัส POS · ชื่อเมนู · ต้นทุนต่อจาน (บาท) · หมายเหตุ แล้ว <b>นำเข้าไฟล์</b></li>
-          <li>ตรวจก่อนบันทึก: นำเข้า · รหัสไม่พบ · รหัสแพ็กเกจ (ไม่รับ) · ค่าไม่ถูกต้อง · เปลี่ยนเกิน 30% จากเดือนก่อน · ขายแต่ไม่มีต้นทุน แล้วยืนยันการนำเข้า</li>
-          <li>เดือนที่ไม่นำเข้า: ใช้ต้นทุนของเดือนก่อนหน้าที่นำเข้า แยกตามรหัส · แก้ทีละแถวในตารางได้ · ทุกการนำเข้าและการแก้มีบันทึกผู้ทำและเวลา</li>
-          <li>ผล: ต้นทุนที่นำเข้าแทนต้นทุนตามสูตรในทุกรายงาน (GP P&L เมนู ต้นทุนต่อหัว) และใช้ในรายงาน ความครอบคลุมต้นทุน</li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-lime-50 border-l-4 border-lime-500" id="manualBranchFlow">
-        <p class="font-semibold text-lime-900 text-sm">G. สาขา: ตัดเบิก → สั่งของ → รับของ → แจ้งของขาด/เสีย → ส่วนต่าง → นับของสิ้นเดือน (บนโทรศัพท์)</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>ตัดเบิก</b> ทุกวัน: เลือกโซน ใส่ "เบิกใช้" และ "ของเสีย" (ของเสียเลือกสาเหตุ) รายการที่เบิกบ่อยอยู่บนสุดของโซน (หน้านี้แสดงรายการที่ใช้ใน 14 วัน มีของที่ควรเหลือ (ตามระบบ) หรือต้องนับทุกเดือน ที่เหลือแตะ <b>แสดงทั้งหมด (N รายการ)</b> ค้นหาได้ทุกรายการ · ป้าย “ต้องนับ” แสดงเฉพาะรายการที่อยู่ในใบเพราะต้องนับเท่านั้น · <b>ดูที่มา</b> บอกเหตุที่รายการอยู่ในใบ หน่วย และจำนวนที่นับล่าสุด) หน่วยกรอกคือหน่วยปิดผนึกที่เล็กที่สุด เช่น แพ็ค แล้วแตะ <b>ส่งใบตัดเบิก</b> (คำถามบอกจำนวนที่กรอก รายการที่ขายแล้วแต่ยังว่าง และรายการที่ว่างถือว่าไม่ได้เบิก ของที่ควรเหลือจึงไม่ลดลง) · วันที่รายการคล้ายเมื่อวาน แตะ <b>เบิกเหมือนเมื่อวาน</b> เติมช่องที่ยังว่างแล้วแก้เฉพาะรายการที่ต่าง · ลืมรายการหลังส่ง แตะ <b>เบิกเพิ่ม</b> (เฉพาะใบของวันนี้) กรอกจำนวนที่ต้องการบวกเพิ่มเป็นจำนวนเต็ม (กรอกทศนิยม ระบบปัดขึ้น เช่น 1.5 เป็น 2) แล้วแตะ <b>บันทึกการเบิกเพิ่ม</b> · วันที่ลืมทำย้อนหลังได้ แต่นับเป็น "ส่งช้า"</li>
-          <li><b>สั่งของ</b>: เลือกรอบ (เปิดรับ · เลยเวลา · สั่งแล้ว) ตรวจ "จำนวนที่ควรสั่ง" และ "ของที่ควรเหลือ (ตามระบบ)" แตะ <b>สั่งตามจำนวนที่ควรสั่งทั้งหมด</b> เพื่อใส่จำนวนที่ควรสั่งให้ทุกรายการ หรือแก้ช่อง "สั่ง" เฉพาะที่ไม่เห็นด้วย (ต่างเกิน 20% ต้องเลือกเหตุผล ถ้ายังไม่ได้เลือก ระบบไม่เปิดคำถามส่ง และเลื่อนไปที่รายการแรกที่ต้องระบุเหตุผล) · รายการที่ยังไม่มีขนาดแพ็คติดป้าย “ยังไม่มีขนาดแพ็ค” จำนวนแสดงและกรอกเป็นกิโลกรัมหรือลิตร คาดว่ายอดขายต่างจากปกติ กรอกเป็น % หรือเป็นบาท (ระบบแปลงเป็น % ให้) <b>ดูที่มา</b> บอกปริมาณที่ปกติใช้ต่อยอดขาย ฿100,000 · ใบตัดเบิกที่ส่งแล้วไม่ถึง 14 วัน ขึ้น “ใบตัดเบิกยังไม่พอ (N/14 วัน) · กรอกยอดสั่งเอง” ถ้าสาขาอื่นของบริษัทครบ 14 วันแล้ว กรอกยอดขายที่คาดของรอบนี้ ระบบคำนวณจากค่ากลางของสาขาเหล่านั้น แล้วแตะ <b>ส่งใบสั่งซื้อ</b> ก่อน 13:15 สองวันก่อนวันส่ง (แถวบนสุดบอก “รอบ 2 · ส. 17/10 · ส่งใบสั่งซื้อภายใน พฤ. 15/10 เวลา 13:15” และเวลาที่เหลือเป็นวันกับชั่วโมง คำถามที่ขึ้นมาบอกจำนวนรายการ มูลค่า และเทียบรอบก่อน) · ต้องส่งใบตัดเบิกของวันนี้ก่อน ใบที่ค้างจากวันก่อนทำภายหลังได้ · จำนวนที่ควรสั่งอ่านจากใบตัดเบิกที่ส่งแล้ว (ต้องมีอย่างน้อย 14 วันใน 8 สัปดาห์) · วันที่ยังไม่ทำใบตัดเบิก จำนวนที่ควรสั่งหักของที่ควรเหลือตามค่าเฉลี่ยใบตัดเบิกของสาขาในวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน</li>
-          <li><b>รับของ</b>: ตอบ "รับครบตามที่คลังส่งทุกรายการ?" แตะ <b>รับครบ</b> หรือ <b>มีรายการไม่ครบ</b> (เลือกเฉพาะรายการที่ไม่ครบ ใส่รับจริงและสาเหตุ) ติ๊ก "ตรวจสภาพและจำนวนครบแล้ว" แล้วแตะ <b>บันทึกรับของ</b> · ของที่ซื้อเองบันทึกที่ <b>บันทึกของที่รับเอง</b> ท้ายหน้า (แตะเพื่อเปิด)</li>
-          <li><b>แจ้งของขาด/เสีย</b>: ส่วนที่ได้ไม่ครบแจ้งในฟอร์มรับของเลย พบภายหลังแตะ <b>แจ้งของขาด/เสีย</b> เลือกรายการที่มีปัญหา ใส่จำนวนและสาเหตุ แล้วส่งรูปทางไลน์ถึงประสานงานขาย</li>
-          <li><b>ส่วนต่างการใช้</b> 2 แถบ: รายวัน · สิ้นเดือน · รายวันเทียบยอดเบิกกับ <b>ที่สาขาใช้ปกติ</b> (ค่าเฉลี่ยวันเดียวกันของสัปดาห์ 8 สัปดาห์ก่อน ปรับตามยอดขายวันนั้น) และ <b>เฉลี่ยทุกสาขา</b> (ค่ากลางของสาขาอื่นที่ใช้ใบตัดเบิก ต่อยอดขาย ฿100,000) เขียนส่วนต่างเป็นคำ เช่น "เบิกมากกว่าปกติ ฿1,200 (12%)" (ไฟล์ Excel ยังใช้ตัวเลขบวกลบ) · ของแพงเบิกเกินที่สาขาใช้ปกติหรือค่ากลางมากกว่า 20% หรือต่ำกว่าเกิน 20% ติดต่อกัน 3 วันขาย ขึ้นป้ายเตือน · แถบรายวันไม่เทียบวันนี้ (ยังขายอยู่) และวันที่ยังไม่มีใบตัดเบิกย้อนหลังพอหรือยอดขายยังไม่เข้า (แสดง “ยังไม่มีค่าปกติให้เทียบ”) · สิ้นเดือน: ระบบถามเหตุผลเฉพาะรายการของแพงที่ต่างมากและเป็นเงินตั้งแต่ ฿500 ขึ้นไป เดือนที่ไม่มีใบรับของหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม · เมื่อบันทึกรับของครบ แตะ <b>แจ้งว่าบันทึกรับของครบ</b> ที่หน้า นับของสิ้นเดือน หลังส่งผลนับสิ้นเดือน</li>
-          <li><b>นับของ</b>: วันที่ 1 ของทุกเดือน <b>นับของครบทุกรายการ</b> ปิดเดือนต้องนับ 100% (ไม่มีการปิดเดือนด้วยการนับบางส่วนแล้ว) · นับทีละโซน (รายการที่มาเป็นกล่องของแพ็คมี 2 ช่อง กล่อง และ แพ็ค ระบบรวมให้) ใส่ 0 ถ้าไม่มีของ ช่องว่างถือว่ายังไม่ได้นับ ต้องมีค่าครบทุกรายการจึง <b>ส่งผลนับ</b> ได้ (ถ้ายังไม่ครบ ระบบแจ้ง "ยังไม่ได้นับ N รายการ ปิดเดือนต้องนับของครบทุกรายการ" พร้อมชื่อรายการ และข้อความค้างไว้ข้างปุ่ม) · วัตถุดิบที่ทะเบียนยังไม่มีหน่วยเล็กสุดไม่อยู่ในใบนับของ (เป็นงานของฝ่ายวิเคราะห์) · ส่งผลนับแล้ว หน้านี้แสดง “นับครั้งแรกแล้ว วันที่ …” และวันที่นับครั้งถัดไป ปุ่ม <b>เริ่มนับของสิ้นเดือน</b> แสดงเมื่อถึงกำหนด (ตั้งแต่วันสุดท้ายของเดือน) · <b>นับเสริมรายสัปดาห์ (ไม่ใช่การปิดเดือน)</b> ของแพงทุกสัปดาห์เป็นการตรวจเสริมที่เปิดหรือปิดได้ที่ ตั้งค่า (ปิดไว้เป็นค่าเริ่มต้น) ไม่ใช้ปิดเดือน</li>
-        </ol>
-      </div>
-      <div class="p-3 rounded-lg bg-slate-50 border-l-4 border-slate-400" id="manualRecipeAppendix">
-        <p class="font-semibold text-slate-800 text-sm">ภาคผนวก: ส่วนสูตร (Phase 2)</p>
-        <p class="text-[11px] mt-1" style="color:var(--text-muted)">ใช้เมื่อผู้บริหารเปลี่ยนโหมดระบบเป็นเต็มระบบ (ตั้งค่า → โหมดระบบ) ในโหมดสต๊อกหน้าและงานเหล่านี้ไม่แสดง</p>
-        <ol class="list-decimal list-inside text-xs text-slate-700 mt-1 space-y-1">
-          <li><b>ฝ่ายวิเคราะห์ (สูตร):</b> หน้า สูตรตามระดับราคา · สูตรกึ่งสำเร็จ · ตรวจและประกาศใช้ · ตรวจสูตรด้วยยอดซื้อ · ความพร้อมและรหัสสูตรเดิม · ตรวจสูตรที่ครัวส่ง แล้ว "ประกาศใช้" ภายในวันที่ 25 (ปุ่มกดได้เมื่อไม่มีข้อที่ต้องแก้ไข) หรือ "ส่งกลับแก้ไข" · ผู้บริหารรับทราบที่ ผู้บริหาร → รับทราบสูตร · สูตรแบ่งชิ้น: ที่ <i class="pg">สูตรกึ่งสำเร็จ</i> การ์ด “สูตรแบ่งชิ้นจากวัตถุดิบทั้งตัว” ระบุของทั้งตัวและจำนวนชิ้นที่ได้ ระบบคำนวณน้ำหนักและต้นทุนต่อชิ้นให้ · หัว หนัง และเศษจากวัตถุดิบทั้งตัวไม่คิดต้นทุน ต้นทุนทั้งหมดอยู่ที่ชิ้นที่ได้ · ไฟล์นำเข้า (BoM_Semi และแม่แบบ) ไม่แทนที่สูตรแบ่งชิ้น แก้ที่การ์ดสูตรแบ่งชิ้น · ตรวจสูตรด้วยยอดซื้อ: ที่ <i class="pg">ตรวจสูตรด้วยยอดซื้อ</i> เลือกเดือนที่มีไฟล์ราคารายสาขา ระบบเทียบปริมาณที่สาขาของบริษัทซื้อจริงกับปริมาณตามสูตร ต่อยอดขาย ฿100,000 ด้วยค่ากลางของทั้งสองฝั่ง แล้วแบ่งผลเป็น ในเกณฑ์ · ซื้อมากกว่าสูตร · ซื้อน้อยกว่าสูตร · ต่างกันเกิน 10 เท่า (ตรวจหน่วย) · มีการซื้อแต่ไม่มีในสูตร · มีในสูตรแต่ไม่มีการซื้อ (ตรวจรหัส) เรียงตามมูลค่าส่วนต่าง มีลิงก์ไปหน่วยและการแปลงและทะเบียนวัตถุดิบ ดาวน์โหลด Excel ได้ หน้านี้ไม่เปลี่ยนข้อมูลใด ๆ และเฉพาะฝ่ายวิเคราะห์และผู้บริหารเปิดได้ · ยอดซื้อในไฟล์เป็นยอดทั้งเดือน ถ้ายอดขายรายวันมีไม่ครบทุกวัน ระบบปรับยอดซื้อตามสัดส่วนวันและแจ้งไว้ในหน้า · งาน “ตรวจหน่วยของวัตถุดิบที่ยอดซื้อต่างจากสูตรเกิน 10 เท่า” แสดงที่หน้างาน · การ์ด “งานแก้ข้อมูลค้างเรียงตามผลกระทบ” ที่หน้างานและหน้าความพร้อมและรหัสสูตรเดิม แสดง 10 รายการแรกเรียงตามจานที่กระทบใน 30 วันล่าสุด (จานที่ไม่ถูกนับในยอดสั่งก่อน เช่น สูตรย่อยไม่ครบ) แตะ “ไปแก้” เพื่อเปิดหน้าที่แก้ · งาน “ตรวจสูตร: วัตถุดิบ (สาขา)” เกิดเมื่อรายการเดียวกันถูกให้เหตุผลว่าเสิร์ฟหรือตัดแต่งทิ้งเกินปกติใน 2 สาขาในเดือนเดียว หรือสาขาเดิม 2 เดือนติดกัน แตะ “ไปที่งาน” เปิดตรวจสูตรด้วยยอดซื้อของรายการนั้น แล้วกด “รับทราบแล้ว”</li>
-          <li><b>ครัว:</b> ที่ ครัว → สูตรตามระดับราคา: ดาวน์โหลด → แม่แบบสูตรตามระดับราคา (หลายเมนูในไฟล์เดียว) กรอก นำเข้าไฟล์ แล้วแตะปุ่ม "ส่งตรวจ" ที่ด้านขวาของแถบขั้นตอน (แท็บ ยังไม่จับคู่ แสดงเมนูที่ยังไม่มีรหัส POS) · ระหว่างตรวจครัวแก้ไขสูตรไม่ได้ ถูกส่งกลับจะเห็นเหตุผลที่แถบ · ครัวไม่ประกาศใช้สูตร · สูตรแบ่งชิ้น: ที่ <i class="pg">สูตรกึ่งสำเร็จ</i> ระบุของทั้งตัวและจำนวนชิ้นที่ได้จริง แล้วกด “บันทึกสูตรแบ่งชิ้น”</li>
-          <li><b>ผู้บริหาร:</b> รับทราบสูตรที่ประกาศใช้แล้วที่หน้างาน (คลิกเดียว)</li>
-          <li><b>ปิดเดือน ขั้นที่ 1 (โหมดเต็มระบบ):</b> สูตรเวอร์ชันที่มีผลของเดือน — ฝ่ายวิเคราะห์ ตรวจและประกาศใช้ที่ <b>ฝ่ายวิเคราะห์ → ตรวจและประกาศใช้</b> ภายในวันที่ 25 แล้วผู้บริหารรับทราบที่ <b>ผู้บริหาร → รับทราบสูตร</b></li>
-          <li><b>สรุปผลต่างรายเดือน (ประสานงานขาย → สรุปผลต่างรายเดือน):</b> ปิดเดือนขั้นที่ 9 ของโหมดเต็มระบบ ฝ่ายปฏิบัติการและผู้บริหารอ่านส่วนต่างการใช้ของทุกสาขา เทียบตามสูตร</li>
-          <li><b>สถานะสูตร:</b> ร่าง → รอตรวจ → ประกาศใช้ → ยกเลิกใช้</li>
-          <li><b>ส่วนต่างรายเดือน (แท็บ รายเดือน ของ สาขา → ส่วนต่างการใช้):</b> ใช้จริง เทียบตามสูตร · 3 แถบ: รายเดือน · รายวัน · สิ้นเดือน · เขียนส่วนต่างเป็นคำ เช่น "ใช้น้อยกว่าสูตร ฿16,197 (8.1%)" (ไฟล์ Excel ยังใช้ตัวเลขบวกลบ) · ระบบถามเหตุผลเฉพาะรายการของแพงที่ต่างมากและเป็นเงินตั้งแต่ ฿500 ขึ้นไป รายการที่ใช้จริง 0 ทั้งที่สูตรมี หรือเดือนที่ไม่มีใบรับของหรือขาดใบตัดเบิก ติดป้าย “ข้อมูลไม่ครบ” และไม่ถาม เมื่อบันทึกรับของและให้เหตุผลครบ แตะ <b>แจ้งว่าบันทึกรับของครบ</b> · แถบรายวันไม่เทียบสูตรของวันนี้ (ยังขายอยู่) และวันที่ยอดขายยังไม่เข้า (แสดง “ยังไม่มีค่าตามสูตร”)</li>
-          <li><b>ส่วนต่างรายวันเทียบสูตร:</b> เทียบยอดเบิกกับตามสูตรของยอดขายวันนั้น ของแพงเบิกเกินสูตรมากกว่า 20% หรือน้อยกว่าสูตรเกิน 30% ติดต่อกัน 3 วันขาย</li>
-        </ol>
-      </div>
-    </div>
-  </div>
-
-  <!-- Cost-data status (updated 2026-06) -->
-  <div class="card p-5 mb-4" style="background:#ecfdf5;border:1px solid #10b981">
-    <h3 class="font-bold text-base mb-2 text-emerald-900">สถานะข้อมูลต้นทุน (อัปเดต 2026-06)</h3>
-    <p class="text-sm text-emerald-800 mb-2">แก้ปัญหา price-as-cost แล้ว (เคยพบ 98.6% ของ unit_cost = ราคาขาย×1.07). นำเข้าสูตร จริงจาก workbook → ครอบคลุม ~71% ของจำนวนเสิร์ฟ.</p>
-    <p class="text-sm text-emerald-800 mb-2"><b>COGS เป็นสูตรเดียวทั้งแอป:</b> BoM recipe ก่อน → ถ้าไม่มีรีซิปีใช้ sku_cost → buffet tier นับ 0. ทุกหน้าแสดง GP ตรงกัน (~40%, food cost ~60%).</p>
-    <p class="text-sm text-emerald-800"><b>ยังเหลือ:</b> ~29% ของเมนู (ส่วนใหญ่เครื่องดื่ม/à-la-carte) ยังไม่มีรีซิปี — เติมได้ที่ <b>Settings → Cost Management</b> (แก้ในหน้า auto-save) หรือดูเป้าที่ <b>ความครอบคลุมต้นทุน</b></p>
-    <p class="text-sm text-amber-800 mt-2" style="background:#fffbeb;border:1px solid #f59e0b;padding:6px 10px;border-radius:var(--r-md)"><b>⚠ จุดที่ต้องระวัง:</b> (1) <b>เครื่องดื่มยังไม่มีต้นทุนเกือบทั้งหมด</b> → margin เครื่องดื่มในหน้า Menu Engineering ขึ้น ~100% (ปลอม) — ควรเติม unit_cost เครื่องดื่มก่อน. (2) à-la-carte บางตัว unit_cost ≈ ราคาขาย → margin อาจติดลบ/แปลก เป็นปัญหา<b>คุณภาพข้อมูล</b> ไม่ใช่บั๊ก. (3) Over-consumption Rate = 0 เพราะข้อมูล Easy ไม่มีรหัสค่าปรับ OT</p>
-  </div>
-
-  <!-- Hard rules -->
-  <div class="card p-5 mb-4" style="background:#fef2f2;border:1px solid #ef4444">
-    <h3 class="font-bold text-base mb-2 text-red-900">⚠ กฎสำคัญ (Hard Rules)</h3>
-    <ul class="list-disc list-inside text-sm text-slate-700 space-y-1.5">
-      <li><b>COGS ใช้ต้นทุนของเราเท่านั้น (กฎเหล็ก)</b> — ทุกการคำนวณต้นทุน/กำไรใช้ต้นทุนต่อจานที่ฝ่ายวิเคราะห์นำเข้ารายเดือน (ถ้าเดือนนั้นมี) แล้วจึงสูตร BoM ของเรา <b>ห้ามใช้ต้นทุนจาก POS</b> เพราะ Easy POS ไม่ได้บันทึกต้นทุนวัตถุดิบ (ตรวจแล้ว = 0 ทุกรายการ). ใช้ทั้งหน้า P&L ต่อบิล, ต้นทุน/หัว, GP/P&L รายสาขา</li>
-      <li><b>VAT ไม่ใช่รายได้</b> — ตัวเลข "รายได้" ทุกที่ในแอปใช้ <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">subtotal_ex_vat</code> (ก่อน VAT) เท่านั้น. <code style="background:#fee2e2;padding:1px 4px;border-radius:3px">total_inc_vat</code> ใช้สำหรับ reconcile กับใบเสร็จ POS เท่านั้น</li>
-      <li><b>เดือนไม่เต็มเทียบแบบ MTD</b> — เมื่อเดือนล่าสุดยังไม่จบ การเทียบ MoM ในภาพรวม + Insights จะใช้ช่วงวันเท่ากัน (1→วันล่าสุด) ของทั้งสองเดือน ไม่เอาเดือนเต็มมาเทียบเดือนไม่เต็ม</li>
-      <li><b>วิเคราะห์ต้องเป็น time-series</b> — ตัวเลขสะสมอย่างเดียวไม่มีประโยชน์ ทุก analytics ต้องดูได้รายวัน/สัปดาห์/เดือน</li>
-      <li><b>Tier SKUs ไม่นับ cost</b> — BUFFET/BUFFETCHILD ใส่ unit_cost ไม่ส่งผล (cost จริงนับที่ B0xxx items แล้ว) เพื่อกัน double-counting</li>
-      <li><b>Buffet ไม่ได้แยก tier จริง</b> — รหัส BUFFET350/500/590/799 <b>ไม่มีข้อมูล</b> (ยกเลิกใช้แล้ว) บุฟเฟ่ต์ผู้ใหญ่อยู่บนรหัส BUFFET เดียว, เด็กบน BUFFETCHILD. Tier ราคาจึงอ่านจาก<b>ราคาต่อหัวบนบิลจริง</b> เทียบกับเมนูของวันนั้น — ถึง 31 ส.ค. 2026 คือราคาก่อนบวก service charge 5% + VAT 7% (350/590/649/689/799/999) · <b>ตั้งแต่ 1 ก.ย. 2026 (Grand Menu) เป็นราคา NET 459/629/789/999/1,299 และราคาเก่าไม่มีขายแล้ว</b> ราคาที่ไม่ตรงรายการของเมนูนั้นถือเป็น “โปรฯ/ส่วนลด”. <b>pax จริง</b> ใช้ customer_count จาก transaction (ไม่ใช่ qty). เมตริก Premium%/tier mix/tier pricing จึงถูกซ่อนไว้</li>
-      <li><b>COGS สูตรเดียว (unified 2026-06)</b> — ทุกหน้าใช้ BoM recipe ก่อน → fallback sku_cost → tier=0. GP ต้องตรงกันทุกหน้า (~40%). ถ้าหน้าไหนไม่ตรง = bug</li>
-    </ul>
-  </div>
-
-  <!-- Troubleshooting -->
-  <div class="card p-5 mb-4">
-    <h3 class="font-bold text-base mb-3 text-slate-800">Troubleshooting</h3>
-    <div class="space-y-2 text-sm">
-      <details class="border border-slate-200 rounded-lg p-3">
-        <summary class="font-semibold cursor-pointer text-slate-800">ตัวเลขไม่อัปเดต/ยังเห็นข้อมูลเก่า</summary>
-        <p class="text-xs text-slate-600 mt-2">1. Hard refresh: <kbd class="bg-slate-100 px-2 py-0.5 rounded">Ctrl + Shift + R</kbd><br>2. ตรวจ server: ดู topbar มุมขวาบนสีเขียว = connected · สีแดง = restart server<br>3. Restart: kill <code>python.exe</code> แล้วเปิด <code>เปิด Oshinei Dashboard.bat</code> ใหม่</p>
-      </details>
-      <details class="border border-slate-200 rounded-lg p-3">
-        <summary class="font-semibold cursor-pointer text-slate-800">Food cost % ดูแปลก (สูง/ต่ำผิดปกติ)</summary>
-        <p class="text-xs text-slate-600 mt-2"><b>ค่าปกติ ~57-68%/เดือน, GP ~40%.</b> ถ้าหน้าไหนแสดง GP ไม่ตรงหน้าอื่น = bug (COGS ต้องเป็นสูตรเดียวกันทุกหน้า).<br><b>สูงเกิน 100%:</b> unit_cost ตัวไหนตั้งสูงเกิน (cost > ราคาขาย) — ตรวจที่ <b>Settings → Cost Recalibration</b> หรือ <b>BoM Cost Audit</b><br><b>เมนูยังไม่มีต้นทุน:</b> ดูที่ <b>ความครอบคลุมต้นทุน</b> ว่าเหลือ SKU ไหนต้องเติม</p>
-      </details>
-      <details class="border border-slate-200 rounded-lg p-3">
-        <summary class="font-semibold cursor-pointer text-slate-800">มี SKU ใหม่จาก POS แต่ไม่มี unit_cost</summary>
-        <p class="text-xs text-slate-600 mt-2">หลัง ingest ครั้งใหม่อาจมี SKU codes ใหม่ที่ระบบยังไม่รู้ cost. ไปที่ <b>Settings → Cost Management</b> → filter "ประเภท: ทั้งหมด" + sort by "no cost" → ใส่ค่าทีละตัว หรือ upload CSV</p>
-      </details>
-      <details class="border border-slate-200 rounded-lg p-3">
-        <summary class="font-semibold cursor-pointer text-slate-800">เปรียบเทียบสาขา 2-5 แห่งพร้อมกัน</summary>
-        <p class="text-xs text-slate-600 mt-2">ไป <b>เมนู&ต้นทุน → BoM Cost → เปรียบเทียบ</b> → Ctrl+click เลือกหลายสาขา (2-5) → ดู side-by-side พร้อม variance highlight (cell ที่ off &gt; 10% จาก mean)</p>
-      </details>
-    </div>
-  </div>
-
-  <!-- About -->
-  <div class="card p-5" style="background:#f8fafc">
-    <h3 class="font-bold text-base mb-2 text-slate-800">ℹ️ เกี่ยวกับ</h3>
-    <p class="text-xs text-slate-600 leading-relaxed">
-      <b>Oshinei Sales & Cost Analysis Dashboard</b> · FastAPI + SQLite + Chart.js<br>
-      Data source: Easy POS (easyrestaurant.asia / Infogrammer) — 27 สาขา, period 2025-05 → 2026-05<br>
-      Architecture & full phase history: <code>docs/APP_STRUCTURE.md</code><br>
-      <span class="text-slate-400">Build: 2026-06-02 · buffet pax/food-cost fix · Menu Engineering redesign · endpoint VAT/COGS audit</span>
-    </p>
+    </details>
   </div>
 </div><!-- /tab-manual -->

@@ -611,6 +611,7 @@ function loadAllPages() {
 // Drawn from DEPARTMENTS on every visit to คู่มือการใช้งาน (TABS.manual.load), so the map never drifts from the menu: the icon, the name, the
 // duty line, the role(s) whose home it is, and every page as a link. A page this account may not open stays in the list, dimmed.
 function renderManualDeptMap() {
+  deptManualRender();                                            // the task manual above the map (same visit, same permissions)
   const host = document.getElementById('manualDeptMapBody');
   if (!host) return;
   const open = new Set(deptVisible().flatMap(r => r.pages.map(x => r.dept.key + '|' + x.i)));
@@ -623,4 +624,109 @@ function renderManualDeptMap() {
       + `<header class="mdm-head"><span class="mdm-badge">${_deptSvg(d.icon, 24)}</span><div><h4 class="mdm-name">${esc(d.label)}</h4><p class="mdm-duty">${esc(deptDuty(d))}</p></div></header>`
       + `<p class="mdm-who">แผนกหลักของ: ${esc(d.roles.map(who).join(' · '))}</p><div class="mdm-pages">${pages}</div></section>`;
   }).join('');
+}
+
+// ── คู่มือการใช้งาน (owner 2026-10-30: "a real manual, not narrative" · layout A + search) ──────────────────────────────────────────
+// The tasks are the <article class="mt"> elements of tabs/47-manual.html (#manTasks): data-d = DEPARTMENTS keys, data-when, data-icon,
+// data-kw and data-go = "tab|pane". Drawn on every visit: department chips (the signed-in role's own department opens; any chip opens for
+// anyone - it is a manual), the task cards of the chosen department, one open task under the grid, and a search over the title, the
+// keywords and the step text of every task. The related-page link shows only when this login may open that page (deptPageAllowed).
+const _MAN_ORDER = ['brn', 'wh', 'ss', 'acc', 'ana', 'kit', 'mgmt', 'mkt', 'ops', 'own'];
+let _manDept = null, _manRole = null, _manOpen = null;
+function _manTasks() { return [...document.querySelectorAll('#manTasks > article.mt')]; }
+function _manDeptsOf(/** @type {HTMLElement} */ a) { return String(a.dataset.d || '').split(/\s+/).filter(Boolean); }
+function _manHue(key) { const d = DEPARTMENTS.find(x => x.key === key); return d ? `--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint)` : ''; }
+function _manLabel(key) { const d = DEPARTMENTS.find(x => x.key === key); return d ? d.label : key; }
+function _manTitle(/** @type {HTMLElement} */ a) { const h = a.querySelector('h3'); return h ? h.textContent : ''; }
+function _manHome() {
+  const d = DEPARTMENTS.find(x => x.roles.includes(_deptRole()));
+  return d && _MAN_ORDER.includes(d.key) ? d.key : 'mgmt';      // auth off and a role with no department of its own read the manager's tasks
+}
+function _manGo(/** @type {HTMLElement} */ a) {
+  const [tab, pane] = String(a.dataset.go || '').split('|');
+  if (!tab) return null;
+  let ok = false;
+  try { ok = deptPageAllowed(pane ? { tab, pane } : { tab }); } catch (e) { ok = false; }
+  if (!ok) return null;
+  const pg = DEPARTMENTS.flatMap(d => d.pages).find(x => x.tab === tab && (x.pane || '') === (pane || ''));
+  return { tab, pane: pane || '', label: pg ? pg.label : (PAGE_TITLES[tab] || tab) };
+}
+// once per page load: the "เมื่อไร" line, the count of the problems, the slot of the related page
+function _manDecorate(/** @type {HTMLElement} */ a) {
+  if (a.dataset.ready) return;
+  a.dataset.ready = '1';
+  const h = a.querySelector('h3');
+  if (h) h.insertAdjacentHTML('afterend', `<p class="mt-when">เมื่อไร: ${esc(a.dataset.when || '')}</p>`);
+  const s = a.querySelector('.mt-pr > summary');
+  if (s) s.textContent += ` (${a.querySelectorAll('.mt-pr dt').length})`;
+  a.insertAdjacentHTML('beforeend', '<p class="mt-go" hidden></p>');
+}
+function deptManualRender() {
+  if (!document.getElementById('manGrid')) return;
+  const role = _deptRole();
+  if (_manRole !== role) { _manRole = role; _manDept = _manHome(); _manOpen = null; }   // a new login opens its own department
+  _manTasks().forEach(a => {
+    _manDecorate(a);
+    const go = _manGo(a), slot = /** @type {HTMLElement} */ (a.querySelector('.mt-go'));
+    if (!slot) return;
+    slot.hidden = !go;
+    slot.innerHTML = go ? `หน้าที่เกี่ยวข้อง: <a href="#" onclick="deptManualPage('${go.tab}','${go.pane}');return false">${esc(go.label)}</a>` : '';
+  });
+  const q = /** @type {HTMLInputElement} */ (document.getElementById('manSearch'));
+  deptManualSearch(q ? q.value : '');
+}
+function deptManualPage(tab, pane) { alpGo(tab, pane || undefined); }
+function _manDraw() {
+  const tasks = _manTasks(), chips = document.getElementById('manChips'), grid = document.getElementById('manGrid');
+  if (!chips || !grid) return;
+  const have = _MAN_ORDER.filter(k => tasks.some(a => _manDeptsOf(a).includes(k)));
+  if (!have.includes(_manDept)) _manDept = have[0];
+  chips.innerHTML = have.map(k => {
+    const d = DEPARTMENTS.find(x => x.key === k);
+    return `<button type="button" class="man-chip" style="${_manHue(k)}" aria-pressed="${k === _manDept}" onclick="deptManualPick('${k}')">${_deptSvg(d ? d.icon : 'doc', 18)}<span>${esc(_manLabel(k))}</span></button>`;
+  }).join('');
+  const mine = tasks.filter(a => _manDeptsOf(a).includes(_manDept));
+  if (_manOpen && !mine.some(a => a.id === _manOpen)) _manOpen = null;
+  grid.style.cssText = _manHue(_manDept);
+  grid.innerHTML = mine.map(a => `<button type="button" class="man-card" aria-expanded="${a.id === _manOpen}" aria-controls="${a.id}" onclick="deptManualOpen('${a.id}')">`
+    + `<span class="man-ic">${_deptSvg(a.dataset.icon || 'doc', 20)}</span><span><b>${esc(_manTitle(a))}</b><small>${esc(a.dataset.when || '')}</small></span></button>`).join('');
+  tasks.forEach(a => { a.hidden = a.id !== _manOpen; if (a.id === _manOpen) a.style.cssText = _manHue(_manDept); });
+}
+function deptManualPick(key) { _manDept = key; _manOpen = null; _manDraw(); }
+function deptManualOpen(id, jump) {
+  _manOpen = _manOpen === id && !jump ? null : id;               // a second tap on the open card folds it
+  _manDraw();
+  const a = _manOpen && document.getElementById(_manOpen);
+  if (a && a.scrollIntoView) a.scrollIntoView({ block: jump ? 'start' : 'nearest', behavior: 'smooth' });
+}
+function _manNorm(s) { return String(s || '').toLowerCase().replace(/\s+/g, ' ').trim(); }
+function deptManualSearch(v) {
+  const box = document.getElementById('manResults'), q = _manNorm(v);
+  if (!box) return;
+  const parts = ['manChips', 'manGrid', 'manTasks'].map(id => document.getElementById(id));
+  if (!q) { box.hidden = true; box.innerHTML = ''; parts.forEach(el => { if (el) el.hidden = false; }); _manDraw(); return; }
+  parts.forEach(el => { if (el) el.hidden = true; });
+  const terms = q.split(' ');
+  const hits = _manTasks().map(a => {
+    const title = _manNorm(_manTitle(a)), kw = _manNorm(a.dataset.kw), body = _manNorm(a.textContent);
+    if (!terms.every(t => title.includes(t) || kw.includes(t) || body.includes(t))) return null;
+    return { a, rank: terms.every(t => title.includes(t)) ? 0 : terms.every(t => title.includes(t) || kw.includes(t)) ? 1 : 2 };
+  }).filter(Boolean).sort((x, y) => x.rank - y.rank);
+  box.hidden = false;
+  box.className = hits.length ? 'man-res' : 'man-res-empty';
+  box.innerHTML = hits.length ? hits.map(({ a }) => {
+    const ds = _manDeptsOf(a);
+    return `<button type="button" style="${_manHue(ds[0])}" onclick="deptManualHit('${a.id}')"><span class="man-ic">${_deptSvg(a.dataset.icon || 'doc', 20)}</span>`
+      + `<span><b>${esc(_manTitle(a))}</b><small>${esc(ds.map(_manLabel).join(' · '))} · ${esc(a.dataset.when || '')}</small></span></button>`;
+  }).join('') : `ไม่พบงานที่ตรงกับ “${esc(String(v).trim())}”`;
+}
+function deptManualHit(id) {
+  const a = document.getElementById(id), q = /** @type {HTMLInputElement} */ (document.getElementById('manSearch'));
+  if (!a) return;
+  const ds = _manDeptsOf(a);
+  if (!ds.includes(_manDept)) _manDept = ds.includes(_manHome()) ? _manHome() : ds[0];
+  if (q) q.value = '';
+  _manOpen = null;
+  deptManualSearch('');
+  deptManualOpen(id, true);
 }
