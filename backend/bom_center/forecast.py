@@ -183,14 +183,22 @@ def calendar(con, branch_id: int) -> dict:
 
 
 def cover_for_delivery(con, branch_id: int, rnd: str, delivery: date) -> tuple:
-    """(cutoff_date, delivery, cover_from, cover_to) — inclusive dates the order must last."""
+    """(cutoff_date, delivery, cover_from, cover_to) — inclusive dates the order must last.
+
+    `delivery` is the REGULAR delivery day of the cycle (the order's key; the cutoff follows from it). เลื่อนรอบส่ง (reschedule.py):
+    the cover starts on the day the delivery ACTUALLY comes and ends the day before the next delivery actually comes, so the
+    order before a postponed delivery covers the extra day and the postponed one starts later."""
+    from .reschedule import actual
     cal = calendar(con, branch_id)
     cut = cutoff_for(delivery).date()
-    if rnd == "salmon":
-        return cut, delivery, delivery, delivery + timedelta(days=6)
-    other = "2" if rnd == "1" else "1"
-    nxt = _next_on_or_after(delivery + timedelta(days=1), int(cal[other]["delivery_weekday"]))
-    return cut, delivery, delivery, nxt - timedelta(days=1)
+    start = actual(con, branch_id, rnd, delivery)
+    if rnd == "salmon":                                       # salmon: a week, to the next salmon delivery
+        other, nxt = rnd, delivery + timedelta(days=7)
+    else:
+        other = "2" if rnd == "1" else "1"
+        nxt = _next_on_or_after(delivery + timedelta(days=1), int(cal[other]["delivery_weekday"]))
+    nxt = actual(con, branch_id, other, nxt)
+    return cut, delivery, start, max(start, nxt - timedelta(days=1))
 
 
 def cover_period(con, branch_id: int, rnd: str, day: date) -> tuple:
@@ -206,6 +214,7 @@ def cover_period(con, branch_id: int, rnd: str, day: date) -> tuple:
 def next_deliveries(con, branch_id: int, today: date, horizon_days: int = 10, now: datetime = None) -> list:
     """The coming deliveries of every round (from tomorrow), each with its cutoff and whether it is
     still open, sorted by delivery day then round."""
+    from .reschedule import delay_of
     now = _now_for(today, now)
     cal = calendar(con, branch_id)
     out = []
@@ -218,7 +227,8 @@ def next_deliveries(con, branch_id: int, today: date, horizon_days: int = 10, no
             out.append({"round": rnd, "round_th": ROUND_TH[rnd], "delivery": d.isoformat(), "delivery_th": day_th(d),
                         "cycle_date": cyc.isoformat(), "cutoff_at": cut.isoformat(), "cutoff_th": cutoff_th(cut),
                         "open": now <= cut, "late": now > cut, "hours_left": round(left, 1),
-                        "cover_from": cf.isoformat(), "cover_to": ct.isoformat()})
+                        "cover_from": cf.isoformat(), "cover_to": ct.isoformat(),
+                        "delay": delay_of(con, branch_id, rnd, d)})          # เลื่อนรอบส่ง: the new day + reason, else None
             d += timedelta(days=7)
     out.sort(key=lambda x: (x["delivery"], x["round"]))
     return out
@@ -1031,6 +1041,7 @@ def suggest(con, branch_id: int, rnd: str, order_day: date, weeks: int = HISTORY
     return {"branch_id": branch_id, "branch": bname, "round": rnd, "order_day": order_day.isoformat(),
             "cycle_date": order_day.isoformat(), "cutoff_at": cut.isoformat(), "cutoff_th": cutoff_th(cut),
             "order_weekday": WD_TH[_wd(order_day)], "delivery": dlv.isoformat(),
+            "delivery_actual": c_from.isoformat(),               # เลื่อนรอบส่ง: the day the delivery comes (= delivery unless moved)
             "cover_from": c_from.isoformat(), "cover_to": c_to.isoformat(), "cover_days": len(cover),
             "calendar_filled": cal["filled"], "history_from": start.isoformat(), "history_to": as_of.isoformat(),
             "trading_days": len(days), "season": sf, "stats": stats, "uplift_pct": round(float(uplift_pct or 0.0), 2),

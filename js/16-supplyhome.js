@@ -100,6 +100,18 @@ async function loadSupplyHome() {
     (BC_MODE !== 'stock' && (role === 'analyst' || role === 'management') ? ` · สูตรเดือนถัดไป ${fmtMonthTh(d.release.effective_month)} · ${d.release.in_force}` : '');
   _shmRender(d);
   _bmcStatus('shmStatus', '');
+  shmLoadMoved(d);
+}
+// เลื่อนรอบส่ง (2026-10-29): a branch login reads its moved deliveries at the top of หน้างาน (the order page shows the same notices)
+async function shmLoadMoved(d) {
+  const box = document.getElementById('shmMoved');
+  if (!box) return;
+  if (!(d && d.scoped)) { box.style.display = 'none'; box.innerHTML = ''; return; }
+  let ns = [];
+  try { ns = (await _bmcJson(`${API}/api/bom-center/order/round-notices`)).notices || []; } catch (e) { ns = []; }
+  box.innerHTML = ns.length ? `<div class="card p-3">${bmcMovedNotices(ns)}
+    <div class="mt-2"><a href="#" onclick="supplyGo({tab:'branchstock',pane:'order'});return false" style="color:var(--accent);font-size:14px;text-decoration:underline">ไปที่สั่งของ</a></div></div>` : '';
+  box.style.display = ns.length ? '' : 'none';
 }
 function shmCtxChanged() {
   const m = document.getElementById('shmMonth'), b = document.getElementById('shmBranch');

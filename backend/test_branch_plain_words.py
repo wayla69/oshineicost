@@ -47,6 +47,9 @@ ALLOW = [
     # a file downloaded before the wording changed is still read by the importer
     ("backend/bom_center/branch_forms.py", '"รับสินค้า "'),
     ("backend/bom_center/branch_forms.py", '"สาเหตุส่วนต่าง"'),
+    # เลื่อนรอบส่งของ (owner 2026-10-29): "ล่าช้า" is the status of a delivery the centre moved to a later day - the owner's own word,
+    # distinct from "ส่งช้า (มีค่าปรับ)" (the branch sent its order after the cutoff)
+    ("js/14-branch.js", "'var(--amber-ink)'}\">ล่าช้า</span>"),
 ]
 
 

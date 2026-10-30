@@ -347,6 +347,10 @@ MODULE_RULES = [
     ("W",   "/api/bom-center/order-calendar",          {"supply.ordering", "bom.center"}),
     ("W",   "/api/bom-center/event-calendar",          {"supply.ordering", "bom.center"}),   # PR-B4a (1.8): festivals / promotions, the sales team's too
     ("W",   "/api/bom-center/forecast",                {"supply.ordering", "bom.center"}),
+    # เลื่อนรอบส่ง (2026-10-29): moving ONE delivery is Sales Support's (and management's, which holds every module); the analyst and the
+    # branch only read it - the branch through /api/bom-center/order/round-notices, pinned to its own branch
+    ("GET", "/api/bom-center/round-reschedule",        {"supply.ordering", "bom.center", "ops.report"}),
+    ("W",   "/api/bom-center/round-reschedule",        {"supply.ordering"}),
     # Phase 2: a branch counts its own stock; the centre reads every branch's and sets zones/units
     ("GET", "/api/bom-center/stock",                   {"branch.stock", "supply.ordering", "bom.center", "ops.report"}),
     ("W",   "/api/bom-center/stock",                   {"branch.stock", "bom.center"}),

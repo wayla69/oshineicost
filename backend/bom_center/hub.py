@@ -196,6 +196,8 @@ def queue(con, status: str = "submitted", date_from: str = None, date_to: str = 
         d["late"] = late                                  # the flag recorded when the order was submitted
         d["stock_deducted"] = d.pop("stock_count_id") is not None
         out.append(d)
+    from .reschedule import add_delays
+    add_delays(con, out)                     # เลื่อนรอบส่ง: `delay` (new day + reason) on an order whose delivery was moved
     return with_values(con, out)             # the stored snapshot (o.value) is replaced by the one live value
 
 

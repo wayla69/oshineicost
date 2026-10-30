@@ -410,6 +410,7 @@ OWNED_TABLES = (
     "bc_code_request",            # PR-Y: a new code of an existing item, asked by Sales Support, decided by the analyst (aliases.py)
     "bc_cycle_count", "bc_cycle_count_line",   # batch 4b (3.4): the weekly count of the class-A items (stock.py)
     "bc_feedback_ack",            # batch 4b (2.6): a task made from the variance reasons was read (feedback.py)
+    "bc_round_reschedule",        # เลื่อนรอบส่ง: one delivery of a round moved to a later day (reschedule.py, 2026-10-29)
 )
 DERIVED_TABLES = ("bcd_cost_cache", "bcd_demand_day", "bcd_demand_day_meta")
 TABLES = OWNED_TABLES + DERIVED_TABLES
@@ -442,7 +443,9 @@ def _ensure_schema(con) -> None:
     from .claims import DDL as CLAIMS_DDL
     from .price_submissions import DDL as PRICE_SUB_DDL
     from .issues import DDL as ISSUES_DDL
-    for ddl in DDL + EXTRA_DDL + (DATED_DDL, CODES_DDL, CENTRAL_DDL, LINK_DDL) + CLAIMS_DDL + PRICE_SUB_DDL + ISSUES_DDL:
+    from .reschedule import DDL as RESCHEDULE_DDL
+    for ddl in (DDL + EXTRA_DDL + (DATED_DDL, CODES_DDL, CENTRAL_DDL, LINK_DDL) + CLAIMS_DDL + PRICE_SUB_DDL + ISSUES_DDL
+                + RESCHEDULE_DDL):
         con.execute(ddl)
     for table, col, typ in MIGRATIONS:
         have = {r[1] for r in con.execute(f"PRAGMA table_info({table})")}

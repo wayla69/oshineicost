@@ -2061,6 +2061,90 @@ def bc_order_calendar_save(rows: List[CalRow], request: Request):
     return {"ok": True, "rows": len(rows)}
 
 
+# ── เลื่อนรอบส่ง (2026-10-29): ONE delivery of a round moves to a later day, for one or several branches (bom_center/reschedule.py).
+# Sales Support's (and management's: auth.MODULE_RULES gives the writes to supply.ordering alone - a branch login never reaches them).
+# The weekly calendar is not changed; the branch is pushed at once and sees the notice on its order page and หน้างาน.
+from bom_center import reschedule as _rs                                       # noqa: E402
+
+
+class RescheduleBody(BaseModel):
+    branch_ids: List[int] = []
+    round: str
+    orig_date: str                     # the regular delivery day of the calendar
+    new_date: str
+    reason_code: str
+    reason_note: Optional[str] = None
+
+
+class RescheduleEditBody(BaseModel):
+    new_date: str
+    reason_code: str
+    reason_note: Optional[str] = None
+
+
+class RescheduleCancelBody(BaseModel):
+    reason: str
+
+
+def _rs_after_write(items: list) -> None:
+    """A move changes the plans (cover window), the order chips, the queue and the badges: drop the bom-center caches and the
+    plan cache, then tell the branch (one push per branch, in the background)."""
+    invalidate_cache("bc_", rebuild_cost=False)
+    for bid in {r["branch_id"] for r, _k in items}:
+        _fc._bump_gens(bid)
+    _rs.send_push(get_db, items)
+
+
+@router.get("/api/bom-center/round-reschedule")
+def bc_round_reschedule_list(request: Request, date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None)):
+    """Every moved delivery (active and cancelled) touching the range (default: 14 days back to 60 ahead), the reasons offered,
+    the branches and their rounds' delivery weekdays (the form offers the regular days of the round)."""
+    if _auth.scope_branch(request):
+        raise HTTPException(403, "ผู้ใช้ของสาขาไม่มีสิทธิ์ดูรายการนี้", headers={"X-Denied": "role"})
+    today = bkk_today()
+    a = _parse_day(date_from) if date_from else today - timedelta(days=14)
+    b = _parse_day(date_to) if date_to else today + timedelta(days=60)
+    with get_db() as con:
+        _ensure(con)
+        rows = _rs.listing(con, a.isoformat(), b.isoformat())
+        branches = [{"branch_id": bid, "name": nm, "weekdays": {k: v["delivery_weekday"] for k, v in _fc.calendar(con, bid).items()}}
+                    for bid, nm in _calendar_branches(con)]
+    return {"from": a.isoformat(), "to": b.isoformat(), "today": today.isoformat(), "rows": rows, "branches": branches,
+            "reasons": [{"code": k, "label": v} for k, v in _rs.REASONS], "rounds": _fc.ROUND_TH,
+            "max_shift_days": _rs.MAX_SHIFT_DAYS, "can_write": "supply.ordering" in _modules(request)}
+
+
+@router.post("/api/bom-center/round-reschedule", dependencies=[Depends(require_write_token)])
+def bc_round_reschedule_add(body: RescheduleBody, request: Request):
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        rows = _write(con, lambda: _rs.record(con, who, body.branch_ids, body.round, body.orig_date, body.new_date,
+                                              body.reason_code, body.reason_note))
+    _rs_after_write([(r, "new") for r in rows])
+    return {"ok": True, "ids": [r["id"] for r in rows], "branches": len(rows)}
+
+
+@router.post("/api/bom-center/round-reschedule/{rid}/edit", dependencies=[Depends(require_write_token)])
+def bc_round_reschedule_edit(rid: int, body: RescheduleEditBody, request: Request):
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        r = _write(con, lambda: _rs.edit(con, who, rid, body.new_date, body.reason_code, body.reason_note))
+    _rs_after_write([(r, "edit")])
+    return {"ok": True, "id": r["id"]}
+
+
+@router.post("/api/bom-center/round-reschedule/{rid}/cancel", dependencies=[Depends(require_write_token)])
+def bc_round_reschedule_cancel(rid: int, body: RescheduleCancelBody, request: Request):
+    who = _who(request)
+    with get_db() as con:
+        _ensure(con)
+        r = _write(con, lambda: _rs.cancel(con, who, rid, body.reason))
+    _rs_after_write([(r, "cancel")])
+    return {"ok": True, "id": r["id"]}
+
+
 # ── bulk delivery days from a file (30-branch onboarding): template + dry-run preview + save ──
 _CAL_ROUNDS = ("1", "2", "salmon")
 _CAL_HEADERS = ["สาขา", "รอบ 1 วันส่ง", "รอบ 2 วันส่ง", "แซลมอนสด วันส่ง"]
@@ -3759,6 +3843,16 @@ def bc_order_covers(request: Request, round: Optional[str] = Query(None), delive
         out = _fc.covers(con, bid, rnd, bkk_today(), delivery=dlv)
         out["round"] = rnd
         return out
+
+
+@router.get("/api/bom-center/order/round-notices")
+def bc_order_round_notices(request: Request, branch_id: Optional[int] = Query(None)):
+    """เลื่อนรอบส่ง: what the branch is told - its moved deliveries still to come (and a move cancelled in the last 3 days)."""
+    with get_db() as con:
+        _ensure(con)
+        bid = _stock_branch(con, request, branch_id)
+        now = _fc.now_bkk()
+        return {"branch_id": bid, "notices": _rs.notices(con, bid, now.date(), now)}
 
 
 class OrderLine(BaseModel):

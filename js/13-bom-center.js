@@ -258,6 +258,19 @@ function _bmcChip(text, ink, wrap) {        // wrap: a long chip (a flag) may br
   const k = /good-ink/.test(ink) ? 'good' : /amber-ink/.test(ink) ? 'watch' : /bad-ink/.test(ink) ? 'fix' : /accent/.test(ink) ? 'info' : 'neutral';
   return `<span class="bmc-chip" data-k="${k}" style="display:inline-block;padding:1px 8px;border-radius:${wrap ? 12 : 999}px;border:1px solid var(--border);color:${ink};font-size:12px;line-height:1.5;white-space:${wrap ? 'normal;max-width:100%' : 'nowrap'};vertical-align:middle">${esc(text)}</span>`;
 }
+// เลื่อนรอบส่ง (2026-10-29): an order / a delivery whose delivery day was moved carries `delay` {from_th, to_th, reason} - the chip
+// "ล่าช้า" with the new day and the reason (watch colour); the order's own status chip is unchanged
+function _bmcDelayChip(dl) { return dl ? _bmcChip(`ล่าช้า · ส่ง ${dl.to_th} · ${dl.reason}`, 'var(--amber-ink)', true) : ''; }
+// the notices a branch reads (/order/plan round_notices, /order/round-notices): title, the plain lines, and the hint
+function bmcMovedNotices(ns) {
+  return (ns || []).map((n, i) => {
+    const on = n.status !== 'cancelled';
+    return `<div class="bmc-moved" role="status" style="border:1px solid ${on ? 'var(--watch-f)' : 'var(--border)'};border-left-width:4px;background:${on ? 'var(--watch-t)' : 'transparent'};border-radius:var(--r-sm);padding:8px 12px;margin-top:${i ? 8 : 0}px">
+      <div class="text-sm font-semibold" style="color:var(--text-primary)">${esc(n.title)}</div>
+      <div class="text-sm" style="color:var(--text-primary);line-height:1.6">${(n.lines || []).map((l, i) => i < 2 && on ? `<b>${esc(l)}</b>` : esc(l)).join(' · ')}</div>
+      ${n.hint ? `<div class="text-xs mt-1" style="color:var(--text-secondary)">${esc(n.hint)}</div>` : ''}</div>`;
+  }).join('');
+}
 // One row per branch (2026-10-19, owner: no run-on "✓ อุดรธานี: … · ✓ อุบลราชธานี: …" lines): สาขา · สถานะ · รายละเอียด · the link.
 // `branches` = [{branch, status, detail, ...}] as /todo gives them; `linkFn(b)` returns the row's action html (or '').
 const _BMC_BR_ST = { done: ['เสร็จแล้ว', 'var(--good-ink)'], todo: ['รอทำ', 'var(--amber-ink)'],
@@ -2956,6 +2969,131 @@ async function bmcLoadCalendar() {
   bmcLoadBenchmark();
   bmcLoadCloseSettings();
   bmcLoadMode();
+  bmcLoadReschedule();
+}
+// ── เลื่อนรอบส่ง (2026-10-29): ONE delivery of a round moves to a later day, for one or several branches; the weekly days above stay ──
+// Sales Support (supply.ordering) records, edits and cancels; every change asks a reason and the branch is told at once (push + notice).
+let _bmcRs = null;            // GET /api/bom-center/round-reschedule
+let _bmcRsForm = null;        // the open form: {id?} (id = editing that row)
+const _BMC_RS_FLD = 'border:1px solid var(--border-control);border-radius:var(--r-sm);padding:0 8px;min-height:38px;font-size:14px;background:var(--bg-input);color:var(--text-primary)';
+function _bmcRsWd(iso) { const p = String(iso || '').split('-').map(Number); return p.length === 3 && p[0] ? new Date(Date.UTC(p[0], p[1] - 1, p[2])).getUTCDay() : null; }
+function _bmcRsDone(r) { return r.status === 'cancelled' || String(r.new_date) < String((_bmcRs || {}).today || ''); }
+function bmcRsPick(f) { uiStateFilter.set(f); bmcRenderReschedule(); }
+async function bmcLoadReschedule() {
+  const box = document.getElementById('bmcRsCard');
+  if (!box) return;
+  try { _bmcRs = await _bmcJson(`${API}/api/bom-center/round-reschedule`); } catch (e) { box.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; return; }
+  bmcRenderReschedule();
+}
+function bmcRenderReschedule() {
+  const box = document.getElementById('bmcRsCard');
+  if (!box || !_bmcRs) return;
+  const w = !!_bmcRs.can_write, f = uiStateFilter.get(), sp = uiStateFilter.split(_bmcRs.rows, _bmcRsDone);
+  const rows = sp[f] || sp.todo;
+  const ordTxt = r => r.order ? _bmcChip(r.order.status_th, r.ordered ? 'var(--navy-ink)' : 'var(--text-muted)') : _bmcChip('ยังไม่มีใบสั่งซื้อ', 'var(--text-muted)');
+  const stTxt = r => r.status === 'cancelled' ? _bmcChip('ยกเลิกการเลื่อน', 'var(--text-muted)') : _bmcChip('ล่าช้า', 'var(--amber-ink)');
+  box.innerHTML = `<div class="flex items-center flex-wrap gap-3 mb-2"><div class="text-sm font-semibold" style="color:var(--text-primary)">เลื่อนรอบส่ง</div>
+      ${uiQ('bmc:rs', 'เลื่อนรอบส่ง', `<p>ใช้เมื่อรอบส่งรอบใดรอบหนึ่งต้องเลื่อน เช่น รอบวันศุกร์นี้เลื่อนไปวันเสาร์ วันส่งประจำสัปดาห์ไม่เปลี่ยน</p><p>เลื่อนได้เฉพาะวันที่หลังวันส่งตามปกติ ไม่เกิน ${_bmcRs.max_shift_days} วัน · เวลาส่งใบสั่งซื้อยังเป็นเวลาเดิมของรอบ</p><p>สาขาได้รับการแจ้งเตือนทันที และเห็นประกาศที่หน้าสั่งของและหน้างาน · ใบสั่งซื้อของรอบนั้นติดป้าย “ล่าช้า” · สาขาที่ยังไม่สั่ง ยอดแนะนำคิดถึงวันส่งใหม่ให้</p><p>แก้ไขหรือยกเลิกได้ ทุกครั้งต้องระบุเหตุผล และมีบันทึกการแก้ไข</p>`)}
+      <div id="bmcRsFilter"></div>
+      ${w && !_bmcRsForm ? `<button type="button" class="wt-btn is-primary ml-auto" onclick="bmcRsOpen()">เลื่อนรอบส่ง</button>` : ''}</div>
+    <div id="bmcRsFormBox">${_bmcRsForm ? _bmcRsFormHtml() : ''}</div>
+    ${rows.length ? `<div class="wt-wrap"><table class="wt"><thead><tr><th>สาขา</th><th>รอบ</th><th>ปกติส่ง</th><th>เลื่อนเป็น</th><th>เหตุผล</th><th>สถานะ</th><th>ใบสั่งซื้อ</th><th>แจ้งเมื่อ</th>${w ? '<th></th>' : ''}</tr></thead><tbody>
+      ${rows.map(r => `<tr><td data-l="สาขา" style="font-weight:600;white-space:nowrap">${esc(r.branch)}</td><td data-l="รอบ">${esc(r.round_th)}</td>
+        <td data-l="ปกติส่ง" style="white-space:nowrap">${esc(r.from_th)}</td><td data-l="เลื่อนเป็น" style="white-space:nowrap;font-weight:600">${esc(r.to_th)}</td>
+        <td data-l="เหตุผล">${esc(r.reason)}${r.status === 'cancelled' ? `<div class="wt-muted" style="font-size:13px">ยกเลิก: ${esc(r.cancel_reason || '')}</div>` : ''}</td>
+        <td data-l="สถานะ">${stTxt(r)}</td><td data-l="ใบสั่งซื้อ">${ordTxt(r)}</td>
+        <td data-l="แจ้งเมื่อ" class="wt-muted" style="white-space:nowrap">${esc(r.announced_th)}<div style="font-size:13px">${esc(r.created_by_th)}</div></td>
+        ${w ? `<td data-l="">${r.status === 'active' ? `<div style="display:flex;gap:6px;flex-wrap:wrap"><button type="button" class="wt-btn" onclick="bmcRsOpen(${r.id})">แก้ไข</button><button type="button" class="wt-btn" onclick="bmcRsCancel(${r.id})">ยกเลิกการเลื่อน</button></div>` : ''}</td>` : ''}</tr>`).join('')}</tbody></table></div>`
+      : uiStateFilter.empty(f, 'bmcRsPick', 'รอบที่เลื่อน')}`;
+  uiStateFilter.bar('bmcRsFilter', { counts: sp.counts, f, pick: 'bmcRsPick' });
+}
+function _bmcRsFormHtml() {
+  const R = _bmcRs, e = _bmcRsForm.id ? R.rows.find(r => r.id === _bmcRsForm.id) : null, v = _bmcRsForm;
+  const rnd = v.round || '1', wd = _bmcRsWd(v.orig_date);
+  const fits = R.branches.filter(b => wd != null && Number(b.weekdays[rnd]) === wd);
+  const lab = (t, inner) => `<label class="text-xs" style="color:var(--text-muted);display:flex;flex-direction:column;gap:2px">${t}${inner}</label>`;
+  return `<div style="border:1px solid var(--border);border-radius:var(--r-sm);padding:12px;margin-bottom:10px">
+    <div class="text-sm font-semibold mb-2" style="color:var(--text-primary)">${e ? `แก้ไขการเลื่อน · ${esc(e.branch)} · ${esc(e.round_th)} · ปกติส่ง ${esc(e.from_th)}` : 'เลื่อนรอบส่ง'}</div>
+    <div class="flex flex-wrap items-end gap-3">
+      ${e ? '' : lab('รอบ', `<select id="bmcRsRound" onchange="bmcRsField('round',this.value)" style="${_BMC_RS_FLD}">${Object.entries(R.rounds).map(([k, t]) => `<option value="${k}" ${k === rnd ? 'selected' : ''}>${esc(t)}</option>`).join('')}</select>`)}
+      ${e ? '' : lab('วันส่งตามปกติ', `<input id="bmcRsOrig" type="date" min="${R.today}" value="${esc(v.orig_date || '')}" onchange="bmcRsField('orig_date',this.value)" style="${_BMC_RS_FLD}">`)}
+      ${lab('เลื่อนเป็น', `<input id="bmcRsNew" type="date" value="${esc(v.new_date || '')}" onchange="bmcRsField('new_date',this.value,true)" style="${_BMC_RS_FLD}">`)}
+      ${lab('เหตุผล', `<select id="bmcRsReason" onchange="bmcRsField('reason_code',this.value,true)" style="${_BMC_RS_FLD}"><option value="">— เลือกเหตุผล —</option>${R.reasons.map(x => `<option value="${x.code}" ${x.code === v.reason_code ? 'selected' : ''}>${esc(x.label)}</option>`).join('')}</select>`)}
+      ${lab(`รายละเอียด${v.reason_code === 'other' ? ' (ต้องระบุ)' : ''}`, `<input id="bmcRsNote" type="text" maxlength="300" value="${esc(v.reason_note || '')}" oninput="_bmcRsForm.reason_note=this.value" style="${_BMC_RS_FLD};min-width:220px;max-width:100%">`)}
+    </div>
+    ${e ? '' : `<div class="mt-3"><div class="text-xs mb-1" style="color:var(--text-muted)">สาขา ${wd == null ? '(เลือกวันส่งตามปกติก่อน)' : `ที่ส่ง${esc(R.rounds[rnd])} วัน${_BMC_WD[wd]} (${fits.length})`}
+        ${fits.length ? `<button type="button" class="shm-showall" onclick="bmcRsAll(true)">เลือกทั้งหมด</button> <button type="button" class="shm-showall" onclick="bmcRsAll(false)">ไม่เลือก</button>` : ''}</div>
+      <div style="display:flex;flex-wrap:wrap;gap:6px 14px">${fits.map(b => `<label class="text-sm" style="display:flex;align-items:center;gap:6px;min-height:32px;color:var(--text-primary)"><input type="checkbox" data-rs-bid="${b.branch_id}" ${(v.branch_ids || []).includes(b.branch_id) ? 'checked' : ''} onchange="bmcRsBranch(${b.branch_id},this.checked)" style="width:18px;height:18px"> ${esc(b.name)}</label>`).join('')
+        || (wd == null ? '' : `<span class="text-xs" style="color:var(--amber-ink)">ไม่มีสาขาที่ส่ง${esc(R.rounds[rnd])} วัน${_BMC_WD[wd]}</span>`)}</div></div>`}
+    <div class="flex flex-wrap items-center gap-2 mt-3"><button type="button" class="wt-btn is-primary" onclick="bmcRsSave()">${e ? 'บันทึกการแก้ไข' : 'บันทึกและแจ้งสาขา'}</button>
+      <button type="button" class="wt-btn" onclick="bmcRsClose()">ปิด</button><span id="bmcRsStatus" class="text-xs" style="color:var(--text-muted)"></span></div></div>`;
+}
+function bmcRsOpen(id) {
+  const e = id ? _bmcRs.rows.find(r => r.id === id) : null;
+  _bmcRsForm = e ? { id, new_date: e.new_date, reason_code: e.reason_code, reason_note: e.reason_note || '' } : { round: '1', orig_date: '', new_date: '', reason_code: '', reason_note: '', branch_ids: [] };
+  bmcRenderReschedule();
+  const box = document.getElementById('bmcRsFormBox');
+  if (box && box.scrollIntoView) box.scrollIntoView({ block: 'nearest' });
+}
+function bmcRsClose() { _bmcRsForm = null; bmcRenderReschedule(); }
+function _bmcRsKeep() {                                   // the typed note survives a redraw
+  const n = document.getElementById('bmcRsNote');
+  if (n && _bmcRsForm) _bmcRsForm.reason_note = n.value;
+}
+function bmcRsField(k, v, light) {
+  _bmcRsKeep();
+  _bmcRsForm[k] = v;
+  if (k === 'orig_date' && v) {                           // the next day is offered as the new day
+    const p = v.split('-').map(Number), d = new Date(Date.UTC(p[0], p[1] - 1, p[2] + 1));
+    if (!_bmcRsForm.new_date || _bmcRsForm.new_date <= v) _bmcRsForm.new_date = d.toISOString().slice(0, 10);
+  }
+  if (k === 'orig_date' || k === 'round') {               // the branches offered follow the round's weekday: keep only those that still fit
+    const wd = _bmcRsWd(_bmcRsForm.orig_date), rnd = _bmcRsForm.round || '1';
+    _bmcRsForm.branch_ids = (_bmcRsForm.branch_ids || []).filter(b => Number((_bmcRs.branches.find(x => x.branch_id === b) || { weekdays: {} }).weekdays[rnd]) === wd);
+  }
+  if (!light || k === 'reason_code') { document.getElementById('bmcRsFormBox').innerHTML = _bmcRsFormHtml(); }
+}
+function bmcRsBranch(bid, on) {
+  const s = new Set(_bmcRsForm.branch_ids || []);
+  if (on) s.add(bid); else s.delete(bid);
+  _bmcRsForm.branch_ids = [...s];
+}
+function bmcRsAll(on) {
+  _bmcRsKeep();
+  const wd = _bmcRsWd(_bmcRsForm.orig_date), rnd = _bmcRsForm.round || '1';
+  _bmcRsForm.branch_ids = on ? _bmcRs.branches.filter(b => Number(b.weekdays[rnd]) === wd).map(b => b.branch_id) : [];
+  document.getElementById('bmcRsFormBox').innerHTML = _bmcRsFormHtml();
+}
+async function bmcRsSave() {
+  _bmcRsKeep();
+  const v = _bmcRsForm, e = v.id ? _bmcRs.rows.find(r => r.id === v.id) : null;
+  const note = (v.reason_note || '').trim();
+  const miss = !e && !v.orig_date ? 'เลือกวันส่งตามปกติ' : !v.new_date ? 'เลือกวันส่งใหม่' : !v.reason_code ? 'เลือกเหตุผล'
+    : v.reason_code === 'other' && !note ? 'ระบุรายละเอียดของเหตุผล' : !e && !(v.branch_ids || []).length ? 'เลือกสาขาอย่างน้อย 1 สาขา' : '';
+  if (miss) { bmcStatus('bmcRsStatus', 'warn', miss); return; }
+  const names = e ? e.branch : _bmcRs.branches.filter(b => v.branch_ids.includes(b.branch_id)).map(b => b.name).join(', ');
+  const rt = e ? e.round_th : _bmcRs.rounds[v.round];
+  if (!await uiConfirm(`${rt} · ${names}\nปกติส่ง ${fmtDayShort(e ? e.orig_date : v.orig_date)} เลื่อนเป็น ${fmtDayShort(v.new_date)}\nสาขาจะได้รับการแจ้งเตือนทันที`,
+    { title: e ? 'ยืนยันแก้ไขการเลื่อนรอบส่ง' : 'ยืนยันเลื่อนรอบส่ง', ok: e ? 'บันทึกการแก้ไข' : 'บันทึกและแจ้งสาขา', cancel: 'ยังไม่บันทึก' })) return;
+  try {
+    const body = e ? { new_date: v.new_date, reason_code: v.reason_code, reason_note: note || null }
+      : { branch_ids: v.branch_ids, round: v.round, orig_date: v.orig_date, new_date: v.new_date, reason_code: v.reason_code, reason_note: note || null };
+    await _bmcJson(`${API}/api/bom-center/round-reschedule${e ? `/${e.id}/edit` : ''}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+    _bmcRsForm = null;
+    await bmcLoadReschedule();
+    uiToast(`✓ ${e ? 'แก้ไขการเลื่อนรอบส่งแล้ว' : 'เลื่อนรอบส่งแล้ว'} · แจ้งสาขาแล้ว`, 'success');
+  } catch (err) { bmcStatus('bmcRsStatus', false, String(err.message || err)); }
+}
+async function bmcRsCancel(id) {
+  const r = _bmcRs.rows.find(x => x.id === id);
+  if (!r) return;
+  const why = await uiPrompt(`${r.branch} · ${r.round_th}\nกลับไปส่งตามปกติ ${r.from_th} · สาขาจะได้รับการแจ้งเตือน`, '', { title: 'ยกเลิกการเลื่อนรอบส่ง', okText: 'ยกเลิกการเลื่อน', placeholder: 'เหตุผลที่ยกเลิก', required: true });
+  if (!why) return;
+  try {
+    await _bmcJson(`${API}/api/bom-center/round-reschedule/${id}/cancel`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason: why }) });
+    await bmcLoadReschedule();
+    uiToast('✓ ยกเลิกการเลื่อนรอบส่งแล้ว · แจ้งสาขาแล้ว', 'success');
+  } catch (err) { uiToast('ไม่สำเร็จ: ' + String(err.message || err), 'error'); }
 }
 // ── batch 4b (3.3 · 3.4) · เกณฑ์ผลต่างและการตรวจนับ: the baht floor of a variance reason, and the weekly-count switch ──
 let _bmcCs = null;
