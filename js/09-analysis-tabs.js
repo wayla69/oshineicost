@@ -630,7 +630,7 @@ async function loadDiscountReasons(params, gen) {
   }
   const reasons = d.reasons || [];
   DISC_REASON_DATA = reasons;
-  if (note) note.textContent = `${fmtN(d.total_bills || 0)} บิลมีส่วนลด · รวม ${fmt(d.total_amount || 0)}`;
+  if (note) note.textContent = '';   // phone UI review 2026-10-31 (item 2): the total and its bills are the KPI row's ส่วนลดรวม / จำนวนบิลที่ลด
   // leakage banner: high "ไม่ระบุเหตุผล" share = cashiers discounting off-policy
   const ra = document.getElementById('disc-reason-alert');
   if (ra) {
@@ -638,13 +638,12 @@ async function loadDiscountReasons(params, gen) {
     const u = reasons.find(r => r.reason_id === 0);
     if (up != null && up >= 15 && u) {
       ra.classList.remove('hidden');
-      ra.innerHTML = `⚠ <b>ส่วนลด "ไม่ระบุเหตุผล" สูง ${up}%</b> (${fmt(u.amount)} · ${fmtN(u.bills)} บิล) — จุดรั่วที่ควรกำหนดนโยบายให้พนักงานเลือกเหตุผลทุกครั้ง`;
+      ra.innerHTML = `⚠ <b>ส่วนลด "ไม่ระบุเหตุผล" สูง</b> — จุดรั่วที่ควรกำหนดนโยบายให้พนักงานเลือกเหตุผลทุกครั้ง`;   // its figures: the card below
     } else ra.classList.add('hidden');
   }
   const untyped = reasons.find(r => r.reason_id === 0);
   const typedAmt = (d.total_amount || 0) - ((untyped && untyped.amount) || 0);
   cards.innerHTML = [
-    { l: 'มูลค่าลดทั้งหมด', v: fmt(d.total_amount || 0), s: `${fmtN(d.total_bills || 0)} บิล`, c: '#ef4444' },
     { l: '⚠ ไม่ระบุเหตุผล', v: (d.untyped_pct != null ? d.untyped_pct + '%' : '—'), s: untyped ? `${fmt(untyped.amount)} · ${fmtN(untyped.bills)} บิล` : 'ไม่มี', c: '#f59e0b' },
     { l: '✓ ระบุเหตุผล', v: (d.total_amount ? (100 - (d.untyped_pct || 0)).toFixed(1) + '%' : '—'), s: fmt(typedAmt), c: '#10b981' },
   ].map(k => `<div class="ms-kpi" style="border:1px solid ${k.c}"><p class="text-[11px]" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.s}</p></div>`).join('');
@@ -955,7 +954,7 @@ async function loadDiscountLeakage(params, gen) {
     const pctColor = abn ? 'var(--bad-ink)' : (pct >= avg ? '#d97706' : 'var(--good-ink)');
     const vs = b.vs_avg_pts || 0;
     const vsColor = vs > 0 ? 'var(--bad-ink)' : 'var(--good-ink)';
-    const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(2) + ' pts · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain.toFixed(2) : '–') + ' ค่าเฉลี่ย';
+    const vsTxt = (vs > 0 ? '▲ +' : '▼ ') + Math.abs(vs).toFixed(2) + ' จุด · ×' + (b.ratio_vs_chain != null ? b.ratio_vs_chain.toFixed(2) : '–') + ' ค่าเฉลี่ย';
     const reason = b.top_reason ? esc(b.top_reason) : '—';
     const untyped = b.top_reason && b.top_reason.indexOf('ไม่ระบุ') >= 0;
     const reasonColor = untyped ? 'var(--amber-ink)' : 'var(--text-secondary)';
@@ -1052,9 +1051,9 @@ async function loadDiscountsTab() {
   document.getElementById('disc-kpi-row').innerHTML = [
     { label: 'ส่วนลดรวม', value: `${fmt(o.total_discount||0)}`, sub: `${discRate}% ของบิลทั้งหมด`, color: '#ef4444', drill: `openDiscountBills({${drillDate}title:'บิลส่วนลดทั้งหมด (ตามตัวกรอง)'})` },
     { label: 'จำนวนบิลที่ลด', value: fmtN(o.discount_tx||0), sub: `จากทั้งหมด ${fmtN(o.total_tx||0)} บิล`, color: '#f59e0b', drill: `openDiscountBills({${drillDate}sort:'date', title:'บิลที่มีส่วนลด (ล่าสุด)'})` },
-    { label: 'Avg Discount/Tx', value: `${fmt(o.avg_discount||0)}`, sub: 'when discount given', color: '#7a66b8' },
+    { label: 'ส่วนลดเฉลี่ยต่อบิล', value: `${fmt(o.avg_discount||0)}`, sub: 'เฉพาะบิลที่มีส่วนลด', color: '#7a66b8' },
     { label: `เกินเพดานส่วนลด ${o.policy_pct != null ? o.policy_pct : (d.policy_pct != null ? d.policy_pct : 2.5)}%`, value: `${fmt(o.excess_baht||0)}`,
-      sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ${fmtN(o.total_tx||0)} บิล · ตั้งเพดานที่ Settings`, color: (o.excess_baht||0) > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' },
+      sub: `${o.branches_over_policy||0} สาขาเกินเพดาน · ตั้งเพดานที่ ตั้งค่า`, color: (o.excess_baht||0) > 0 ? 'var(--bad-ink)' : 'var(--good-ink)' },
   ].map(k => `<div class="card p-4 ${k.drill?'cursor-pointer hover:ring-2 hover:ring-indigo-200':''}" ${k.drill?`onclick="${k.drill}"`:''}><p class="kpi-label">${k.label}${k.drill?'':''}</p><p class="kpi-value" style="color:${textInk(k.color)}">${k.value}</p><p class="text-xs mt-1" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
 
   // Trend chart

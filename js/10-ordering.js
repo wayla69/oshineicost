@@ -1009,7 +1009,7 @@ async function loadIngPurchase(force) {
   const cmp = (k, unit, upGood, i) => R ? periodCmpHtml(t[k], TP && TP[k], TL && TL[k], { unit, upGood, range: R, q: i === 0 }) : '';
   document.getElementById('ipKpis').innerHTML = [
     { l:'ยอดซื้อวัตถุดิบรวม', v:'฿'+fmt(t.amount||0), s:'เฉพาะสัปดาห์ที่นำเข้าแล้ว', c:'#7a66b8', x: cmp('amount', '%', false, 0) },
-    { l:'ยอดขายรวม (ex-VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2', x: cmp('revenue', '%', true) },
+    { l:'ยอดขายรวม (ไม่รวม VAT)', v:'฿'+fmt(t.revenue||0), s:'ช่วงเดียวกัน', c:'#0891b2', x: cmp('revenue', '%', true) },
     { l:'% ยอดซื้อต่อยอดขาย', v:(t.pct!=null?t.pct+'%':'—'), s:'ทั้งช่วง (ค่าที่ควรใช้ตัดสิน)', c:pctCol(t.pct), x: cmp('pct', 'pp', false) },
     { l:'สัปดาห์ที่ยังไม่นำเข้า', v:fmtN(m.missing_weeks||0), s:'ช่อง สาขา × สัปดาห์', c:(m.missing_weeks?'#f59e0b':'#10b981'), x: '' },
   ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p>${k.x ? `<div class="pkpi-cmp">${k.x}</div>` : ''}<p class="text-[11px]" style="color:var(--text-muted)">${esc(k.s)}</p></div>`).join('');

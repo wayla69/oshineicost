@@ -173,7 +173,10 @@
           <option value="">— ช่องทาง —</option><option>Google</option><option>Facebook</option><option>Instagram</option><option>Grab</option><option>LINE MAN</option><option>foodpanda</option><option>หน้าร้าน</option><option>อื่นๆ</option>
         </select>
         <input type="date" id="fbDate" class="rounded border px-2 py-1 text-sm" style="border-color:var(--border);background:var(--bg-input);color:var(--text-primary)">
-        <input type="file" id="fbFile" accept=".csv,.tsv,.txt,.xlsx,.json,.zip" class="text-xs">
+        <!-- the app's own file button (no browser "Choose File" text): the input is hidden inside its label (phone UI review 2026-10-31, item 10) -->
+        <label class="fb-ghost inline-flex items-center">เลือกไฟล์<input type="file" id="fbFile" accept=".csv,.tsv,.txt,.xlsx,.json,.zip" hidden
+          onchange="document.getElementById('fbFileName').textContent = this.files[0] ? this.files[0].name : ''"></label>
+        <span id="fbFileName" class="text-xs" style="color:var(--text-secondary)"></span>
         <button class="fb-btn" onclick="uploadFeedback()">นำเข้าและวิเคราะห์</button>
         <span id="fbUploadStatus" class="text-xs" style="color:var(--text-muted)"></span>
       </div>

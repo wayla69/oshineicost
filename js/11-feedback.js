@@ -329,7 +329,7 @@ async function uploadFeedback() {
     if (r.detail) throw new Error(r.detail);
     st.textContent = `นำเข้า ${r.inserted} รีวิว (อัปเดต ${r.updated || 0} · ซ้ำ ${r.duplicates}) · วิเคราะห์โดย ${r.analysed_by}` + ((r.unmatched || []).length ? ` · ไม่พบสาขาสำหรับ: ${r.unmatched.join(', ')}` : '');
     document.getElementById('fbText').value = '';
-    document.getElementById('fbFile').value = '';
+    document.getElementById('fbFile').value = ''; const fn = document.getElementById('fbFileName'); if (fn) fn.textContent = '';
     loadFeedback(true);
   } catch (e) { st.textContent = 'ไม่สำเร็จ: ' + e.message; }
 }

@@ -1089,7 +1089,7 @@ def _cost_suggestions(con, limit=400):
         # real sample before trusting a median, and never let an estimate claim
         # a dish costs most of what it sells for.
         fam = _ingredient_family(r["description"] or "")
-        pool = fam_pool.get(fam) if fam != "Other · อื่นๆ" else None
+        pool = fam_pool.get(fam) if fam != "อื่นๆ" else None
         if pool and len(pool) >= 8:
             est, method = _stat.median(pool), "ingredient"
             basis, n = fam, len(pool)
