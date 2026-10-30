@@ -28,7 +28,15 @@ The management session(s) loop GET /api/reports/management (a different branch/p
 cache never answers it) and GET /api/home/brief every ~2 s from the first login to the last receive.
 
 Records p50 / p95 / max latency per endpoint, the 4xx / 5xx counts, and any body or transport error that
-mentions "locked" or "timeout". The default password is read from backend/auth.py at run time and never printed.
+mentions "locked" or "timeout".
+
+Passwords (2026-10-30, after #498): a new account no longer gets the shared default - it gets a random one-time
+password the script never sees - and an admin can no longer set the default. So the script makes ONE random password
+per run (kept in memory, never printed or written) and sets it on its own test accounts: with --create-accounts it
+creates load_bNN (role branch) and load_wh (role warehouse), or resets the password of the ones already there. Without
+--create-accounts it reads the test accounts' password from OSHINEI_LOAD_PASSWORD. The management login that creates
+them uses OSHINEI_LOAD_MGMT_PASSWORD when set, else the seeded default (a local scratch server still accepts it; the
+live site refuses it, and --base only allows 127.0.0.1 / localhost anyway).
 """
 import argparse
 import concurrent.futures as cf
@@ -36,6 +44,7 @@ import json
 import os
 import random
 import re
+import secrets
 import sys
 import threading
 import time
@@ -318,7 +327,8 @@ def main():
     ap.add_argument("--prefix", default="load_b", help="branch account prefix: load_b01 ...")
     ap.add_argument("--create-accounts", action="store_true", help="create load_bNN accounts (management1 + the write token)")
     ap.add_argument("--token", default=os.environ.get("OSHINEI_SEED_TOKEN", ""), help="owner write token (env OSHINEI_SEED_TOKEN)")
-    ap.add_argument("--warehouse-user", default="warehouse1")
+    ap.add_argument("--warehouse-user", default="",
+                    help="warehouse login (default: load_wh, created with --create-accounts; else warehouse1)")
     ap.add_argument("--mgmt-user", default="management1")
     ap.add_argument("--month-end", action="store_true", help="add the month-end count sheet + draft autosave per branch each round")
     ap.add_argument("--seed", type=int, default=7)
@@ -329,14 +339,23 @@ def main():
     a = ap.parse_args()
     if not re.match(r"^https?://(127\.0\.0\.1|localhost|\[::1\])(:\d+)?$", a.base.rstrip("/")):
         raise SystemExit("refusing: --base must be a local scratch server (127.0.0.1 / localhost)")
-    pw = default_password()
+    mpw = os.environ.get("OSHINEI_LOAD_MGMT_PASSWORD") or default_password()
+    if a.create_accounts:
+        pw = secrets.token_urlsafe(18)                 # this run's test-account password: memory only, never printed
+    else:
+        pw = os.environ.get("OSHINEI_LOAD_PASSWORD", "")
+        if not pw:
+            raise SystemExit("set OSHINEI_LOAD_PASSWORD to the test accounts' password, or pass --create-accounts "
+                             "(the script then sets a fresh random password on its own accounts)")
+    wh_user = a.warehouse_user or ("load_wh" if a.create_accounts else "warehouse1")
     stats = Stats()
     n = a.branches
 
     # branch names the accounts are bound to: the centre's active list, real branches first
     mg = Client(a.base, stats)
-    if not mg.login(a.mgmt_user, pw):
-        raise SystemExit("management login failed")
+    if not mg.login(a.mgmt_user, mpw):
+        raise SystemExit("management login failed (set OSHINEI_LOAD_MGMT_PASSWORD if the scratch DB's management "
+                         "password is not the seeded default)")
     me = jget(mg.call("GET", "/api/bom-center/stock/me", "GET stock/me"))
     names = [b["name"] for b in sorted(me.get("branches") or [], key=lambda b: b["branch_id"])]
     if len(names) < n:
@@ -345,15 +364,27 @@ def main():
     if a.create_accounts:
         if not a.token:
             raise SystemExit("--create-accounts needs --token (or OSHINEI_SEED_TOKEN)")
-        made = 0
-        for u, b in accounts:
-            r = mg.s.post(a.base.rstrip("/") + "/api/auth/users", headers={"X-Upload-Token": a.token},
-                          json={"username": u, "role": "branch", "branch": b})
+        made = reset = 0
+        hdr = {"X-Upload-Token": a.token}
+        wanted = [(u, "branch", b) for u, b in accounts]
+        if not a.warehouse_user:
+            wanted.append((wh_user, "warehouse", None))
+        for u, role, b in wanted:
+            body = {"username": u, "role": role, "password": pw}
+            if b:
+                body["branch"] = b
+            r = mg.s.post(a.base.rstrip("/") + "/api/auth/users", headers=hdr, json=body)
             if r.status_code == 200:
                 made += 1
-            elif r.status_code != 409:
+            elif r.status_code == 409:                 # already there: give it this run's password (and switch it on)
+                upd = {"password": pw, "active": True, **({"branch": b} if b else {})}
+                r2 = mg.s.put(a.base.rstrip("/") + f"/api/auth/users/{u}", headers=hdr, json=upd)
+                if r2.status_code != 200:
+                    raise SystemExit(f"account {u}: password reset {r2.status_code} {r2.text[:120]}")
+                reset += 1
+            else:
                 raise SystemExit(f"account {u}: {r.status_code} {r.text[:120]}")
-        print(f"accounts: {made} created, {n - made} already there")
+        print(f"accounts: {made} created, {reset} given this run's password")
     # a throw-away stats object for set-up traffic would hide nothing; reset so the tables show only the test itself
     stats = Stats()
     mg.stats = stats
@@ -362,7 +393,7 @@ def main():
 
     # baseline of the heavy report on an idle server (cold cache)
     base_c = Client(a.base, stats)
-    base_c.login(a.mgmt_user, pw)
+    base_c.login(a.mgmt_user, mpw)
     t0 = time.perf_counter()
     base_c.call("GET", "/api/reports/management", "BASELINE reports/management (idle, cold)", params={"period": "monthly", "lang": "th", "branch": names[0]})
     print(f"idle baseline of the heavy report: {time.perf_counter() - t0:.2f} s")
@@ -370,7 +401,7 @@ def main():
     stop = threading.Event()
     heavy_threads = []
     for k in range(a.heavy):
-        t = threading.Thread(target=heavy_loop, args=(a.base, stats, stop, a.mgmt_user, pw, names, a.seed + k), daemon=True)
+        t = threading.Thread(target=heavy_loop, args=(a.base, stats, stop, a.mgmt_user, mpw, names, a.seed + k), daemon=True)
         t.start()
         heavy_threads.append(t)
 
@@ -383,8 +414,10 @@ def main():
     if not all(ok):
         stop.set(); raise SystemExit("some branch logins failed")
     wh = Client(a.base, stats)
-    if not wh.login(a.warehouse_user, pw):
-        stop.set(); raise SystemExit("warehouse login failed")
+    # our own load_wh carries this run's password; any other warehouse login: OSHINEI_LOAD_WH_PASSWORD, else the seeded default
+    wh_pw = pw if (a.create_accounts and not a.warehouse_user) else (os.environ.get("OSHINEI_LOAD_WH_PASSWORD") or default_password())
+    if not wh.login(wh_user, wh_pw):
+        stop.set(); raise SystemExit(f"warehouse login failed ({wh_user})")
     if not a.token:
         stop.set(); raise SystemExit("the warehouse needs the write token: pass --token or set OSHINEI_SEED_TOKEN")
     wh.s.headers["X-Upload-Token"] = a.token
