@@ -233,7 +233,7 @@ def new_menus(con, ids, ce, th=True) -> dict:
 # pos_cancel_bill_detail (one row per voided bill, the sync keeps the 20,000 most recent ~ 11 months) by date(sale_date);
 # only a window older than that table falls back to the monthly pos_cancel_bill (whole month, "source": "month").
 # Three windows are answered at once - เมื่อวาน (the last finished day, rules.latest_settled_day, the hero's anchor),
-# 7 วัน (the 7 finished days ending there) and เดือนนี้ (cs..ce) - the phone's chips switch between them client-side; the
+# 7 วัน (the 7 finished days ending there), 15 วัน (the 15) and เดือนนี้ (cs..ce) - the phone's chips switch between them client-side; the
 # top-level fields stay the month window. The bands are per-window rates; the day window needs T_VOID_MIN_BILLS bills.
 T_VOID_MIN_BILLS = 20            # small-sample guard of the เมื่อวาน window
 _DETAIL_KEEP = 20000             # sync_mssql keeps this many voided bills in pos_cancel_bill_detail
@@ -337,6 +337,7 @@ def voids(con, ids, cs, ce, where, params, th=True) -> dict:
         day = min(_dt.date.fromisoformat(d[:10]), ce)
         windows["day"] = _void_window(con, ids, day, day, where, params, th, cover, month_ok=False, min_bills=T_VOID_MIN_BILLS)
         windows["week"] = _void_window(con, ids, day - _dt.timedelta(days=6), day, where, params, th, cover, month_ok=False)
+        windows["half"] = _void_window(con, ids, day - _dt.timedelta(days=14), day, where, params, th, cover, month_ok=False)   # 15 วัน (owner 2026-10-31)
     common = {"bands": {"watch": T_VOID_WATCH, "fix": T_VOID_FIX}, "range": month["range"], "label": month["label"],
               "source": month["source"], "min_bills_day": T_VOID_MIN_BILLS, "windows": windows}
     if not month["available"]:
