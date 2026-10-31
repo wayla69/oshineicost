@@ -2402,6 +2402,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-ts-bad { background: var(--fix-t); color: var(--bad-ink); }
 .ph-ts-watch { background: var(--watch-t); color: var(--amber-ink); }
 .ph-ts-good { background: var(--good-t); color: var(--good-ink); }
+.ph-ts-neu { background: var(--neu-t); color: var(--neu-i); }   /* within the normal band: no verdict colour (owner 2026-10-31) */
 .ph-ptile .ph-ts { white-space: nowrap; font-variant-numeric: tabular-nums; }
 .ph-pt-t { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
 .ph-pt-t .ph-ts { margin-left: 0; }
@@ -2528,7 +2529,7 @@ body.ph-on .card.ui-fbar { padding: 8px 10px; }
 /* item 8: the state filter (uiStateFilter) is ONE row of horizontal tabs on a phone, 36 px tall, scrolled sideways when it is wider */
 body.ph-on .tskf-seg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 8px; }
 body.ph-on .tskf-seg::-webkit-scrollbar { display: none; }
-body.ph-on .tskf-btn, body.ph-on #shmFilter .tskf-btn { flex: 0 0 auto; min-width: 0; min-height: 36px; padding: 0 12px; border-radius: 999px; white-space: nowrap; }
+body.ph-on .tskf-btn, body.ph-on #shmFilter .tskf-btn { flex: 0 0 auto; min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 999px; white-space: nowrap; }
 @media (max-width: 700px) {
   body.ph-on #phNav { display: grid; }
   body.ph-on.ph-home #phHome { display: block; }

@@ -371,7 +371,8 @@ const _phPctTxt = p => `${p > 0 ? '▲' : p < 0 ? '▼' : '±'}${Math.abs(p).toF
 function _phSalesVals() {
   const v = {}, b = _phBriefJ, sc = _phScJ;
   const ch = sc && sc.chain;
-  if (ch && ch.vs_normal_pct != null) v.dailysales = { v: _phPctTxt(ch.vs_normal_pct), tone: ch.vs_normal_pct < 0 ? 'bad' : 'good', l: 'ยอดขายเมื่อวานเทียบปกติ' };   // the hero's own pill rule (_phPill): down = red
+  // owner 2026-10-31: grey while within the normal band (rules.BELOW_NORMAL_PCT −8 … ABOVE_NORMAL_PCT +10), red only below it, green only above
+  if (ch && ch.vs_normal_pct != null) v.dailysales = { v: _phPctTxt(ch.vs_normal_pct), tone: ch.vs_normal_pct <= -8 ? 'bad' : ch.vs_normal_pct >= 10 ? 'good' : 'neu', l: 'ยอดขายเมื่อวานเทียบปกติ' };
   if (sc && Array.isArray(sc.branches) && sc.branches.length) {
     const n = sc.below_count != null ? sc.below_count : belowNormalRows(sc).length;
     v.home = n ? { v: `${fmtN(n)} สาขา`, tone: 'bad', l: 'สาขาต่ำกว่าปกติเมื่อวาน' } : { tone: 'good', l: 'ทุกสาขาอยู่ในเกณฑ์ปกติ' };
@@ -387,7 +388,7 @@ function _phSalesVals() {
   if (f != null) {
     const t = (b.cost_health && b.cost_health.food_cost_target) || 58, ok = f <= t;
     v.cost = { v: f.toFixed(1) + '%', tone: ok ? 'good' : 'bad', l: `ต้นทุนอาหารเดือนนี้ เป้าไม่เกิน ${t}%` };
-    v.gpbranch = { v: (100 - f).toFixed(0) + '%', tone: ok ? 'good' : 'bad', l: 'GP เดือนนี้' };
+    v.gpbranch = { v: (100 - f).toFixed(1) + '%', tone: ok ? 'good' : 'bad', l: 'GP เดือนนี้' };   // one decimal, the same as ต้นทุน (owner 2026-10-31)
   }
   return v;
 }
@@ -405,18 +406,21 @@ function _phDeptState(d) {
 }
 // the page tiles of a department, work first; o = { h: the state (default: the department's own), head: false = no heading, first: a tile drawn
 // ahead of the rest (the owner's summary) }. The phone's department pages, its หน้าแรก and the operation's home grid all draw through here.
+// owner 2026-10-31: these pages stay on top of the ผู้บริหาร grid even though they carry no figure (never folded under หน้าอื่น)
+const _PH_TILE_PIN = new Set(['mgtreport', 'overall', 'trend', 'pnl', 'pnlbranch']);
 function _phDtHtml(d, o) {
   o = o || {};
   const row = deptVisible().find(r => r.dept.key === d.key);
   const pages = row ? row.pages : [];
   const h = 'h' in o ? o.h : _phDeptState(d);
   const tiles = pages.map(x => ({ x, st: _phTileState(h, x.p.tab + (x.p.pane ? ':' + x.p.pane : '')) }));
-  const rank = t => !t.st ? 4 : t.st.tone === 'bad' ? 0 : t.st.n && !t.st.info ? 1 : t.st.n || t.st.tone === 'watch' ? 2 : 3;
+  const pinned = t => !t.st && _PH_TILE_PIN.has(t.x.p.tab);
+  const rank = t => !t.st ? (pinned(t) ? 4 : 5) : t.st.tone === 'bad' ? 0 : t.st.n && !t.st.info ? 1 : t.st.n || t.st.tone === 'watch' ? 2 : 3;
   tiles.sort((a, b) => (rank(a) - rank(b)) || (((b.st && b.st.n) || 0) - ((a.st && a.st.n) || 0)) || (a.x.i - b.x.i));
   const tile = t => {
     const st = t.st;
     const chip = !st ? '' : st.n ? `<b class="ph-ts ph-ts-${st.tone}" aria-label="${st.info ? 'รอ' : 'ค้าง'} ${fmtN(st.n)}">${fmtN(st.n)}</b>`
-      : st.v ? `<b class="ph-ts ph-ts-${st.tone === 'bad' ? 'bad' : st.tone === 'watch' ? 'watch' : 'good'}" aria-label="${esc(st.l || '')} ${esc(st.v)}">${esc(st.v)}</b>`
+      : st.v ? `<b class="ph-ts ph-ts-${st.tone === 'bad' ? 'bad' : st.tone === 'watch' ? 'watch' : st.tone === 'neu' ? 'neu' : 'good'}" aria-label="${esc(st.l || '')} ${esc(st.v)}">${esc(st.v)}</b>`
       : `<b class="ph-ts ph-ts-good" role="img" aria-label="${esc(st.l || 'เรียบร้อย')}">✓</b>`;     // a check, not a word: the page name keeps the room
     // a tile with no status keeps the red badge of the launcher (navBadgesApply), as before the answers came
     return `<a href="#" class="ph-ptile"${st ? '' : ` data-nb="${_navPageSpec(t.x.p)}"`} onclick="phOpenDeptPage('${d.key}',${t.x.i});return false">${_deptSvg(t.x.p.icon, 28)}${chip ? `<span class="ph-pt-t"><span>${esc(t.x.p.label)}</span>${chip}</span>` : `<span>${esc(t.x.p.label)}</span>`}</a>`;
@@ -425,7 +429,7 @@ function _phDtHtml(d, o) {
   const first = o.first || '';
   // no answer yet (or none for this login): every page as before, no status and nothing folded
   if (!h) return head + `<div class="ph-ptiles">${first}${tiles.map(tile).join('')}</div>`;
-  const shown = tiles.filter(t => t.st), rest = tiles.filter(t => !t.st);
+  const shown = tiles.filter(t => t.st || pinned(t)), rest = tiles.filter(t => !t.st && !pinned(t));
   return head + (shown.length || first ? `<div class="ph-ptiles">${first}${shown.map(tile).join('')}</div>` : '')
     + (rest.length ? `<details class="ph-more"${shown.length || first ? '' : ' open'}><summary>หน้าอื่น (${fmtN(rest.length)})</summary><div class="ph-ptiles">${rest.map(tile).join('')}</div></details>` : '');
 }
