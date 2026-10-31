@@ -136,7 +136,7 @@ def test_filters_are_one_row_and_downloads_sit_under_the_more_menu():
     assert "row.prepend(lab)" in _fn(_src("js/15-orderhub.js"), "_ohbMonthSync")                   # the month joins the row on a phone
     assert re.search(r"body\.ph-on \.ui-fbar \{[^}]*flex-wrap: nowrap", HTML) and re.search(r"body\.ph-on \.ui-more-pop \{[^}]*display: none", HTML)
     assert re.search(r"\.ui-more-pop \{ display: contents; \}", HTML)                              # a desktop keeps them inline
-    assert re.search(r"body\.ph-on \.tskf-seg \{[^}]*flex-wrap: nowrap", HTML) and re.search(r"body\.ph-on \.tskf-btn[^{]*\{[^}]*min-height: 36px", HTML)
+    assert re.search(r"body\.ph-on \.tskf-seg \{[^}]*flex-wrap: nowrap", HTML) and re.search(r"body\.ph-on \.tskf-btn[^{]*\{[^}]*min-height: 44px", HTML)
 
 
 # ── item 11 · charts ──────────────────────────────────────────────────────────────────────────────────────────────────────────────
