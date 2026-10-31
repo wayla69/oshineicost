@@ -141,7 +141,7 @@ def test_b1_frame_is_built_for_one_series_and_not_for_several():
   const off = _glanceB1Frame(mk(12, ['bar'], false), gi), line = _glanceB1Frame(mk(12, ['line'], true), gi);
   return { one: one && [one.latest, one.kinds.length, one.pal.t1], two, off, line, wk: one.kinds.filter(k => k.wk).length };
 })()""")
-    assert got["one"] == [11, 12, "#f0a500"] and got["two"] is None and got["off"] is None and got["line"] is None
+    assert got["one"] == [11, 12, "#e0a43a"] and got["two"] is None and got["off"] is None and got["line"] is None
     assert got["wk"] == 3          # 2026-09-05/06 (Sat, Sun) and 2026-09-12 (Sat)
 
 
@@ -173,7 +173,7 @@ def test_old_series_colours_become_the_b_set_and_keep_their_alpha():
     pre = _const(CORE, "PALETTE") + "\n" + _const(CORE, "B1_PAL") + "\n" + _const(CORE, "_B_OLD") + "\n" + _const(CORE, "_B_EXTRA") + "\n" + _fn(CORE, "glanceBColour")
     got = _node(pre, "[glanceBColour('#2a78d6', false), glanceBColour('#2A78D6', true), glanceBColour('#1baf7a33', false), glanceBColour('#5a9f33', false), "
                      "glanceBColour('#4a70b0', false), glanceBColour('#123456', false), glanceBColour('rgba(1,2,3,.5)', false), glanceBColour(null, false)]")
-    assert got == ["#3a2fb5", "#9d98ff", "#c25e0033", "#8a92b8", "#3a2fb5", "#123456", "rgba(1,2,3,.5)", None]
+    assert got == ["#5b6ba8", "#9aa7e0", "#d08a3e33", "#a99cc9", "#5b6ba8", "#123456", "rgba(1,2,3,.5)", None]   # Pastel A (2026-10-31) series set
 
 
 def test_line_charts_are_2_5_px_and_chart_text_is_at_least_12px():

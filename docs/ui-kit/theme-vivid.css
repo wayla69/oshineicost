@@ -1,32 +1,35 @@
 /* ════════════════════════════════════════════════════════════════════════
-   Oshinei — theme B "Vivid" (2026-10-22, VZ1). Components. Tokens live in tokens.css.
-   Linked LAST in index.html (after theme-formal.css, theme-groups.css and the inline blocks), so it wins ties.
-   Drop the <link> to go back to the formal theme (the tokens still carry the B palette).
-   MEANING, not decoration: green = good, gold = watch, red = fix, slate = normal; always with a glyph or a word.
+   Oshinei — theme "Pastel A" (2026-10-31; owner: "vivid ดู too fancy ให้เป็นสีแบบ pastel, ขึ้นลงใช้เขียวแดงปกติจะได้สะดุดตา",
+   mockup "แบบ A โทนเย็น"). Components. Tokens live in tokens.css. This file kept its name from theme B "Vivid" (2026-10-22, VZ1)
+   so the link order and the tests stay; its rules are now flat.
+   Linked after theme-formal.css, theme-groups.css and the inline blocks, so it wins ties.
+   NO GRADIENTS: a tile is the flat pastel tint of its department hue under that hue's dark ink; a pill is a solid pastel under its
+   dark ink; the header band, the rail and the table head are the flat navy-indigo. The up / down pair (green / red) is the one
+   saturated colour on screen: its fill draws the rules, bars and dots, its dark ink the figures.
+   MEANING, not decoration: green = good, amber = watch, red = fix, slate = normal; always with a glyph or a word.
    The most important number of a card is the boldest thing on it. No content, label or behaviour changes here.
    Screen only: print and the A4 report keep their own look.
    ════════════════════════════════════════════════════════════════════════ */
 @media screen {
 
-/* ── working variables ─────────────────────────────────────────────────── */
+/* ── working variables: --kpi-t the tile tint, --kpi-i its ink, --kpi-f the hue's mid tone (a bar or a ring, never under text) ── */
 body {
-  --on-fill: #ffffff;
-  --kpi-f: var(--hero1); --kpi-f2: #4f3fcf;
+  --on-fill: var(--accent);
+  --kpi-f: var(--accent); --kpi-f2: var(--accent); --kpi-t: var(--accent-soft); --kpi-i: var(--accent);
 }
-body.dark { --kpi-f: #3a3590; --kpi-f2: #4a44a8; }
-body[data-group="sales"], body[data-group="supply"] { --kpi-f: var(--hue-blue-f);   --kpi-f2: var(--hue-blue-f2); }
-body[data-group="buffet"]   { --kpi-f: var(--hue-teal-f);   --kpi-f2: var(--hue-teal-f2); }
-body[data-group="feedback"], body[data-group="money"] { --kpi-f: var(--hue-pink-f); --kpi-f2: var(--hue-pink-f2); }
-body[data-group="menu"], body[data-group="cost"] { --kpi-f: var(--hue-orange-f); --kpi-f2: var(--hue-orange-f2); }
-body[data-group="profit"]   { --kpi-f: var(--hue-green-f);  --kpi-f2: var(--hue-green-f2); }
-body[data-group="ops"]      { --kpi-f: var(--hue-violet-f); --kpi-f2: var(--hue-violet-f2); }
+body[data-group="sales"], body[data-group="supply"] { --kpi-f: var(--hue-blue-f);   --kpi-f2: var(--hue-blue-f);   --kpi-t: var(--hue-blue-t);   --kpi-i: var(--hue-blue-i); }
+body[data-group="buffet"]   { --kpi-f: var(--hue-teal-f);   --kpi-f2: var(--hue-teal-f);   --kpi-t: var(--hue-teal-t);   --kpi-i: var(--hue-teal-i); }
+body[data-group="feedback"], body[data-group="money"] { --kpi-f: var(--hue-pink-f); --kpi-f2: var(--hue-pink-f); --kpi-t: var(--hue-pink-t); --kpi-i: var(--hue-pink-i); }
+body[data-group="menu"], body[data-group="cost"] { --kpi-f: var(--hue-orange-f); --kpi-f2: var(--hue-orange-f); --kpi-t: var(--hue-orange-t); --kpi-i: var(--hue-orange-i); }
+body[data-group="profit"]   { --kpi-f: var(--hue-green-f);  --kpi-f2: var(--hue-green-f);  --kpi-t: var(--hue-green-t);  --kpi-i: var(--hue-green-i); }
+body[data-group="ops"]      { --kpi-f: var(--hue-violet-f); --kpi-f2: var(--hue-violet-f); --kpi-t: var(--hue-violet-t); --kpi-i: var(--hue-violet-i); }
 [data-k="good"]  { --k-f: var(--good-f);  --k-f2: var(--good-f2);  --k-t: var(--good-t);  --k-i: var(--good-i);  --k-on: var(--good-on); }
 [data-k="watch"] { --k-f: var(--watch-f); --k-f2: var(--watch-f2); --k-t: var(--watch-t); --k-i: var(--watch-i); --k-on: var(--watch-on); }
 [data-k="fix"]   { --k-f: var(--fix-f);   --k-f2: var(--fix-f2);   --k-t: var(--fix-t);   --k-i: var(--fix-i);   --k-on: var(--fix-on); }
 [data-k="neutral"], [data-k="info"] { --k-f: var(--neu-f); --k-f2: var(--neu-f2); --k-t: var(--neu-t); --k-i: var(--neu-i); --k-on: var(--neu-on); }
-[data-k="info"] { --k-f: var(--accent); --k-f2: var(--accent); --k-on: var(--on-accent); }
+[data-k="info"] { --k-f: var(--accent); --k-f2: var(--accent); --k-t: var(--accent-soft); --k-i: var(--accent); --k-on: var(--on-accent); }
 
-/* ── cards: radius 20, shadow level 1, an optional meaning bar (data-k) ─── */
+/* ── cards: radius 20, a soft shadow, an optional meaning bar (data-k) ─── */
 body .card, body .ph-card, body .ms-card, body .lnch-tasks, body .frc-tbl-wrap, body .frc-heat {
   border: 0; border-radius: var(--r-card); box-shadow: var(--shadow-card);
 }
@@ -34,110 +37,102 @@ body .card:hover, body .cmp-card:hover { box-shadow: var(--shadow-card); }
 body .card[data-k], body .ms-card[data-k], body .ph-card[data-k] { box-shadow: inset 6px 0 0 var(--k-f), var(--shadow-card); }
 body .skeleton-kpi { border: 0; border-radius: var(--r-card); box-shadow: var(--shadow-card); }
 
-/* ── KPI tiles: the department-hue gradient, white text, the number is the boldest thing ──
-   2026-10-29 (owner: the purple tiles beside white cards "look like two apps"): the phone summary's tiles (#mobileSummary) are
-   left out - they are flat white cards with the hue as a top bar (index.html, .ms-kpi phone block) ── */
+/* ── KPI tiles: the flat pastel tint of the page's hue under its dark ink; the number is the boldest thing ──
+   the phone summary's tiles (#mobileSummary) are left out - they are white cards with the hue as a top bar (index.html, .ms-kpi phone block) ── */
 body .kpi-card.card, body .ms-kpi:not(#mobileSummary .ms-kpi), body #tab-menuimpact .mi-kpi, body #home-decision-tiles > .card {
-  background: linear-gradient(135deg, var(--kpi-f), var(--kpi-f2)); color: var(--on-fill);
-  border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-tile); position: relative; overflow: hidden;
-}
-body .kpi-card.card::after, body .ms-kpi:not(#mobileSummary .ms-kpi)::after, body #home-decision-tiles > .card::after {
-  content: ''; position: absolute; right: -36px; top: -36px; width: 130px; height: 130px; border-radius: 50%;
-  background: rgba(255,255,255,.10); pointer-events: none;
+  background: var(--kpi-t); color: var(--kpi-i);
+  border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-card); position: relative; overflow: hidden;
 }
 body .kpi-card.card { container-type: inline-size; }
 body .kpi-card.card :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .pcmp, .pcmp *),
 body .ms-kpi:not(#mobileSummary .ms-kpi) :is(p, span, div, b, strong, small, em):not(.pill, .pill *, .ui-q, .ms-chip, .ms-chip *, .pcmp, .pcmp *),
 body #tab-menuimpact .mi-kpi :is(p, span, div, b, strong, small):not(.pill, .pill *),
 body #home-decision-tiles > .card :is(p, span, div, b, strong, small):not(.pill, .pill *, .pcmp, .pcmp *) { color: inherit !important; }
-/* PR-PP2: the comparison chips (periodCmpHtml) on a gradient tile sit on the card colour, so their good / bad inks keep their contrast */
-body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp { background: var(--bg-card); border-color: transparent; box-shadow: 0 0 0 1px rgba(255,255,255,.6); }
-body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp-q { background: rgba(255,255,255,.95); }
+/* PR-PP2: the comparison chips (periodCmpHtml) on a tile sit on the card colour, so their good / bad inks keep their contrast */
+body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp { background: var(--bg-card); border-color: transparent; box-shadow: none; }
+body :is(.kpi-card.card, .ms-kpi, #home-decision-tiles > .card) .pcmp-q { background: var(--bg-card); }
 body #home-decision-tiles > .card p.text-2xl { font-size: var(--kfs); font-weight: 700; line-height: 1.1; letter-spacing: -.02em; }
-body .kpi-card.card .kpi-label, body .ms-kpi:not(#mobileSummary .ms-kpi) .lbl { font-weight: 700; opacity: .96; }
+body .kpi-card.card .kpi-label, body .ms-kpi:not(#mobileSummary .ms-kpi) .lbl { font-weight: 700; }
 body .kpi-card.card .kpi-value { font-size: clamp(26px, 15cqw, var(--kfs)); font-weight: 700; letter-spacing: -.02em; line-height: 1.1; overflow-wrap: anywhere; }
 body .ms-kpi:not(#mobileSummary .ms-kpi) .val { font-size: var(--kfs); font-weight: 700; letter-spacing: -.02em; overflow-wrap: anywhere; }
-body .kpi-card.card .kpi-sub, body .ms-kpi:not(#mobileSummary .ms-kpi) .sub { opacity: .96; }
-body .kpi-card.card svg:not(.ui-icon) { background: rgba(255,255,255,.92); border-radius: 8px; padding: 2px 4px; }
-body .kpi-card.card .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .ms-chip { box-shadow: 0 0 0 2px rgba(255,255,255,.85); }
-body .kpi-card.kpi-up    { box-shadow: inset 0 -5px 0 var(--good-f2), var(--shadow-tile); }
-body .kpi-card.kpi-down  { box-shadow: inset 0 -5px 0 var(--fix-f2), var(--shadow-tile); }
-body .kpi-card.card .ui-q { background: rgba(255,255,255,.95); }
+body .kpi-card.card svg:not(.ui-icon) { background: var(--bg-card); border-radius: 8px; padding: 2px 4px; }
+body .kpi-card.card .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .pill, body .ms-kpi:not(#mobileSummary .ms-kpi) .ms-chip { box-shadow: none; }
+body .kpi-card.kpi-up    { box-shadow: inset 0 -4px 0 var(--good-f), var(--shadow-card); }
+body .kpi-card.kpi-down  { box-shadow: inset 0 -4px 0 var(--fix-f), var(--shadow-card); }
+body .kpi-card.card .ui-q { background: var(--bg-card); }
 
-/* ── status pills and chips: a gradient fill with a leading glyph ─────── */
+/* ── status pills and chips: a solid pastel under its dark ink, with a leading glyph ─────── */
 body .pill, body .ms-chip, body .anomaly-item { font-weight: 700; border: 0; }
-body .pill-up, body .badge-up, body .anomaly-good { background: linear-gradient(135deg, var(--good-f), var(--good-f2)); color: var(--good-on); }
-body .pill-down, body .badge-down, body .anomaly-bad, body .pill-danger { background: linear-gradient(135deg, var(--fix-f), var(--fix-f2)); color: var(--fix-on); }
-body .pill-warn { background: linear-gradient(135deg, var(--watch-f), var(--watch-f2)); color: var(--watch-on); }
-body .pill-neu { background: var(--neu-f); color: var(--neu-on); }
+body .pill-up, body .badge-up, body .anomaly-good { background: var(--good-t); color: var(--good-i); }
+body .pill-down, body .badge-down, body .anomaly-bad, body .pill-danger { background: var(--fix-t); color: var(--fix-i); }
+body .pill-warn { background: var(--watch-t); color: var(--watch-i); }
+body .pill-neu { background: var(--neu-t); color: var(--neu-i); }
 body .pill-warn::before { content: '! '; white-space: pre; }
 body .pill-danger::before { content: '✕ '; white-space: pre; }
 body .anomaly-good::before { content: '✓ '; white-space: pre; }
 body .anomaly-bad::before { content: '✕ '; white-space: pre; }
 body .bmc-chip[data-k] { border: 0 !important; font-weight: 700; background: var(--k-t); color: var(--k-i) !important; }
-body .bmc-chip[data-k][style*="white-space:nowrap"] { background: var(--k-f); color: var(--k-on) !important; }   /* a short chip is the solid pill; a long flag stays a tint so a list of them does not shout */
 body .bmc-chip[data-k="good"]::before  { content: '✓ '; white-space: pre; }
 body .bmc-chip[data-k="watch"]::before { content: '! '; white-space: pre; }
 body .bmc-chip[data-k="fix"]::before   { content: '✕ '; white-space: pre; }
 body .frc-chip, body .frc-pill { font-weight: 700; border-radius: 999px; }
-body .frc-chip { border: 0; background: var(--watch-f); color: var(--watch-on); }
-/* the verdict rows of ร้านของฉัน / the phone summary: ดี · ควรดู · ต้องแก้ as a filled tag on a tinted row */
-body .ms-row > span:first-child[style*="flex:0 0 44px"] { flex-basis: 64px !important; text-align: center; padding: 3px 0; border-radius: 999px; color: var(--k-on) !important; background: var(--k-f); }
-body .ms-row > span:first-child[style*="--good-ink"] { --k-f: var(--good-f); --k-on: var(--good-on); }
-body .ms-row > span:first-child[style*="--amber-ink"] { --k-f: var(--watch-f); --k-on: var(--watch-on); }
-body .ms-row > span:first-child[style*="--bad-ink"] { --k-f: var(--fix-f); --k-on: var(--fix-on); }
+body .frc-chip { border: 0; background: var(--watch-t); color: var(--watch-i); }
+/* the verdict rows of ร้านของฉัน / the phone summary: ดี · ควรดู · ต้องแก้ as a pastel tag on a lightly tinted row */
+body .ms-row > span:first-child[style*="flex:0 0 44px"] { flex-basis: 64px !important; text-align: center; padding: 3px 0; border-radius: 999px; color: var(--k-i) !important; background: var(--k-t); }
+body .ms-row > span:first-child[style*="--good-ink"] { --k-t: var(--good-t); --k-i: var(--good-i); }
+body .ms-row > span:first-child[style*="--amber-ink"] { --k-t: var(--watch-t); --k-i: var(--watch-i); }
+body .ms-row > span:first-child[style*="--bad-ink"] { --k-t: var(--fix-t); --k-i: var(--fix-i); }
 body .ms-row > span:first-child[style*="--good-ink"]::before { content: '✓ '; white-space: pre; }
 body .ms-row > span:first-child[style*="--amber-ink"]::before { content: '! '; white-space: pre; }
 body .ms-row > span:first-child[style*="--bad-ink"]::before { content: '✕ '; white-space: pre; }
-body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--good-ink"]) { background: linear-gradient(90deg, var(--good-t), transparent 80%); }
-body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--amber-ink"]) { background: linear-gradient(90deg, var(--watch-t), transparent 80%); }
-body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--bad-ink"]) { background: linear-gradient(90deg, var(--fix-t), transparent 80%); }
+body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--good-ink"]) { background: color-mix(in srgb, var(--good-t) 40%, transparent); }
+body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--amber-ink"]) { background: color-mix(in srgb, var(--watch-t) 40%, transparent); }
+body .ms-row:has(> span:first-child[style*="flex:0 0 44px"][style*="--bad-ink"]) { background: color-mix(in srgb, var(--fix-t) 40%, transparent); }
 body .ms-row:has(> span:first-child[style*="flex:0 0 44px"]) { margin: 0 -16px; padding-left: 16px; padding-right: 16px; border-top-color: transparent; }
 
-/* ── buttons: primary = indigo-to-violet gradient, secondary = outlined and bold ── */
+/* ── buttons: primary = the flat accent, secondary = outlined and bold ── */
 body .upload-btn, body .topbar-icon-btn, body .lnch-go, body .shm-showall, body .dive-action-btn { font-weight: 700; border-radius: var(--r-btn); }
 body .ui-toast-act, body .frc-dl, body #offlineOverlay .retry-btn, body .period-preset.active, body .gran-active, body .gran-btn.gran-active,
-body .tskf-btn[aria-pressed="true"], body .lnch-tab[aria-pressed="true"], body .ms-seg-on {
-  background: linear-gradient(135deg, var(--accent), #8a2aa8) !important; color: #ffffff !important; border-color: transparent !important; box-shadow: 0 5px 14px rgba(58,47,181,.38);
-}
+body .tskf-btn[aria-pressed="true"], body .lnch-tab[aria-pressed="true"], body .ms-seg-on,
 body.dark .ui-toast-act, body.dark .frc-dl, body.dark .period-preset.active, body.dark .gran-active, body.dark .tskf-btn[aria-pressed="true"],
-body.dark .lnch-tab[aria-pressed="true"], body.dark .ms-seg-on { background: linear-gradient(135deg, #8577f2, #cc62bd) !important; color: #10122e !important; box-shadow: none; }
-/* RV-M: the stops #7a6cf0 → #c04fb0 held the dark ink at 4.34:1 (every active chip of dark mode); #8577f2 → #cc62bd are 5.2:1 and up */
+body.dark .lnch-tab[aria-pressed="true"], body.dark .ms-seg-on {
+  background: var(--accent) !important; color: var(--on-accent) !important; border-color: transparent !important; box-shadow: none;
+}
 body .tskf-btn, body .lnch-tab, body .period-preset, body .gran-btn, body .subtab-btn, body .ph-nav-i, body .preset-chip { font-weight: 700; border-radius: var(--r-btn); }
 body .tskf-btn, body .lnch-tab { border: 0; box-shadow: var(--shadow-card); }
 body .subtab-btn.active, body.dark .subtab-btn.active { background: var(--accent-soft); border-radius: var(--r-btn) var(--r-btn) 0 0; }
 body .ui-q { background: var(--accent-soft); border: 0; font-weight: 700; }
 body .ui-q:hover { background: var(--accent); color: var(--on-accent); }
 
-/* ── section headers: a coloured chip in the page's hue ─────────────────── */
+/* ── section headers: a ring in the page's hue ─────────────────── */
 body .section-title { color: var(--text-primary); font-weight: 700; }
 body .section-title::before, body .ms-section-title::before {
-  content: ''; flex: 0 0 22px; width: 22px; height: 22px; border-radius: 50%; margin-right: 2px;
-  background: radial-gradient(circle at center, #ffffff 0 3.5px, transparent 4px), linear-gradient(135deg, var(--kpi-f), var(--kpi-f2));
-  box-shadow: 0 2px 6px rgba(12,15,46,.2);
+  content: ''; flex: 0 0 18px; width: 18px; height: 18px; border-radius: 50%; margin-right: 2px; box-sizing: border-box;
+  background: var(--kpi-t); border: 5px solid var(--kpi-f); box-shadow: none;
 }
 body .ms-section-title { display: flex; align-items: center; gap: 8px; font-size: 15px; }
-body #mobileSummary .ms-section-title::before { background: radial-gradient(circle at center, #ffffff 0 3.5px, transparent 4px), linear-gradient(135deg, var(--kpi-f), var(--kpi-f2)); width: 22px; height: 22px; margin-right: 2px; vertical-align: 0; border-radius: 50%; }
+body #mobileSummary .ms-section-title::before { background: var(--kpi-t); border: 5px solid var(--kpi-f); width: 18px; height: 18px; margin-right: 2px; vertical-align: 0; border-radius: 50%; }
 
-/* ── the hero band: indigo -> violet -> magenta ─────────────────────────── */
-body .ph-hero, body .ph-head-navy, body .ms-header, body #phBusy {
-  background: linear-gradient(120deg, var(--hero1), var(--hero-mid) 55%, var(--hero2)); color: var(--hero-ink);
+/* ── the header band: flat navy-indigo ─────────────────────────── */
+body .ph-hero, body .ph-head-navy, body .ms-header, body #phBusy, body .frc-hero {
+  background: var(--hero1); color: var(--hero-ink);
 }
 body .ph-hero .ph-uid, body .ph-hero-date, body .ph-yest-l, body .ph-yest-s, body .ph-head-navy .ph-head-t p, body .ph-hero .ph-yest { color: var(--hero-ink2); }
 body .ph-yest-v { color: var(--hero-ink); font-weight: 700; }
-body .ph-logo, body .ms-header .ms-logo { background: rgba(255,255,255,.24); color: var(--hero-ink); }
+body .ph-logo, body .ms-header .ms-logo { background: rgba(255,255,255,.18); color: var(--hero-ink); }
 body .ph-yest { color: var(--hero-ink); }
-body .ph-taskcard { border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-tile); }
-body #deptHead .dh-band, body .ph-head-tint { background: linear-gradient(120deg, var(--df, var(--hero1)), var(--df2, var(--hero2))); color: #ffffff; border-bottom: 0; }
-body #deptHead .dh-name, body .ph-head-tint .ph-head-t h1 { color: #ffffff; font-weight: 700; }
-body #deptHead .dh-duty, body .ph-head-tint .ph-head-t p { color: #ffffff; opacity: .95; }
-body #deptHead .dh-badge { border-radius: var(--r-tile); box-shadow: 0 3px 8px rgba(12,15,46,.25); }
-body #deptHead .dh-tab { color: #ffffff; font-weight: 700; border-radius: var(--r-btn) var(--r-btn) 0 0; }
-body #deptHead .dh-tab svg { color: #ffffff; }
-body #deptHead .dh-tab:hover { background: rgba(255,255,255,.16); }
-body #deptHead .dh-tab[aria-selected="true"] { background: var(--bg-page); color: var(--text-primary); box-shadow: inset 0 4px 0 var(--gold); }
+body .ph-taskcard { border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-card); }
+/* a department's band: its flat pastel tint under its dark ink */
+body #deptHead .dh-band, body .ph-head-tint { background: var(--dt, var(--accent-soft)); color: var(--dk, var(--accent)); border-bottom: 0; }
+body #deptHead .dh-name, body .ph-head-tint .ph-head-t h1 { color: var(--dk, var(--accent)); font-weight: 700; }
+body #deptHead .dh-duty, body .ph-head-tint .ph-head-t p { color: var(--dk, var(--accent)); }
+body #deptHead .dh-badge { border-radius: var(--r-tile); box-shadow: var(--shadow-card); }
+body #deptHead .dh-tab { color: var(--dk, var(--accent)); font-weight: 700; border-radius: var(--r-btn) var(--r-btn) 0 0; }
+body #deptHead .dh-tab svg { color: var(--dk, var(--accent)); }
+body #deptHead .dh-tab:hover { background: color-mix(in srgb, var(--dk, var(--accent)) 10%, transparent); }
+body #deptHead .dh-tab[aria-selected="true"] { background: var(--bg-page); color: var(--text-primary); box-shadow: inset 0 3px 0 var(--dk, var(--accent)); }
 body #deptHead .dh-tab[aria-selected="true"] svg { color: var(--dk); }
-body .ph-head-tint .ph-back { color: #ffffff; }
+body .ph-head-tint .ph-back { color: var(--dk, var(--accent)); }
 body .ph-head-tint .ph-badge { background: var(--bg-card); color: var(--dk); border-radius: 50%; }
 body #deptHead .dh-crumb { background: var(--bg-card); }
 body .dept-head { border-bottom: 0; background: var(--bg-card); }
@@ -145,29 +140,29 @@ body .dept-head { border-bottom: 0; background: var(--bg-card); }
 /* ── launcher: department cards, tiles, the phone tiles ─────────────────── */
 body #tab-launcher .lnch-greet { color: var(--accent); font-weight: 700; }
 body #tab-launcher .lnch-dept, body .ph-dept, body .ph-bigtile { border: 0; border-radius: var(--r-card); box-shadow: var(--shadow-card); }
-body #tab-launcher .lnch-dept-head { background: linear-gradient(120deg, var(--df, var(--hero1)), var(--df2, var(--hero2))); border-bottom: 0; }
-body #tab-launcher .lnch-dept-name { color: #ffffff; font-weight: 700; }
-body #tab-launcher .lnch-dept-duty { color: #ffffff; opacity: .95; }
-body #tab-launcher .lnch-badge { border-radius: var(--r-tile); box-shadow: 0 3px 8px rgba(12,15,46,.25); }
+body #tab-launcher .lnch-dept-head { background: var(--dt, var(--accent-soft)); border-bottom: 0; }
+body #tab-launcher .lnch-dept-name { color: var(--dk, var(--accent)); font-weight: 700; }
+body #tab-launcher .lnch-dept-duty { color: var(--dk, var(--accent)); }
+body #tab-launcher .lnch-badge { border-radius: var(--r-tile); box-shadow: var(--shadow-card); }
 body #tab-launcher .lnch-tile { border: 0; border-radius: var(--r-tile); background: var(--dt); box-shadow: var(--shadow-card); font-weight: 700; }
 body #tab-launcher .lnch-tile:hover { background: var(--bg-subtle); box-shadow: var(--shadow-tile); }
 body #tab-launcher .lnch-tile-label { font-weight: 700; color: var(--text-primary); }
 body #tab-launcher .lnch-search, body .ph-search { border-radius: var(--r-btn); }
-body .ph-badge { border-radius: 50%; background: linear-gradient(135deg, var(--df, var(--dk)), var(--df2, var(--dk))); color: #ffffff; box-shadow: 0 3px 8px rgba(12,15,46,.22); }
+body .ph-badge { border-radius: 50%; background: var(--dt, var(--accent-soft)); color: var(--dk, var(--accent)); box-shadow: none; }
 body .ph-badge-sm { background: var(--bg-card); color: var(--dk); }
-body .ph-ptile { border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-tile); font-weight: 700; }
+body .ph-ptile { border: 0; border-radius: var(--r-tile); box-shadow: var(--shadow-card); font-weight: 700; }
 body .ph-ptile svg { color: var(--dk); }
 body .ph-dept-n, body .ph-bigtile-n { font-weight: 700; }
 body .ph-sec, body .ph-card-h { font-weight: 700; }
-body #phNav { box-shadow: 0 -8px 22px rgba(58,47,181,.18); border-top: 0; border-radius: 22px 22px 0 0; }
+body #phNav { box-shadow: 0 -4px 14px rgba(31,42,68,.10); border-top: 0; border-radius: 22px 22px 0 0; }
 body .ph-nav-i.active { color: var(--accent); }
 
-/* ── sidebar and rail ───────────────────────────────────────────────────── */
-body .sidebar { background: linear-gradient(180deg, var(--rail-grad1), var(--rail-grad2)); }
+/* ── sidebar and rail: flat navy-indigo ─────────────────────────────────── */
+body .sidebar { background: var(--bg-sidebar); }
 body .nav-section { color: var(--rail-ink); }
 body .nav-item { color: var(--rail-ink); }
-body .nav-item.active { background: rgba(255,255,255,.20); }
-body .nav-item:hover { background: rgba(255,255,255,.14); }
+body .nav-item.active { background: rgba(255,255,255,.18); }
+body .nav-item:hover { background: rgba(255,255,255,.12); }
 body .toggle-btn { color: var(--rail-ink); }
 body .sidebar-logo { border-bottom-color: rgba(255,255,255,.22); }
 body .logo-mark { color: var(--accent); }
@@ -177,12 +172,11 @@ body .sidebar.collapsed .nav-item.rail-item.active { border-radius: var(--r-btn)
 body .top-bar { box-shadow: var(--shadow-card); border-bottom: 0; }
 body .page-title { font-weight: 700; }
 
-/* ── tables and lists: a header band, a status bar and tint on over/under rows, neutral rows plain ── */
-body thead th, body .wt th { background: linear-gradient(135deg, var(--accent), var(--hue-violet-f)); color: #ffffff; border-bottom: 0; font-weight: 700; }
-body.dark thead th, body.dark .wt th { background: linear-gradient(135deg, #3a3590, #4a3290); color: #ffffff; }
+/* ── tables and lists: a flat header band, a status bar and tint on over/under rows, neutral rows plain ── */
+body thead th, body .wt th, body.dark thead th, body.dark .wt th { background: var(--th-bg); color: var(--th-on); border-bottom: 0; font-weight: 700; }
 body thead th:first-child, body .wt th:first-child { border-top-left-radius: var(--r-btn); border-bottom-left-radius: var(--r-btn); }
 body thead th:last-child, body .wt th:last-child { border-top-right-radius: var(--r-btn); border-bottom-right-radius: var(--r-btn); }
-body thead th.th-sortable:hover, body thead th.sorted-desc, body thead th.sorted-asc, body thead th.sorted-desc::after, body thead th.sorted-asc::after { color: #ffffff; }
+body thead th.th-sortable:hover, body thead th.sorted-desc, body thead th.sorted-asc, body thead th.sorted-desc::after, body thead th.sorted-asc::after { color: var(--th-on); }
 body tbody tr:nth-child(even), body.dark tbody tr:nth-child(even) { background: var(--bg-subtle); }
 body tbody tr { border-bottom-color: var(--border-soft); }
 body .wt tr[data-k="watch"] td { background: var(--watch-t); } body .wt tr[data-k="fix"] td { background: var(--fix-t); } body .wt tr[data-k="good"] td { background: var(--good-t); }
@@ -191,9 +185,14 @@ body tr.row-over, body tr[data-k="watch"] { background: var(--watch-t) !importan
 body tr.row-bad, body tr[data-k="fix"] { background: var(--fix-t) !important; box-shadow: inset 4px 0 0 var(--fix-f); }
 body tr[data-k="good"] { background: var(--good-t) !important; box-shadow: inset 4px 0 0 var(--good-f); }
 body .frc-tbl th, body .frc-tbl th:first-child { background: var(--bg-subtle); color: var(--text-secondary); }
-body .brn-row.brn-need { box-shadow: none; background: linear-gradient(90deg, var(--watch-t), transparent 75%); padding-left: 0 !important; }
+body .brn-row.brn-need { box-shadow: none; background: color-mix(in srgb, var(--watch-t) 70%, transparent); padding-left: 0 !important; }
 body .brn-row .brn-qty { border: 2px solid var(--border-control); border-radius: var(--r-btn); font-weight: 700; font-size: 17px; background: var(--bg-subtle); }
 body .brn-row .brn-qty[aria-invalid="true"] { border-color: var(--fix-f) !important; }
+
+/* ── the insight bars (index.html .ins-bar-*): flat meaning fills ── */
+body .ins-bar-bad, body.dark .ins-bar-bad { background: var(--fix-f); }
+body .ins-bar-good, body.dark .ins-bar-good { background: var(--good-f); }
+body .ins-bar-flat, body.dark .ins-bar-flat { background: var(--neu-f); }
 
 /* ── toast and dialogs ──────────────────────────────────────────────────── */
 body .ui-toast { border: 0; border-left: 6px solid var(--toast-info); border-radius: var(--r-tile); box-shadow: var(--toast-shadow); font-weight: 600; }

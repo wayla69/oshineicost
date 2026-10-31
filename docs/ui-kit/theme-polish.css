@@ -72,9 +72,9 @@ body .section-title { flex-wrap: wrap; row-gap: 2px; }
      header (the Top 60 tables, heatmaps, the franchise tables, the supply tabs' flat tables, an inline fill) keeps its own fill and ink
      (the franchise table's first head cell read 1.2:1). */
   .content-area table thead th:first-child:not(.tbl-top60 th, .heatmap-table th, .frc-tbl th, [style*="background"],
-      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: var(--accent); color: #ffffff !important; }
+      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: var(--th-bg); color: var(--th-on) !important; }
   body.dark .content-area table thead th:first-child:not(.tbl-top60 th, .heatmap-table th, .frc-tbl th, [style*="background"],
-      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: #3a3590; }
+      :is(#tab-supplyhome, #tab-bomcenter, #tab-orderhub, #tab-branchstock, #tab-ordering, #tab-ingpurchase, #tab-ordersetup) table:not(.wt) th) { background: var(--th-bg); }
   body .ms-toggle { min-width: 44px !important; }
   body :is(.dive-btn, .fb-chip, .fb-ghost, .ms-toggle, .tbl-fold-btn, .topbar-icon-btn):where(:not(.ph-frame *)) { min-width: 44px; }
   #tab-mgtreport [class*="flex items-baseline gap-2 text"] { min-height: 44px; align-items: center; }

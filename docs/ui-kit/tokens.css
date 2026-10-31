@@ -8,50 +8,58 @@
    Served in production at /docs/ui-kit/tokens.css (docs/ is mounted at /docs;
    see backend/main.py).
 
-   THEME B "VIVID" (2026-10-22, owner's pick from the VZ-0 mockup): indigo accent, a violet-to-magenta hero,
-   six department hues with gradient fills, three shadow levels, radii 20/18/14. Every text pair below is
-   scripted in scripts/contrast_b.py and listed in docs/ui-kit/CONTRAST_B.md (>= 4.5:1; >= 3:1 for >= 24 px bold).
-   MEANING, not decoration: green/teal = good (-f fill, -t tint, -i ink, -on text on the fill), gold/amber = watch,
-   red/magenta = fix, slate = normal. A meaning is always shown with a glyph or a word too, never colour alone.
+   THEME "PASTEL A" (2026-10-31, owner: "vivid ดู too fancy ให้เป็นสีแบบ pastel, ขึ้นลงใช้เขียวแดงปกติจะได้สะดุดตา"; mockup
+   "แบบ A โทนเย็น"). It replaces theme B "Vivid" (2026-10-22) on the same token names: a cool grey-blue page, white cards, ONE flat
+   navy-indigo accent, department hues as flat pastel tints with a dark ink of the same hue, NO gradients (every -f2 / hero / rail
+   pair is the same colour, so an old two-stop rule paints flat). Green / red for up / down stay the one saturated pair, so they
+   stand out on the pastel page. Radii 20/18/14 and the three shadow levels stay (softer).
+   Every text pair below is scripted in scripts/contrast_b.py and listed in docs/ui-kit/CONTRAST_B.md (>= 4.5:1; >= 3:1 for
+   >= 24 px bold; 3:1 for an edge or an icon).
+   MEANING, not decoration: green = good (-f the saturated fill for bars / rules / dots, -t the pastel tint a pill or a row sits on,
+   -i the dark ink as text and on the tint, -on text on the fill), amber = watch, red = fix, slate = normal. A meaning is always
+   shown with a glyph or a word too, never colour alone.
    ════════════════════════════════════════════════════════════════════════ */
 :root {
-  --bg-page:    #e4e8f7;
+  --bg-page:    #eef1f6;
   --bg-card:    #ffffff;
   --bg-input:   #ffffff;
-  --bg-subtle:  #eff1fc;   /* the "raise" surface: table heads, quiet wells */
-  --bg-sidebar: #2a2290;   /* the indigo rail (it is a gradient to magenta in theme-vivid.css) */
+  --bg-subtle:  #f4f6fa;   /* the "raise" surface: table heads, quiet wells */
+  --bg-sidebar: #3f4c7a;   /* the navy-indigo rail, flat */
   --bg-topbar:  #ffffff;
-  --bg-hover:   #e6e9fa;
-  --text-primary:   #0c0f2e;
-  --text-secondary: #333a63;
-  --text-muted:     #4a5280;
-  --border:         #c9d1ea;   /* card / panel / table edges: structure, not controls */
-  --border-soft:    #dde2f4;   /* row separators */
-  --border-control: #6f7aa8;   /* inputs, selects, outlined buttons: >= 3:1 on white */
+  --bg-hover:   #e6eaf2;
+  --text-primary:   #1f2a44;
+  --text-secondary: #4f5b76;
+  --text-muted:     #56627c;
+  --border:         #d9dee8;   /* card / panel / table edges: structure, not controls */
+  --border-soft:    #e6eaf1;   /* row separators */
+  --border-control: #7a85a0;   /* inputs, selects, outlined buttons: >= 3:1 on white */
 
-  /* The one accent: indigo. White on it = 11:1; as text on white = 11:1. */
-  --accent:       #3a2fb5;
-  --accent-hover: #2a2290;
-  --accent-soft:  #dcdaf8;     /* accent on it = 7.9:1 */
-  --on-accent:    #ffffff;
+  /* The one accent: navy-indigo, flat. Its ink on it = 8.6:1; as text on white = 8.6:1. */
+  --accent:       #3f4c7a;
+  --accent-hover: #33406a;
+  --accent-soft:  #e6eaf7;     /* lavender: accent on it = 7.3:1 */
+  --on-accent:    #f3f5fa;
 
-  /* ── Meaning sets (B): -f solid fill · -f2 gradient end · -t tint · -i ink as TEXT · -on text on the fill ── */
-  --good-f:  #047857; --good-f2:  #06805c; --good-t:  #d5f2e5; --good-i:  #055c42; --good-on:  #ffffff;
-  --watch-f: #f59e0b; --watch-f2: #fbbf24; --watch-t: #ffefc7; --watch-i: #7a4500; --watch-on: #1f1300;
-  --fix-f:   #c62828; --fix-f2:   #d33a3a; --fix-t:   #ffdcdc; --fix-i:   #9b1414; --fix-on:   #ffffff;
-  --neu-f:   #4a5578; --neu-f2:   #4a5578; --neu-t:   #e3e7f6; --neu-i:   #333a63; --neu-on:   #ffffff;
-  --gold: #f59e0b; --gold-i: #7a4500; --on-gold: #1f1300;
-  /* Chart set B1 (VZ2): a above the average (teal->indigo), b below (lilac), w weekend, t latest (gold), c1-c6 categorical, s1-s5 sequential.
-     js/01-core.js B1_PAL mirrors these values (backend/test_charts_b1.py keeps them equal). */
-  --ch-a1: #0c8f81; --ch-a2: #3a2fb5; --ch-aw1: #0f9d8e; --ch-aw2: #5148d4; --ch-b1: #8f78df; --ch-b2: #7e62d2; --ch-bw1: #9a84e6; --ch-bw2: #8468d8;
-  --ch-t1: #f0a500; --ch-t2: #b86e00; --ch-tstroke: #7a4a00; --ch-avg: #475569; --ch-mark: #b86e00;
-  --ch-c1: #3a2fb5; --ch-c2: #0e8f87; --ch-c3: #c25e00; --ch-c4: #b01d62; --ch-c5: #1d78c9; --ch-c6: #6b7399;
+  /* ── Meaning sets: -f fill (bars, rules, dots) · -f2 = -f (no gradient) · -t pastel tint (pill, row) · -i ink · -on text on -f ── */
+  --good-f:  #178043; --good-f2:  #178043; --good-t:  #d6f2e1; --good-i:  #176b3a; --good-on:  #ffffff;
+  --watch-f: #e0a43a; --watch-f2: #e0a43a; --watch-t: #fbefd9; --watch-i: #7a5a20; --watch-on: #1f1300;
+  --fix-f:   #c62828; --fix-f2:   #c62828; --fix-t:   #fbdada; --fix-i:   #9a2222; --fix-on:   #ffffff;
+  --neu-f:   #5b6782; --neu-f2:   #5b6782; --neu-t:   #e9ecf2; --neu-i:   #46526e; --neu-on:   #ffffff;
+  --gold: #e0a43a; --gold-i: #7a5a20; --on-gold: #1f1300;
+  /* Chart set (Pastel A): a above the average (mid teal), b below (mid lavender), w weekend (a step lighter), t the latest (the watch
+     amber, dark edge), avg a dark grey, c1-c6 categorical, s1-s5 sequential (the heat scale, unchanged: index.html --heat-s* mirror it).
+     Each -1/-2 pair is ONE colour: the bars are flat. js/01-core.js B1_PAL mirrors these values (backend/test_charts_b1.py keeps them equal). */
+  --ch-a1: #4e9a8f; --ch-a2: #4e9a8f; --ch-aw1: #72b2a8; --ch-aw2: #72b2a8; --ch-b1: #9aa3cf; --ch-b2: #9aa3cf; --ch-bw1: #b3bade; --ch-bw2: #b3bade;
+  --ch-t1: #e0a43a; --ch-t2: #e0a43a; --ch-tstroke: #7a5a20; --ch-avg: #4a5568; --ch-mark: #b7791f;
+  --ch-c1: #5b6ba8; --ch-c2: #4e9a8f; --ch-c3: #d08a3e; --ch-c4: #c0607a; --ch-c5: #5a8fc8; --ch-c6: #8b7ab8;
   --ch-s1: #7686da; --ch-s2: #6a66d4; --ch-s3: #5b52cc; --ch-s4: #3f33a8; --ch-s5: #2b1f80;
-  /* the hero band: indigo -> violet -> magenta; text on every stop >= 4.5:1 */
-  --hero1: #3a2fb5; --hero-mid: #6a2aa8; --hero2: #b01d62; --hero-ink: #ffffff; --hero-ink2: #f3e8ff;
-  --rail-grad1: #271f8a; --rail-grad2: #8a1650;
+  /* the header band (phone hero, the summary header): flat navy-indigo; hero1 = hero-mid = hero2 */
+  --hero1: #3f4c7a; --hero-mid: #3f4c7a; --hero2: #3f4c7a; --hero-ink: #f3f5fa; --hero-ink2: #dde2ee;
+  --rail-grad1: #3f4c7a; --rail-grad2: #3f4c7a;
+  /* the table header band: flat navy-indigo, its own ink */
+  --th-bg: #3f4c7a; --th-on: #f3f5fa;
 
-  /* Up/down figures as TEXT (the meaning inks above). The bright fills are for rules, bars and dots only. */
+  /* Up/down figures as TEXT (the meaning inks above). The saturated fills are for rules, bars and dots only. */
   --good-ink:   var(--good-i);
   --bad-ink:    var(--fix-i);
   /* Teal and rose as TEXT (categories, the ordering/checklist accent, errors). */
@@ -69,24 +77,30 @@
   --amber-ink:  var(--watch-i);
   --orange-ink: #a8360a;
 
-  /* Six department hues (B): -f / -f2 the gradient fill (white text on both), -t tint, -i ink on the tint and on the card */
-  --hue-blue-f:   #1d5fa8; --hue-blue-f2:   #2a6fc0; --hue-blue-t:   #dceafa; --hue-blue-i:   #154a86;
-  --hue-teal-f:   #0f6b6b; --hue-teal-f2:   #167d7a; --hue-teal-t:   #dcf1f0; --hue-teal-i:   #0b5252;
-  --hue-violet-f: #5b3fa8; --hue-violet-f2: #6d50c0; --hue-violet-t: #ebe5fa; --hue-violet-i: #4a3290;
-  --hue-orange-f: #a63a08; --hue-orange-f2: #bb4a0e; --hue-orange-t: #fdebd8; --hue-orange-i: #8a3f00;
-  --hue-pink-f:   #a8134f; --hue-pink-f2:   #bd1c60; --hue-pink-t:   #fbe3ee; --hue-pink-i:   #8c1442;
-  --hue-green-f:  #046a4b; --hue-green-f2:  #0a7f5c; --hue-green-t:  #e0f3ea; --hue-green-i:  #06553a;
+  /* Six department hues as pastel tints. -t the tint (a tile, a band, a chip), -i the dark ink of the same hue (on the tint and on the card),
+     -f a mid tone of the hue for a thin bar or a rule only (never under text), -f2 = -f.
+     Mapping from theme B (hue -> pastel tint / ink):
+       blue   -> sky       #e4eef8 / #2f5a86      teal   -> mint      #e3f1ec / #3d6b57
+       violet -> lilac     #f0e6f5 / #6a3f80      orange -> sand      #fbefd9 / #7a5a20
+       pink   -> rose      #fbe4e4 / #8a3a3a      green  -> leaf mint #e3f2e6 / #2e6b3f
+     (lavender #e6eaf7 / #4a5680 is the accent's own tint: management and the default page) */
+  --hue-blue-f:   #7c9ccb; --hue-blue-f2:   #7c9ccb; --hue-blue-t:   #e4eef8; --hue-blue-i:   #2f5a86;
+  --hue-teal-f:   #6fae9a; --hue-teal-f2:   #6fae9a; --hue-teal-t:   #e3f1ec; --hue-teal-i:   #3d6b57;
+  --hue-violet-f: #a88cc0; --hue-violet-f2: #a88cc0; --hue-violet-t: #f0e6f5; --hue-violet-i: #6a3f80;
+  --hue-orange-f: #d9a656; --hue-orange-f2: #d9a656; --hue-orange-t: #fbefd9; --hue-orange-i: #7a5a20;
+  --hue-pink-f:   #d58a8a; --hue-pink-f2:   #d58a8a; --hue-pink-t:   #fbe4e4; --hue-pink-i:   #8a3a3a;
+  --hue-green-f:  #74b283; --hue-green-f2:  #74b283; --hue-green-t:  #e3f2e6; --hue-green-i:  #2e6b3f;
 
-  /* Elevation (B): three levels. 1 = a resting card, 2 = a tile / KPI / the raised thing, 3 = a floating thing (menu, dialog). */
+  /* Elevation: three soft levels. 1 = a resting card, 2 = a tile / KPI, 3 = a floating thing (menu, dialog). */
   --shadow-xs:  none;
   --shadow-sm:  none;
-  --shadow-card: 0 1px 2px rgba(12,15,46,0.08), 0 6px 16px rgba(58,47,181,0.10);
-  --shadow-tile: 0 3px 6px rgba(58,47,181,0.18), 0 14px 28px rgba(58,47,181,0.20);
-  --shadow-pop:  0 8px 18px rgba(12,15,46,0.18), 0 24px 48px rgba(58,47,181,0.26);
-  --shadow-md:  0 4px 12px rgba(12,15,46,0.16);    /* menus, dropdowns */
+  --shadow-card: 0 1px 2px rgba(31,42,68,0.06), 0 4px 12px rgba(31,42,68,0.06);
+  --shadow-tile: 0 1px 2px rgba(31,42,68,0.07), 0 6px 16px rgba(31,42,68,0.08);
+  --shadow-pop:  0 8px 18px rgba(31,42,68,0.14), 0 20px 40px rgba(31,42,68,0.16);
+  --shadow-md:  0 4px 12px rgba(31,42,68,0.14);    /* menus, dropdowns */
   --shadow-lg:  var(--shadow-pop);                 /* the modal */
 
-  /* Radii (B): 20 cards · 18 tiles and panels · 14 controls */
+  /* Radii: 20 cards · 18 tiles and panels · 14 controls */
   --r-sm: 14px;   /* inputs, buttons, chips */
   --r-md: 18px;   /* tiles, panels, menus */
   --r-lg: 20px;   /* cards */
@@ -96,35 +110,36 @@
   --kfs: 38px; --tfs: 32px; --w-strong: 700;
 }
 body.dark {
-  --bg-page:    #090a1e;
-  --bg-card:    #14163a;
-  --bg-input:   #1b1e4a;
-  --bg-subtle:  #1d2050;
-  --bg-sidebar: #150f50;
-  --bg-topbar:  #14163a;
-  --bg-hover:   #272b66;
-  --text-primary:   #f5f6ff;
-  --text-secondary: #cfd3f2;   /* owner 2026-10-19 "dark mode อ่านยาก": long runs of muted text read as fog at 5-6:1, so the dark inks stay >= 8:1 */
-  --text-muted:     #aeb4e0;
-  --border:         #3b4182;
-  --border-soft:    #2b3070;
-  --border-control: #7480c0;
-  --accent:       #a9a2ff;
-  --accent-hover: #c9c4ff;
-  --accent-soft:  #2a2c66;     /* accent on it = 6.9:1 */
-  --on-accent:    #090a1e;
+  --bg-page:    #12151f;
+  --bg-card:    #1b2030;
+  --bg-input:   #222838;
+  --bg-subtle:  #20263a;
+  --bg-sidebar: #1f2740;
+  --bg-topbar:  #1b2030;
+  --bg-hover:   #2a3247;
+  --text-primary:   #eef1f7;
+  --text-secondary: #c9d0e0;   /* owner 2026-10-19 "dark mode อ่านยาก": long runs of muted text read as fog at 5-6:1, so the dark inks stay >= 8:1 */
+  --text-muted:     #b0b8cc;
+  --border:         #343c52;
+  --border-soft:    #2a3145;
+  --border-control: #7c88a6;
+  --accent:       #aeb9e6;
+  --accent-hover: #c7d0f0;
+  --accent-soft:  #2a3350;     /* accent on it */
+  --on-accent:    #12151f;
 
-  --good-f:  #34d399; --good-f2:  #34d399; --good-t:  #0f3a2d; --good-i:  #5eeaa8; --good-on:  #04281b;
-  --watch-f: #fbbf24; --watch-f2: #fbbf24; --watch-t: #3d2f0a; --watch-i: #fcd34d; --watch-on: #1f1300;
-  --fix-f:   #f87171; --fix-f2:   #f87171; --fix-t:   #431a1f; --fix-i:   #ff9ea0; --fix-on:   #2a0705;
-  --neu-f:   #9aa3d6; --neu-f2:   #9aa3d6; --neu-t:   #1f2350; --neu-i:   #c4caf0; --neu-on:   #0d1030;
-  --gold: #fbbf24; --gold-i: #fcd34d; --on-gold: #1f1300;
-  --ch-a1: #2dd4bf; --ch-a2: #818cf8; --ch-aw1: #5eead4; --ch-aw2: #a5b4fc; --ch-b1: #8b78d8; --ch-b2: #7a66c8; --ch-bw1: #9a88e4; --ch-bw2: #8975d6;
-  --ch-t1: #fcd34d; --ch-t2: #f5b82e; --ch-tstroke: #fff3c4; --ch-avg: #c3cddb; --ch-mark: #fbbf24;
-  --ch-c1: #9d98ff; --ch-c2: #2dd4bf; --ch-c3: #fbbf24; --ch-c4: #f472b6; --ch-c5: #60a5fa; --ch-c6: #b4b9e0;
+  --good-f:  #3fbf74; --good-f2:  #3fbf74; --good-t:  #173a28; --good-i:  #7edba3; --good-on:  #0b2616;
+  --watch-f: #e0b25a; --watch-f2: #e0b25a; --watch-t: #3a3018; --watch-i: #f0ce85; --watch-on: #1f1300;
+  --fix-f:   #e5605f; --fix-f2:   #e5605f; --fix-t:   #45201f; --fix-i:   #ff9e9c; --fix-on:   #2a0705;
+  --neu-f:   #8c97b3; --neu-f2:   #8c97b3; --neu-t:   #262d40; --neu-i:   #c3cadb; --neu-on:   #12151f;
+  --gold: #e0b25a; --gold-i: #f0ce85; --on-gold: #1f1300;
+  --ch-a1: #5fb3a7; --ch-a2: #5fb3a7; --ch-aw1: #7cc4b9; --ch-aw2: #7cc4b9; --ch-b1: #7e89be; --ch-b2: #7e89be; --ch-bw1: #959fcc; --ch-bw2: #959fcc;
+  --ch-t1: #e0b25a; --ch-t2: #e0b25a; --ch-tstroke: #fff3c4; --ch-avg: #b6bfd0; --ch-mark: #e0b25a;
+  --ch-c1: #9aa7e0; --ch-c2: #5fb3a7; --ch-c3: #e0b25a; --ch-c4: #e58fa6; --ch-c5: #7fb0e3; --ch-c6: #b4a6d8;
   --ch-s1: #5c6bc0; --ch-s2: #7d86d8; --ch-s3: #9d98e8; --ch-s4: #c0b8f6; --ch-s5: #e6e0ff;
-  --hero1: #271f8a; --hero-mid: #5a1f8a; --hero2: #8a1650; --hero-ink: #ffffff; --hero-ink2: #efe3ff;
-  --rail-grad1: #150f50; --rail-grad2: #5b1140;
+  --hero1: #2a3352; --hero-mid: #2a3352; --hero2: #2a3352; --hero-ink: #f3f5fa; --hero-ink2: #d5dbea;
+  --rail-grad1: #1f2740; --rail-grad2: #1f2740;
+  --th-bg: #2a3352; --th-on: #f3f5fa;
 
   --good-ink:   var(--good-i);   /* an alias is resolved where it is declared: body.dark re-declares it against its own inks */
   --bad-ink:    var(--fix-i);
@@ -140,46 +155,51 @@ body.dark {
   --pink-ink:    #f472b6;
   --orange-ink: #fb923c;
 
-  --hue-blue-f:   #1b4f8f; --hue-blue-f2:   #2461ab; --hue-blue-t:   #15304d; --hue-blue-i:   #8cc0f5;
-  --hue-teal-f:   #0d5a5a; --hue-teal-f2:   #146b69; --hue-teal-t:   #123636; --hue-teal-i:   #6fd0cb;
-  --hue-violet-f: #4c3490; --hue-violet-f2: #5d44a8; --hue-violet-t: #2a2347; --hue-violet-i: #c3b3f5;
-  --hue-orange-f: #8e3106; --hue-orange-f2: #a33d0a; --hue-orange-t: #3a2a17; --hue-orange-i: #f5ad72;
-  --hue-pink-f:   #8e0f41; --hue-pink-f2:   #a3174f; --hue-pink-t:   #3a1f30; --hue-pink-i:   #f59cc3;
-  --hue-green-f:  #045c41; --hue-green-f2:  #096e50; --hue-green-t:  #10332a; --hue-green-i:  #5fdca8;
+  /* the same hues dimmed: -t a dark tinted surface, -i a light ink of the hue, -f a muted mid tone for a bar or a rule */
+  --hue-blue-f:   #4f6f9c; --hue-blue-f2:   #4f6f9c; --hue-blue-t:   #1d2c40; --hue-blue-i:   #9cc2ea;
+  --hue-teal-f:   #4d8676; --hue-teal-f2:   #4d8676; --hue-teal-t:   #1b3330; --hue-teal-i:   #8fd0bd;
+  --hue-violet-f: #7e6896; --hue-violet-f2: #7e6896; --hue-violet-t: #2e2540; --hue-violet-i: #cdb5e6;
+  --hue-orange-f: #a6814a; --hue-orange-f2: #a6814a; --hue-orange-t: #3a3020; --hue-orange-i: #e8c88a;
+  --hue-pink-f:   #a56868; --hue-pink-f2:   #a56868; --hue-pink-t:   #3d2228; --hue-pink-i:   #f0a8a8;
+  --hue-green-f:  #548a62; --hue-green-f2:  #548a62; --hue-green-t:  #1c3324; --hue-green-i:  #93d6a6;
 
-  --shadow-card: 0 1px 2px rgba(0,0,0,0.40), 0 6px 16px rgba(0,0,0,0.38);
-  --shadow-tile: 0 3px 6px rgba(0,0,0,0.45), 0 14px 28px rgba(0,0,0,0.45);
-  --shadow-pop:  0 8px 18px rgba(0,0,0,0.55), 0 24px 48px rgba(0,0,0,0.60);
-  --shadow-md:  0 4px 12px rgba(0,0,0,0.50);
+  --shadow-card: 0 1px 2px rgba(0,0,0,0.35), 0 4px 12px rgba(0,0,0,0.30);
+  --shadow-tile: 0 1px 2px rgba(0,0,0,0.38), 0 6px 16px rgba(0,0,0,0.34);
+  --shadow-pop:  0 8px 18px rgba(0,0,0,0.50), 0 20px 40px rgba(0,0,0,0.50);
+  --shadow-md:  0 4px 12px rgba(0,0,0,0.45);
 }
-/* Department hues (PR-D1, 2026-10-21; B palette 2026-10-22): the launcher home, the sidebar and the department workspace read one
-   hue per department (DEPARTMENTS in js/01-core.js). Per department: -ink = icon + heading text (>= 5.2:1 on its
-   own -tint and >= 6.3:1 on the white card), -tint = the card header band, -side = the icon on the rail,
-   -f / -f2 = the gradient fill (white text on it >= 4.5:1; the KPI tile, the launcher badge, the hero tab).
-   Dark: the tint becomes a dark tinted surface and the ink a light ink (>= 6.1:1 on it). Six of the ten ride the six B hues. */
+/* Department hues (PR-D1, 2026-10-21; Pastel A 2026-10-31): the launcher home, the sidebar and the department workspace read one
+   hue per department (DEPARTMENTS in js/01-core.js). Per department: -tint = the flat pastel of the card header band, the tile and the
+   badge; -ink = the dark ink of the same hue (icon + heading text, >= 4.5:1 on its own -tint, on the card and on the page);
+   -side = the icon on the navy rail (>= 3:1); -f / -f2 = a mid tone of the hue (= the tint's hue, one colour: no gradient).
+   Dark: the tint becomes a dark tinted surface and the ink a light ink.
+   Mapping (department -> pastel tint / ink):
+     mgmt lavender #e6eaf7 / #3f4c7a   mkt  pink-rose #f9e3ee / #8a3a62   ops sand  #fbefd9 / #7a5a20   ana lilac  #f0e6f5 / #6a3f80
+     kit  leaf mint #e3f2e6 / #2e6b3f  ss   sky       #e4eef8 / #2f5a86   wh  straw #f6f0d2 / #6b5a1a   acc mint   #e3f1ec / #3d6b57
+     brn  rose      #fbe4e4 / #8a3a3a  own  slate     #e9ecf2 / #46526e */
 :root {
-  --dept-mgmt-ink: #3a2fb5; --dept-mgmt-tint: #dcdaf8; --dept-mgmt-side: #b9b3ff; --dept-mgmt-f: #3a2fb5;           --dept-mgmt-f2: #4f3fcf;
-  --dept-mkt-ink:  #8c1442; --dept-mkt-tint:  #fbe3ee; --dept-mkt-side:  #ffa8c9; --dept-mkt-f:  var(--hue-pink-f);   --dept-mkt-f2:  var(--hue-pink-f2);
-  --dept-ops-ink:  #8a3f00; --dept-ops-tint:  #fdebd8; --dept-ops-side:  #ffc08a; --dept-ops-f:  var(--hue-orange-f); --dept-ops-f2:  var(--hue-orange-f2);
-  --dept-ana-ink:  #4a3290; --dept-ana-tint:  #ebe5fa; --dept-ana-side:  #d2c4ff; --dept-ana-f:  var(--hue-violet-f); --dept-ana-f2:  var(--hue-violet-f2);
-  --dept-kit-ink:  #06553a; --dept-kit-tint:  #e0f3ea; --dept-kit-side:  #8fe6b8; --dept-kit-f:  var(--hue-green-f);  --dept-kit-f2:  var(--hue-green-f2);
-  --dept-ss-ink:   #154a86; --dept-ss-tint:   #dceafa; --dept-ss-side:   #9fd0ff; --dept-ss-f:   var(--hue-blue-f);   --dept-ss-f2:   var(--hue-blue-f2);
-  --dept-wh-ink:   #7a5300; --dept-wh-tint:   #fbf0d0; --dept-wh-side:   #ffd27a; --dept-wh-f:   #8a5a00;             --dept-wh-f2:   #96600a;
-  --dept-acc-ink:  #0b5252; --dept-acc-tint:  #dcf1f0; --dept-acc-side:  #7ff0d6; --dept-acc-f:  var(--hue-teal-f);   --dept-acc-f2:  var(--hue-teal-f2);
-  --dept-brn-ink:  #a12d2d; --dept-brn-tint:  #f9e1e1; --dept-brn-side:  #ffadad; --dept-brn-f:  #a12d2d;             --dept-brn-f2:  #b43a3a;
-  --dept-own-ink:  #3c4a5e; --dept-own-tint:  #e6eaf0; --dept-own-side:  #c9d3e6; --dept-own-f:  #3c4a5e;             --dept-own-f2:  #4b5a74;
+  --dept-mgmt-ink: #3f4c7a; --dept-mgmt-tint: #e6eaf7; --dept-mgmt-side: #c3cbef; --dept-mgmt-f: #8b97c4;           --dept-mgmt-f2: #8b97c4;
+  --dept-mkt-ink:  #8a3a62; --dept-mkt-tint:  #f9e3ee; --dept-mkt-side:  #f2b8d2; --dept-mkt-f:  #cf8cad;           --dept-mkt-f2:  #cf8cad;
+  --dept-ops-ink:  #7a5a20; --dept-ops-tint:  #fbefd9; --dept-ops-side:  #f3cf8e; --dept-ops-f:  var(--hue-orange-f); --dept-ops-f2:  var(--hue-orange-f2);
+  --dept-ana-ink:  #6a3f80; --dept-ana-tint:  #f0e6f5; --dept-ana-side:  #dcc3ec; --dept-ana-f:  var(--hue-violet-f); --dept-ana-f2:  var(--hue-violet-f2);
+  --dept-kit-ink:  #2e6b3f; --dept-kit-tint:  #e3f2e6; --dept-kit-side:  #a9dcb6; --dept-kit-f:  var(--hue-green-f);  --dept-kit-f2:  var(--hue-green-f2);
+  --dept-ss-ink:   #2f5a86; --dept-ss-tint:   #e4eef8; --dept-ss-side:   #b5d2f0; --dept-ss-f:   var(--hue-blue-f);   --dept-ss-f2:   var(--hue-blue-f2);
+  --dept-wh-ink:   #6b5a1a; --dept-wh-tint:   #f6f0d2; --dept-wh-side:   #ecdc98; --dept-wh-f:   #c9b260;             --dept-wh-f2:   #c9b260;
+  --dept-acc-ink:  #3d6b57; --dept-acc-tint:  #e3f1ec; --dept-acc-side:  #a6dcc8; --dept-acc-f:  var(--hue-teal-f);   --dept-acc-f2:  var(--hue-teal-f2);
+  --dept-brn-ink:  #8a3a3a; --dept-brn-tint:  #fbe4e4; --dept-brn-side:  #f2b4b4; --dept-brn-f:  var(--hue-pink-f);   --dept-brn-f2:  var(--hue-pink-f2);
+  --dept-own-ink:  #46526e; --dept-own-tint:  #e9ecf2; --dept-own-side:  #cdd4e3; --dept-own-f:  #9aa4ba;             --dept-own-f2:  #9aa4ba;
 }
 body.dark {
-  --dept-mgmt-ink: #bdb8ff; --dept-mgmt-tint: #2a2c66; --dept-mgmt-f: #3a3590;           --dept-mgmt-f2: #4a44a8;
-  --dept-mkt-ink:  #f59cc3; --dept-mkt-tint:  #3a1f30; --dept-mkt-f:  var(--hue-pink-f);   --dept-mkt-f2:  var(--hue-pink-f2);
-  --dept-ops-ink:  #f5ad72; --dept-ops-tint:  #3a2a17; --dept-ops-f:  var(--hue-orange-f); --dept-ops-f2:  var(--hue-orange-f2);
-  --dept-ana-ink:  #c3b3f5; --dept-ana-tint:  #2a2347; --dept-ana-f:  var(--hue-violet-f); --dept-ana-f2:  var(--hue-violet-f2);
-  --dept-kit-ink:  #5fdca8; --dept-kit-tint:  #10332a; --dept-kit-f:  var(--hue-green-f);  --dept-kit-f2:  var(--hue-green-f2);
-  --dept-ss-ink:   #8cc0f5; --dept-ss-tint:   #15304d; --dept-ss-f:   var(--hue-blue-f);   --dept-ss-f2:   var(--hue-blue-f2);
-  --dept-wh-ink:   #e6c25a; --dept-wh-tint:   #3a2f12; --dept-wh-f:   #6d4800;             --dept-wh-f2:   #805400;
-  --dept-acc-ink:  #6fd0cb; --dept-acc-tint:  #123636; --dept-acc-f:  var(--hue-teal-f);   --dept-acc-f2:  var(--hue-teal-f2);
-  --dept-brn-ink:  #f08a8a; --dept-brn-tint:  #3d2020; --dept-brn-f:  #8a2424;             --dept-brn-f2:  #a02e2e;
-  --dept-own-ink:  #a9b6c9; --dept-own-tint:  #26303f; --dept-own-f:  #3a4659;             --dept-own-f2:  #4a566b;
+  --dept-mgmt-ink: #b8c2ea; --dept-mgmt-tint: #252d48; --dept-mgmt-f: #5d6890;           --dept-mgmt-f2: #5d6890;
+  --dept-mkt-ink:  #eba6c8; --dept-mkt-tint:  #3b2232; --dept-mkt-f:  #9a6480;           --dept-mkt-f2:  #9a6480;
+  --dept-ops-ink:  #e8c88a; --dept-ops-tint:  #3a3020; --dept-ops-f:  var(--hue-orange-f); --dept-ops-f2:  var(--hue-orange-f2);
+  --dept-ana-ink:  #cdb5e6; --dept-ana-tint:  #2e2540; --dept-ana-f:  var(--hue-violet-f); --dept-ana-f2:  var(--hue-violet-f2);
+  --dept-kit-ink:  #93d6a6; --dept-kit-tint:  #1c3324; --dept-kit-f:  var(--hue-green-f);  --dept-kit-f2:  var(--hue-green-f2);
+  --dept-ss-ink:   #9cc2ea; --dept-ss-tint:   #1d2c40; --dept-ss-f:   var(--hue-blue-f);   --dept-ss-f2:   var(--hue-blue-f2);
+  --dept-wh-ink:   #e3cf8a; --dept-wh-tint:   #36311c; --dept-wh-f:   #9a8748;             --dept-wh-f2:   #9a8748;
+  --dept-acc-ink:  #8fd0bd; --dept-acc-tint:  #1b3330; --dept-acc-f:  var(--hue-teal-f);   --dept-acc-f2:  var(--hue-teal-f2);
+  --dept-brn-ink:  #f0a8a8; --dept-brn-tint:  #3d2222; --dept-brn-f:  var(--hue-pink-f);   --dept-brn-f2:  var(--hue-pink-f2);
+  --dept-own-ink:  #b9c2d6; --dept-own-tint:  #262d3d; --dept-own-f:  #6b758c;             --dept-own-f2:  #6b758c;
 }
 /* The red task count (PR-D4, 2026-10-21): the circle on a page tile, a department tab, a rail icon, the phone tiles and the bottom navigation.
    One red and white in BOTH themes (6.5:1 white on it), the owner's #b42318 of the approved mockup. */
@@ -190,12 +210,12 @@ body {   /* on body, not :root: a var() alias is resolved where it is declared, 
   --toast-bg: var(--bg-card); --toast-fg: var(--text-primary);
   --toast-ok: var(--good-ink); --toast-info: var(--accent); --toast-warn: var(--amber-ink); --toast-bad: var(--bad-ink);
 }
-:root { --toast-shadow: 0 8px 18px rgba(12, 15, 46, .18), 0 18px 36px rgba(58, 47, 181, .22); --help-back: rgba(12, 15, 46, .50); }
+:root { --toast-shadow: 0 8px 18px rgba(31, 42, 68, .14), 0 18px 36px rgba(31, 42, 68, .16); --help-back: rgba(31, 42, 68, .45); }
 body.dark { --toast-shadow: 0 6px 20px rgba(0, 0, 0, .55); --help-back: rgba(4, 5, 18, .72); }
-/* The icon rail (PR-D2): the sidebar folded to the department rail. Indigo-to-magenta in both themes, so the same values: the label
-   (>= 7:1 on every stop of the gradient), the open entry as a white tile with an indigo icon, a thin divider above the tools. */
+/* The icon rail (PR-D2): the sidebar folded to the department rail. Flat navy-indigo (Pastel A) in both themes, so the same values: the label
+   (>= 7:1 on the rail), the open entry as a white tile with a navy icon, a thin divider above the tools. */
 :root {
-  --rail-ink: #e6e9ff; --rail-ink-hover: #ffffff; --rail-active-bg: #ffffff; --rail-active-ink: #2a2290; --rail-line: rgba(255, 255, 255, 0.22);
+  --rail-ink: #e6e9f2; --rail-ink-hover: #ffffff; --rail-active-bg: #ffffff; --rail-active-ink: #3f4c7a; --rail-line: rgba(255, 255, 255, 0.22);
 }
 /* Legacy names: the app's CSS and markup still say --indigo*. They alias the accent,
    declared on BOTH selectors so body.dark re-resolves them against its own accent. */
