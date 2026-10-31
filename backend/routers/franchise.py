@@ -1744,3 +1744,25 @@ def franchise_overview(request: Request, month: Optional[str] = Query(None, patt
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     return franchise_overview_data(bid, month, kind, pick)
+
+
+# ── บิลยกเลิก / พิมพ์ซ้ำ of the owner's own branch (owner 2026-10-31, "ทำเลย") ──────────────────────────────────────
+# The management phone's level 2 (routers/voids.report_voids with `branch`), reached through the franchise rule
+# (GET /api/franchise = franchise.view): a franchise login reads its own branch only (_resolve_branch), head office may pass
+# branch_id. Month window only - the page is monthly. The classes are the drill-down's (ไม่ออกใหม่ · ออกใหม่แล้ว · บิลเปล่า).
+@router.get("/api/franchise/voids")
+def franchise_voids(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE), branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน · การควบคุม › บิลยกเลิก: every cancelled and reprinted bill of the owner's branch in the month."""
+    from routers import voids as V
+    with get_db() as con:
+        _, name = _resolve_branch(con, request, branch_id)
+    return V.report_voids(window="month", month=month, date=None, branch=name, group=None, lang="th")
+
+
+@router.get("/api/franchise/voids/bill")
+def franchise_voids_bill(request: Request, receipt: str = Query(...), branch_id: Optional[int] = Query(None)):
+    """One reprinted bill of the owner's branch: its lines and payments (routers/voids.report_voids_bill, same pin)."""
+    from routers import voids as V
+    with get_db() as con:
+        _, name = _resolve_branch(con, request, branch_id)
+    return V.report_voids_bill(request, branch=name, receipt=receipt)

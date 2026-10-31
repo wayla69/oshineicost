@@ -849,7 +849,7 @@ function _frcControls(c) {
   // each line carries the id a ควรดู row goes to (frcGo: frcCtlDisc / frcCtlVoids / frcCtlReprint / frcCtlCash)
   const disc = `<div class="ms-card">` + _frcRow('ส่วนลด', `<span style="color:${over ? 'var(--bad-ink)' : 'var(--text-primary)'}">${_frcPct(D.pct)}</span>`,
       `เพดาน ${_frcPctText(D.policy_pct)} · ฿${fmtN(D.baht || 0)}${D.over_policy_baht ? ' · เกินเพดาน ฿' + fmtN(D.over_policy_baht) : ''}`, 'frcCtlDisc')
-    + _frcRow('บิลยกเลิก', V.bills ? `${fmtN(V.bills)} ใบ` : '0 ใบ', V.bills ? `฿${fmtN(V.baht || 0)} · ${_frcPctText(V.rate_pct)} ของบิลทั้งหมด` : 'ไม่มีบิลยกเลิกในเดือนนี้', 'frcCtlVoids')
+    + _frcVoidRow(V)
     + (R.available ? _frcRow('บิลพิมพ์ซ้ำที่มีส่วนลด', `<span style="color:${R.bills ? 'var(--amber-ink)' : 'var(--text-primary)'}">${fmtN(R.bills || 0)} บิล</span>`,
       R.bills ? `ส่วนลดรวม ฿${fmtN(R.baht || 0)}` : 'ไม่มีบิลพิมพ์ซ้ำที่มีส่วนลด', 'frcCtlReprint') : '')
     + _frcRow('เงินสดขาด/เกิน สุทธิ', C.net == null ? _FRC_NA : `<span style="color:${C.net < 0 ? 'var(--bad-ink)' : 'var(--text-primary)'}">${C.net < 0 ? '−' : ''}฿${fmtN(Math.abs(C.net))}</span>`,
@@ -861,9 +861,94 @@ function _frcControls(c) {
     + `</tbody></table></div>` : '';
   return _frcCard('การควบคุม', 'controls', help, '',
     `<div class="ms-card">${_frcFlagBox(c.flags)}</div>` + disc
+    + `<div id="frcVoidList" hidden></div>`
     + _frcMoneyList('ส่วนลดตามคูปองและโปรโมชัน', D.by_coupon, 'name', 'uses', 'ครั้ง')
     + _frcMoneyList('ส่วนลดตามเหตุผล', D.by_reason, 'reason', 'bills', 'บิล')
     + _frcMoneyList('บิลยกเลิกตามเหตุผล', V.by_reason, 'reason', 'bills', 'ใบ') + cash);
+}
+
+// ── บิลยกเลิก / พิมพ์ซ้ำ of this branch, bill by bill (owner 2026-10-31, "ทำเลย"): the การควบคุม row opens the list under it ──
+// GET /api/franchise/voids (the management drill-down's level 2, pinned to the owner's branch, the month of the period chip).
+// Classes as the management phone: ไม่ออกใหม่ (the alert's basis, the default) · ออกใหม่แล้ว · บิลเปล่า (฿0) · ทั้งหมด. A bill row folds
+// its full detail (▾); a reprinted bill fetches its lines (/api/franchise/voids/bill). No sheet: the owner's slice has none.
+let _frcVoidData = null, _frcVoidCls = 'open', _frcVoidSeq = 0;
+const _FRC_VCLS = [['open', 'ไม่ออกใหม่'], ['zero', 'บิลเปล่า'], ['re', 'ออกใหม่แล้ว'], ['all', 'ทั้งหมด']];
+function _frcVoidRow(V) {
+  const open = V.voids_open != null;
+  const n = open ? V.voids_open : V.bills || 0;
+  const fact = !V.bills ? 'ไม่มีบิลยกเลิกในเดือนนี้'
+    : open ? `฿${fmtN(V.amount_open || 0)} · ${_frcPctText(V.rate_open_pct)} ของบิล · รวม ${fmtN(V.bills)} ใบ`
+    : `฿${fmtN(V.baht || 0)} · ${_frcPctText(V.rate_pct)} ของบิล`;
+  return uiRow2({ title: open ? 'บิลยกเลิกแล้วไม่ออกใหม่' : 'บิลยกเลิก', val: `${fmtN(n)} ใบ`, fact: esc(fact), chip: V.bills ? { t: 'ดูรายบิล' } : null,
+    onGo: 'frcVoidsOpen()', attrs: ' id="frcCtlVoids"' });
+}
+function frcVoidsOpen() {
+  const box = document.getElementById('frcVoidList'); if (!box) return;
+  if (!box.hidden && _frcVoidData) { box.hidden = true; return; }      // a second tap folds the list
+  box.hidden = false;
+  frcVoidsLoad();
+}
+function frcVoidsCls(k) {
+  _frcVoidCls = _FRC_VCLS.some(([x]) => x === k) ? k : 'open';
+  const box = document.getElementById('frcVoidList');
+  if (box && _frcVoidData) box.innerHTML = _frcVoidsHtml(_frcVoidData);
+}
+async function frcVoidsLoad() {
+  const box = document.getElementById('frcVoidList'); if (!box) return;
+  const seq = ++_frcVoidSeq;
+  const mon = _frcPeriod().month, q = mon ? '?month=' + mon : '';
+  box.innerHTML = `<div class="ms-card">${uiSkel(5)}</div>`;
+  let j;
+  try { j = await _frcGetJson('/api/franchise/voids' + q); }
+  catch (e) { if (seq === _frcVoidSeq) box.innerHTML = `<div class="ms-card">${uiEmpty({ t: e.message || 'โหลดไม่สำเร็จ', act: 'ลองอีกครั้ง', go: 'frcVoidsLoad()' })}</div>`; return; }
+  if (seq !== _frcVoidSeq) return;
+  if (!j || !j.available || j.level !== 2) { box.innerHTML = `<div class="ms-card">${uiEmpty({ t: (j && j.line) || 'ยังไม่มีข้อมูลบิลยกเลิก' })}</div>`; return; }
+  _frcVoidData = j;
+  box.innerHTML = _frcVoidsHtml(j);
+  const flash = document.getElementById('frcVoidHead'); if (flash) uiFlash(flash);
+}
+const _frcHm = at => String(at || '').slice(11, 16);
+function _frcVoidsHtml(j) {
+  const all = j.bills || [], reps = j.reprints || [], H = j.header || {};
+  const cls = b => b.zero ? 'zero' : b.reissued_as ? 're' : 'open';
+  const n = { all: all.length, open: all.filter(b => cls(b) === 'open').length, zero: all.filter(b => cls(b) === 'zero').length, re: all.filter(b => cls(b) === 're').length };
+  const k = _frcVoidCls, rows = all.filter(b => k === 'all' || cls(b) === k);
+  const help = uiQ('frc:voids', 'บิลยกเลิก / พิมพ์ซ้ำ', '<p><b>ไม่ออกใหม่</b> = ยกเลิกแล้วไม่พบบิลใหม่ที่ร้านภายใน ' + (j.reissue_min || 30) + ' นาที (จำนวนลูกค้าเท่ากัน หรือยอดต่างไม่เกิน 20%) · เป็นฐานของการเตือน</p>'
+    + '<p><b>ออกใหม่แล้ว</b> = มีบิลใหม่แทน (เป็นการแก้บิล) · <b>บิลเปล่า</b> = บิลยกเลิกยอด ฿0 ไม่ใช่เงินที่หาย · สองกลุ่มนี้ไม่นับในการเตือน</p>'
+    + '<p><b>บิลพิมพ์ซ้ำ</b> = บิลที่มีส่วนลดและพิมพ์ใบเสร็จมากกว่า 1 ครั้ง</p><p>บิลยกเลิกไม่มีรายการอาหาร เพราะระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p>');
+  const chips = `<div class="ms-vw-chips ms-vd-cls-chips" role="group" aria-label="ประเภทบิลยกเลิก">` + _FRC_VCLS.filter(([x]) => x === 'all' || x === 'open' || n[x]).map(([x, t]) =>
+    `<button type="button" class="ms-vw-chip" aria-pressed="${x === k}" onclick="frcVoidsCls('${x}')">${t} ${fmtN(n[x])}</button>`).join('') + '</div>';
+  const r = H.rate_open_pct != null ? H.rate_open_pct : H.rate_pct;
+  const head = `<div class="frc-sub2" id="frcVoidHead">บิลยกเลิก · ${esc(j.label || '')} ${help}</div>`
+    + `<p class="ms-vd-sum">ยกเลิกแล้วไม่ออกใหม่ <b>${r != null ? _frcPct(r, 2) : _FRC_NA}</b> · ${fmtN(n.open)} บิล · ฿${fmtN(H.amount_open != null ? H.amount_open : H.amount || 0)}`
+    + ` · <span class="ms-vd-all">รวมยกเลิกทั้งหมด ${fmtN(n.all)} บิล</span> · พิมพ์ซ้ำ ${fmtN(reps.length)} บิล</p>`;
+  const billRow = b => {
+    const c = cls(b);
+    const chip = c === 'zero' ? '<span class="ms-vd-cls">บิลเปล่า ฿0</span>' : c === 're' ? `<span class="ms-vd-cls">ออกใหม่แล้ว → ${esc(b.reissued_no || b.reissued_as)}</span>` : '<span class="ms-vd-cls is-open">ไม่ออกใหม่</span>';
+    return uiRow2({ title: `${esc(_frcDay(String(b.at || '').slice(0, 10)))} ${_frcHm(b.at)}`, val: '฿' + fmtN(b.amount || 0), valTone: c === 'open' && b.amount ? 'bad' : '',
+      chips: chip, fact: esc(b.reason || '') + (b.user ? ' · ' + esc(b.user) : ''),
+      more: `เลขที่บิล ${esc(b.receipt || 'ไม่มีเลขที่บิล')}${b.discount > 0 ? ' · ส่วนลด ฿' + fmtN(b.discount) : ''}` });
+  };
+  const bills = rows.length ? rows.map(billRow).join('') : uiEmpty({ t: k === 'open' ? 'ไม่มีบิลยกเลิกที่ไม่ออกใหม่ในเดือนนี้' : 'ไม่มีบิลในกลุ่มนี้' });
+  const more = j.bills_more ? `<p class="ms-vd-note">แสดง ${fmtN(all.length)} บิลล่าสุด · อีก ${fmtN(j.bills_more)} บิลอยู่ในรายงานผู้บริหาร</p>` : '';
+  const repRows = reps.map((b, i) => uiRow2({ title: `${esc(_frcDay(String(b.at || '').slice(0, 10)))} ${_frcHm(b.at)} · ${esc(b.no || b.receipt)}`, val: '฿' + fmtN(b.total || 0),
+    fact: `ส่วนลด ฿${fmtN(b.discount || 0)} · พิมพ์ ${fmtN(b.prints || 0)} ครั้ง${b.cashier ? ' · ' + esc(b.cashier) : ''}`, onGo: `frcVoidBill(${i})`, attrs: ` id="frcRep${i}"` })).join('');
+  const repBox = reps.length ? `<div class="frc-sub2">บิลพิมพ์ซ้ำที่มีส่วนลด</div><div class="ms-card">${repRows}</div>` : '';
+  return head + `<div class="ms-card">${chips}${bills}</div>` + more + repBox;
+}
+// a reprinted bill's lines and payments, folded open under its row
+async function frcVoidBill(i) {
+  const j = _frcVoidData, b = j && (j.reprints || [])[i], row = document.getElementById('frcRep' + i); if (!b || !row) return;
+  let x = row.querySelector('.ms-r2-x');
+  if (x) { row.classList.toggle('is-open'); return; }
+  x = document.createElement('div'); x.className = 'ms-r2-x'; x.innerHTML = uiSkel(3); row.appendChild(x); row.classList.add('is-open');
+  let d;
+  try { d = await _frcGetJson('/api/franchise/voids/bill?' + new URLSearchParams({ receipt: b.receipt })); }
+  catch (e) { x.innerHTML = esc(e.message || 'โหลดไม่สำเร็จ'); return; }
+  if (!d || !d.available) { x.innerHTML = esc((d && d.line) || 'ไม่พบบิลนี้'); return; }
+  const lines = (d.lines || []).map(l => `<div>${esc(l.menu)} × ${fmtN(l.qty)} · ฿${fmtN(l.rev)}</div>`).join('');
+  const pays = (d.payments || []).map(p => `${esc(p.code)} ฿${fmtN(p.amount)}`).join(' · ');
+  x.innerHTML = `<div>โต๊ะ ${esc(d.table || '-')}${d.covers ? ' · ลูกค้า ' + fmtN(d.covers) + ' คน' : ''}</div>` + (lines || '<div>ไม่มีรายการอาหารของบิลนี้ในระบบ</div>') + (pays ? `<div>ชำระ: ${pays}</div>` : '');
 }
 
 // ── เสียงลูกค้า: the branch's public reviews (stars, count, the latest ones) ─────────────────────────────────────────
