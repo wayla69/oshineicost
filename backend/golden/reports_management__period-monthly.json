@@ -460,6 +460,20 @@
       "rows": [],
       "source": "none"
      },
+     "half": {
+      "available": false,
+      "bills": 0,
+      "label": "17–31 May",
+      "level": "none",
+      "line": "no daily cancel data for this window",
+      "range": [
+       "2026-05-17",
+       "2026-05-31"
+      ],
+      "reprints": [],
+      "rows": [],
+      "source": "none"
+     },
      "month": {
       "available": false,
       "bills": 6,

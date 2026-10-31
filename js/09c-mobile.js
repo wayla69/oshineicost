@@ -2777,8 +2777,8 @@ async function msGoFocus(v, go) {
 // sentence that names the branches and the action, and the rows behind it. Sorted by level on the server. Unavailable items fold
 // into one grey row (their reasons behind a tap), so a month with no issue slips still reads as a short card. Phone B: the two-line rows.
 // 2026-10-31 (owner) · บิลยกเลิก / พิมพ์ซ้ำ: the item carries three windows (windows.day / week / month, each the item's own shape, the
-// numerator and the bills over one range); chips เมื่อวาน · 7 วัน · เดือนนี้ switch the row client-side, the pick is kept for the session
-const _MS_VW = [['day', 'เมื่อวาน'], ['week', '7 วัน'], ['month', 'เดือนนี้']];
+// numerator and the bills over one range); chips เมื่อวาน · 7 วัน · 15 วัน · เดือนนี้ switch the row client-side, the pick is kept for the session
+const _MS_VW = [['day', 'เมื่อวาน'], ['week', '7 วัน'], ['half', '15 วัน'], ['month', 'เดือนนี้']];
 function _msVoidKey(it) {
   let k = 'month';
   try { k = sessionStorage.getItem('msVoidWin') || 'month'; } catch (e) { /* private mode: the default */ }

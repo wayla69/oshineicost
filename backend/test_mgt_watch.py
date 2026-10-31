@@ -171,12 +171,13 @@ def test_voids_answer_three_windows_and_the_month_is_the_top_level(tmp_path):
     _detail(con, [(1, "2026-05-20T12:00:00", 100), (1, "2026-06-02T12:00:00", 300), (1, "2026-06-03T12:00:00", 200)])
     out = W.voids(con, ids, CS, CE, WHERE, {})
     win = out["windows"]
-    assert set(win) == {"day", "week", "month"}
+    assert set(win) == {"day", "week", "half", "month"}
     m = win["month"]
     for k in ("level", "rows", "reprints", "line", "range", "label", "source"):
         assert out[k] == m[k], k
     assert win["day"]["range"] == ["2026-06-03", "2026-06-03"]                        # the last finished day with bills (the fixture ends 3 June)
     assert win["week"]["range"] == ["2026-05-28", "2026-06-03"] and win["week"]["label"] == "28 พ.ค. – 3 มิ.ย."
+    assert win["half"]["range"] == ["2026-05-20", "2026-06-03"]                        # 15 วัน (owner 2026-10-31)
     for k in ("rows", "reprints", "line", "level", "range", "label", "source"):
         assert k in win["day"] and k in win["week"], k
 
@@ -206,7 +207,7 @@ def test_the_phone_card_switches_the_voids_window_with_chips():
     from pathlib import Path
     from test_bom_center_batch2 import _fn
     mob = (Path(__file__).resolve().parent.parent / "js" / "09c-mobile.js").read_text(encoding="utf-8")
-    assert "[['day', 'เมื่อวาน'], ['week', '7 วัน'], ['month', 'เดือนนี้']]" in mob
+    assert "[['day', 'เมื่อวาน'], ['week', '7 วัน'], ['half', '15 วัน'], ['month', 'เดือนนี้']]" in mob
     assert "sessionStorage.setItem('msVoidWin', k)" in _fn(mob, "msSetVoidWin") and "msRenderWatch(_msRpt)" in _fn(mob, "msSetVoidWin")
     assert "sessionStorage.getItem('msVoidWin')" in _fn(mob, "_msVoidKey")
     rw = _fn(mob, "msRenderWatch")
