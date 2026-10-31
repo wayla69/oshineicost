@@ -165,7 +165,7 @@ def test_a_card_is_two_fixed_lines_the_name_and_one_figure_then_the_chip_and_one
     # other figures as "label value"); every column is behind the tap (the row sheet). It was pill / name / grey line / three figures.
     h = _list({"id": "t", "rows": ROWS, "keys": ["ยอดขาย", "GP %", "ลูกค้า"]})
     card = re.search(r'<li class="ph-cl-card">(.*?)</li>', h, re.S).group(1)
-    assert ('<span class="ph-cl-l1"><span class="ph-cl-t">ขอนแก่น</span><span class="ph-cl-f"><span class="ph-cl-fv">฿5.0M</span></span></span>'
+    assert ('<span class="ph-cl-l1"><span class="ph-cl-t">ขอนแก่น</span><span class="ph-cl-f" data-l="ยอดขาย"><span class="ph-cl-fv">฿5.0M</span></span></span>'
             in card)                                                                                  # the first figure is the key one
     assert card.count('class="ph-cl-f"') == 1 and card.index("ph-cl-l1") < card.index("ph-cl-l2")
     l2 = card[card.index('<span class="ph-cl-l2">'):]
@@ -175,7 +175,7 @@ def test_a_card_is_two_fixed_lines_the_name_and_one_figure_then_the_chip_and_one
     assert 'aria-label="ขอนแก่น · ยอดขาย ฿5.0M · ดูทุกคอลัมน์"' in card
     # sorted by a figure: that figure is the one on line 1
     s = _list({"id": "t", "rows": ROWS, "keys": ["ยอดขาย", "GP %", "ลูกค้า"], "sort": {"k": 1, "dir": -1}})
-    assert re.search(r'<span class="ph-cl-t">ชลบุรี</span><span class="ph-cl-f"><span class="ph-cl-fv">41%</span>', s)
+    assert re.search(r'<span class="ph-cl-t">ชลบุรี</span><span class="ph-cl-f" data-l="GP %"><span class="ph-cl-fv">41%</span>', s)
     # a long status keeps <= 6 characters on the chip, its words in the title
     long = [dict(ROWS[0], pill={"t": "ไม่มีในตาราง (ใช้ต้นทุนเดิม)", "k": "ใช้เดิม", "tone": "warn"})]
     assert '<span class="ph-cl-pill" data-tone="watch" title="ไม่มีในตาราง (ใช้ต้นทุนเดิม)">ใช้เดิม</span>' in _list({"id": "t", "rows": long, "keys": ["ยอดขาย"]})

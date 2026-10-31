@@ -91,8 +91,10 @@ for (const [name, opts, mode] of [['desktop', DESK, 'fit'], ['แตะง่า
     // PR-SK2: the decreases (฿20.0K) take back 37 % of the increases (฿54.2K) -> the หักกลบ chip follows the gross figures
     expect(m.tiles[2]).toMatch(/^ต้นทุนเพิ่มสุทธิ \+฿[\d.]+K เพิ่ม ฿[\d.]+K · ลด ฿20\.0K หักกลบ 37%$/);
     if (mode === 'touch') {
+      // phone review item 3 (2026-10-31): the card is two lines - the key figure's label is its data-l, the other figures are "label value" on line 2
       const c = await page.evaluate(() => { const card = document.querySelector('#dsSpike .sp-sec-old .ph-cl .ph-cl-card');
-        return card ? { labels: [...card.querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()), txt: card.textContent } : null; });
+        const lab = (c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); };
+        return card ? { labels: lab(card, ['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']), txt: card.textContent } : null; });
       expect(c && c.labels).toEqual(['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
       expect(c && c.txt).toContain('สาขาที่ดัน');
       expect(m.sw).toBeLessThanOrEqual(390);

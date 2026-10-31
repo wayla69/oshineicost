@@ -1510,10 +1510,12 @@ function phCardList(spec) {
     const key = !figs.length ? null : ordered && typeof s.k === 'number' ? figs[Math.min(kk, figs.length - 1)] : (figs.find(has) || figs[0]);
     const rest = figs.filter(f => f !== key && f.v && f.v !== '—').map(f => `${f.l} ${f.v}`);
     const kv = (r.kv || []).map(l => (l.v ? `${l.k} ${l.v}` : l.k));
-    const sb = [(ordered || filter) && r.group ? r.group : '', r.sub, ...kv, ...rest].filter(Boolean).join(' · ');
+    // figSub (owner 2026-10-25): the key figure's change and base ("▲0.9% · เดิม 193,477") lead the grey line
+    const ks = key && key.sub ? [key.sub.a, key.sub.b].filter(Boolean).join(' ') : '';
+    const sb = [(ordered || filter) && r.group ? r.group : '', ks, r.sub, ...kv, ...rest].filter(Boolean).join(' · ');
     return `<li class="ph-cl-card${tot || r.grp ? ' ph-cl-tot' : ''}${r.tick ? ' ph-cl-hastick' : ''}">${tick(r)}<button type="button" class="ph-cl-hit" onclick="phCardOpen('${id}',${r.i})" aria-label="${esc(r.title)}${key ? ` · ${esc(key.l)} ${esc(key.v || '—')}` : ''} · ดูทุกคอลัมน์">`
       + `<span class="ph-cl-main"><span class="ph-cl-l1"><span class="ph-cl-t">${esc(r.title || '—')}</span>`
-      + (key ? `<span class="ph-cl-f"><span class="ph-cl-fv"${key.ink ? ` style="color:${esc(key.ink)}"` : ''}>${esc(key.v || '—')}</span></span>` : '') + '</span>'
+      + (key ? `<span class="ph-cl-f" data-l="${esc(key.l)}"><span class="ph-cl-fv"${key.ink ? ` style="color:${esc(key.ink)}"` : ''}>${esc(key.v || '—')}</span></span>` : '') + '</span>'
       + (sb || r.pill || r.spark ? `<span class="ph-cl-l2">${pillHtml(r.pill)}${sb ? `<span class="ph-cl-s">${esc(sb)}</span>` : ''}${r.spark ? `<span class="ph-cl-spark">${r.spark}</span>` : ''}</span>` : '')
       + `</span><span class="ph-cl-chev" aria-hidden="true">›</span></button></li>`;
   };
