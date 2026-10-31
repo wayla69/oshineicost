@@ -1642,17 +1642,20 @@ def stage_extra(sq, mc, since, bid_map, item_map):
     # NOTE: individual (per-person) attribution is NOT possible in this POS — the Staff
     # master table is empty and SaleItemStaff.StaffName is blank for all rows, so cancel_user
     # (a shared login/role account) is the only "who" available.
+    # 2026-10-31 (owner): + customers (Sale.NumOfCust) - rules.classify_voids matches a void to the bill that re-issued it on the
+    # number of customers when both carry one (the POS gives no table number on Sale). Readers guard the column (PRAGMA table_info).
     sq.executescript("DROP TABLE IF EXISTS pos_cancel_bill_detail; CREATE TABLE pos_cancel_bill_detail("
-                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT, discount REAL);")
+                     "branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, amount REAL, cancel_user TEXT, discount REAL, "
+                     "customers INT);")
     drows = run("""SELECT TOP 20000 s.BranchId bid, CONVERT(char(19),s.SaleDate,126) dt, s.SaleNum num,
                  ISNULL(s.DeleteReasonId,0) rid, CAST(ISNULL(s.Total,0) AS float) amt,
-                 CAST(ISNULL(s.Discount,0) AS float) disc,
+                 CAST(ISNULL(s.Discount,0) AS float) disc, ISNULL(s.NumOfCust,0) cust,
                  LTRIM(RTRIM(COALESCE(u.Username,''))) duser
                  FROM Sale s LEFT JOIN Users u ON u.Id = s.UserId
                  WHERE ISNULL(s.Active,1)=0 AND s.SaleDate >= %s ORDER BY s.SaleDate DESC""")
-    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?,?)",
+    sq.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,?,?,?,?,?)",
         [(bid_map.get(r["bid"]), (r["dt"] or '')[:7], r["dt"], str(r["num"]), r["rid"], round(r["amt"] or 0,2),
-          (r["duser"] or None), round(r["disc"] or 0,2))
+          (r["duser"] or None), round(r["disc"] or 0,2), int(r.get("cust") or 0))
          for r in drows if bid_map.get(r["bid"])])
     sq.execute("CREATE INDEX IF NOT EXISTS idx_cbd_branch ON pos_cancel_bill_detail(branch_id, period_month)")
     print(f"        pos_cancel_bill_detail: {len(drows)} bills")

@@ -127,9 +127,10 @@
    "reason_id",
    "amount",
    "cancel_user",
-   "discount"
+   "discount",
+   "customers"
   ],
-  "sha1": "7cd891b4c824"
+  "sha1": "1a80587b81a8"
  },
  "pos_cancel_reason": {
   "rows": 1,

@@ -10,7 +10,9 @@ between the card and the list (one answer per question):
   GET /api/reports/voids?branch=X           level 2 - one branch: header (+ its 8-week normal rate), the reasons, every cancelled
                                             bill (pos_cancel_bill_detail) and every discounted bill printed more than once
   GET /api/reports/voids/bill?branch=X&receipt=R   level 3 - one reprinted bill: its lines (sale_bill_item, when the sync kept
-                                            them) and its payments (sale_payment). A cancelled bill has no lines anywhere: the POS
+                                            them) and its payments (sale_payment).
+Every voided bill carries its class (rules.classify_voids: re-issued = a new bill at the branch within 30 min that matches it);
+the level, the sort and the alert are on the voids NOT re-issued, the totals of every void stay beside them. A cancelled bill has no lines anywhere: the POS
                                             drops it from the sales (it is not in sales_transaction / sale_bill_item), so the phone
                                             shows the fields of level 2 for it.
 
@@ -27,7 +29,7 @@ from typing import Optional
 from fastapi import APIRouter, HTTPException, Query, Request
 
 from core import get_db, ttl_cache
-from rules import scope_filter
+from rules import VOID_REISSUE_MIN, scope_filter
 from routers import mgt_watch as W
 
 router = APIRouter()
@@ -78,37 +80,43 @@ def _types(con, ids):
         f"SELECT branch_id, COALESCE(branch_type,'master'), COALESCE(active,1) FROM branches WHERE branch_id IN ({ph})", list(ids))}
 
 
-def _row(name, btype, bills, cb, amt, rep, min_bills):
+def _row(name, btype, bills, cnt, rep, min_bills):
+    """One branch of a window. cnt = (all voids, baht, NOT re-issued, their baht) of mgt_watch.void_counts. The level and the
+    sort are on the voids not re-issued (owner 2026-10-31: a void followed by a new bill is a correction); voids / amount /
+    rate_pct stay every void, as the card's bills / amount / rate_pct."""
+    cb, amt, ob, oamt = cnt
     tot = bills + cb
-    r = {"branch": name, "type": btype, "bills_total": tot, "voids": cb, "amount": round(amt), "rate_pct": None, "level": "none",
+    r = {"branch": name, "type": btype, "bills_total": tot, "voids": cb, "amount": round(amt), "rate_pct": None,
+         "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": None, "voids_reissued": cb - ob, "level": "none",
          "reprints": rep.get("bills", 0), "reprint_baht": rep.get("baht", 0)}
     if tot > 0:
-        rate = cb / tot * 100
-        r["rate_pct"] = round(rate, 2)
+        r["rate_pct"], r["rate_open_pct"] = round(cb / tot * 100, 2), round(ob / tot * 100, 2)
         if min_bills and tot < min_bills:
             r["few"] = True                         # the card gives no verdict on a handful of bills
         else:
-            r["level"] = W.void_level(rate)
+            r["level"] = W.void_level(ob / tot * 100)
     return r
 
 
-def _level1(con, ids, s, e, where, params, cover, window):
-    source, canc, bills = W.void_counts(con, ids, s, e, cover, month_ok=(window == "month"))
+def _level1(con, ids, s, e, where, params, cover, window, cls=None):
+    source, canc, bills = W.void_counts(con, ids, s, e, cover, month_ok=(window == "month"), cls=cls)
     rep = {r["branch"]: r for r in W.reprint_rows(con, s, e, where, params)}
     types = _types(con, ids)
     min_bills = W.T_VOID_MIN_BILLS if window == "day" else 0
     rows = []
     for bid, name in ids.items():
-        cb, amt = canc.get(bid, (0, 0))
+        cnt = canc.get(bid, (0, 0, 0, 0))
         b = bills.get(bid, 0)
         btype, active = types.get(bid, ("master", 1))
-        if not active and not b and not cb:         # a closed branch with nothing in the window is not a row
+        if not active and not b and not cnt[0]:     # a closed branch with nothing in the window is not a row
             continue
-        rows.append(_row(name, btype, b, cb, amt, rep.get(name, {}), min_bills))
-    rows.sort(key=lambda r: (r["voids"] == 0, -(r["rate_pct"] or 0), -r["voids"], r["branch"]))
-    tv, tb = sum(r["voids"] for r in rows), sum(r["bills_total"] for r in rows)
+        rows.append(_row(name, btype, b, cnt, rep.get(name, {}), min_bills))
+    rows.sort(key=lambda r: (r["voids"] == 0, -(r["rate_open_pct"] or 0), -(r["rate_pct"] or 0), -r["voids"], r["branch"]))
+    tv, to, tb = sum(r["voids"] for r in rows), sum(r["voids_open"] for r in rows), sum(r["bills_total"] for r in rows)
     total = {"voids": tv, "amount": sum(r["amount"] for r in rows), "bills_total": tb,
              "rate_pct": round(tv / tb * 100, 2) if tb else None,
+             "voids_open": to, "amount_open": sum(r["amount_open"] for r in rows), "voids_reissued": tv - to,
+             "rate_open_pct": round(to / tb * 100, 2) if tb else None,
              "reprints": sum(r["reprints"] for r in rows), "reprint_baht": sum(r["reprint_baht"] for r in rows),
              "branches": len(rows), "flagged": sum(1 for r in rows if r["level"] in ("fix", "watch"))}
     return source, rows, total
@@ -128,41 +136,93 @@ def _reasons(con):
         return {}
 
 
-def _level2(con, bid, name, s, e, where, params, cover, window):
-    source, rows, total = _level1(con, {bid: name}, s, e, where, params, cover, window)
-    head = rows[0] if rows else _row(name, _types(con, {bid: name}).get(bid, ("master", 1))[0], 0, 0, 0, {}, 0)
+def bill_lists(con, bid, s, e, where, params, cls=None, cap=BILL_CAP):
+    """One branch's bills of s..e: (voids, reasons, voids beyond the cap, reprints, reprints beyond the cap) - every voided bill
+    (newest first, with its class: reissued_as = the receipt of the new bill, or None = not re-issued) and every discounted bill
+    printed more than once. The drill-down's level 2 and the report's §7.1 both read this. cap=None = every bill (the .xlsx)."""
+    from rules import classify_voids, receipt_label
     rs = _reasons(con)
     bills, reasons, more = [], [], 0
-    if source == "detail":
-        q = con.execute("""SELECT sale_date, receipt_no, reason_id, amount, cancel_user, discount FROM pos_cancel_bill_detail
+    try:
+        q = con.execute("""SELECT rowid, sale_date, receipt_no, reason_id, amount, cancel_user, discount FROM pos_cancel_bill_detail
                            WHERE branch_id=? AND date(sale_date) BETWEEN ? AND ? ORDER BY sale_date DESC""",
                         (bid, s.isoformat(), e.isoformat())).fetchall()
-        more = max(0, len(q) - BILL_CAP)
-        bills = [{"at": r[0], "receipt": r[1] or "", "amount": round(r[3] or 0), "reason": _reason(rs, r[2]),
-                  "user": r[4] or "", "discount": round(r[5] or 0)} for r in q[:BILL_CAP]]
+    except Exception:                               # no detail table
+        q = []
+    if q:
+        if cls is None:
+            cls = classify_voids(con, [bid], s, e)
+        n = len(q) if cap is None else cap
+        more = max(0, len(q) - n)
+        bills = [{"at": r[1], "receipt": r[2] or "", "amount": round(r[4] or 0), "reason": _reason(rs, r[3]),
+                  "user": r[5] or "", "discount": round(r[6] or 0), "reissued_as": cls.get(r[0]),
+                  "reissued_no": receipt_label(cls.get(r[0])) if cls.get(r[0]) else None} for r in q[:n]]
         acc: dict = {}
         for r in q:
-            k = _reason(rs, r[2])
-            a = acc.setdefault(k, [0, 0])
-            a[0] += 1; a[1] += r[3] or 0
-        reasons = [{"reason": k, "n": v[0], "amount": round(v[1])} for k, v in sorted(acc.items(), key=lambda kv: (-kv[1][0], kv[0]))]
+            a = acc.setdefault(_reason(rs, r[3]), [0, 0, 0])
+            a[0] += 1; a[1] += r[4] or 0; a[2] += 0 if cls.get(r[0]) else 1
+        reasons = [{"reason": k, "n": v[0], "amount": round(v[1]), "n_open": v[2]}
+                   for k, v in sorted(acc.items(), key=lambda kv: (-kv[1][0], kv[0]))]
     rq = con.execute(f"""SELECT st.sold_at, st.receipt_no, st.total_inc_vat, st.discount, st.print_times, st.cashier
                          FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
                          WHERE {where} AND st.branch_id=:bid AND date(st.sold_at) BETWEEN :s AND :e
                            AND st.discount>0 AND COALESCE(st.print_times,0)>1
                          ORDER BY st.sold_at DESC""", {**params, "bid": bid, "s": s.isoformat(), "e": e.isoformat()}).fetchall()
-    reprints = [{"at": r[0], "receipt": r[1], "total": round(r[2] or 0), "discount": round(r[3] or 0), "prints": r[4] or 0,
-                 "cashier": r[5] or ""} for r in rq[:BILL_CAP]]
-    # the branch's normal: the same rate over the 8 weeks before the window (only while the detail table holds them)
+    rn = len(rq) if cap is None else cap
+    reprints = [{"at": r[0], "receipt": r[1], "no": receipt_label(r[1]), "total": round(r[2] or 0), "discount": round(r[3] or 0), "prints": r[4] or 0,
+                 "cashier": r[5] or ""} for r in rq[:rn]]
+    return bills, reasons, more, reprints, max(0, len(rq) - rn)
+
+
+def _level2(con, bid, name, s, e, where, params, cover, window):
+    from rules import classify_voids
+    cls = classify_voids(con, [bid], s, e)
+    source, rows, total = _level1(con, {bid: name}, s, e, where, params, cover, window, cls=cls)
+    head = rows[0] if rows else _row(name, _types(con, {bid: name}).get(bid, ("master", 1))[0], 0, (0, 0, 0, 0), {}, 0)
+    bills, reasons, more, reprints, rmore = bill_lists(con, bid, s, e, where, params, cls=cls)
+    if source != "detail":
+        bills, reasons, more = [], [], 0
+    # the branch's normal: the same rate (voids not re-issued) over the 8 weeks before the window, while the detail table holds them
     normal = None
     ns, ne = s - _dt.timedelta(days=7 * NORMAL_WEEKS), s - _dt.timedelta(days=1)
     nsrc, ncanc, nbills = W.void_counts(con, {bid: name}, ns, ne, cover, month_ok=False)
     if nsrc == "detail":
-        cb = ncanc.get(bid, (0, 0))[0]; tot = nbills.get(bid, 0) + cb
+        cb, _, ob, _ = ncanc.get(bid, (0, 0, 0, 0)); tot = nbills.get(bid, 0) + cb
         if tot:
-            normal = {"rate_pct": round(cb / tot * 100, 2), "range": [ns.isoformat(), ne.isoformat()], "voids": cb, "bills_total": tot}
+            normal = {"rate_open_pct": round(ob / tot * 100, 2), "rate_pct": round(cb / tot * 100, 2),
+                      "range": [ns.isoformat(), ne.isoformat()], "voids": cb, "voids_open": ob, "bills_total": tot}
     return source, {"header": {**head, "normal": normal}, "reasons": reasons, "bills": bills, "bills_more": more,
-                    "reprints": reprints, "reprints_more": max(0, len(rq) - BILL_CAP)}
+                    "reprints": reprints, "reprints_more": rmore}
+
+
+REPORT_CAP = 20                 # the management report's §7.1 prints 20 bills per list per branch ("… อีก k บิล"); the .xlsx all
+
+
+def report_section(con, cs, ce, where, params, branch=None, group=None, whole_month=False, cap=REPORT_CAP) -> dict:
+    """§7.1 of the management report (owner 2026-10-31, "แยก grouping บิล voided หรือ พิมพ์ซ้ำ"): the drill-down's level 1 over the
+    report's own cs..ce, then, for every branch with at least one void or reprint (worst rate of voids NOT re-issued first), its
+    level-2 lists (bill_lists, `cap` bills a list; None = every bill, for the .xlsx). The branches with neither are one total.
+    whole_month: the period is a calendar month, so a window older than the per-bill table may fall back to the monthly count."""
+    from rules import VOID_REISSUE_MIN, classify_voids
+    ids = W._scope_ids(con, branch, group)
+    if not ids:
+        return {"available": False}
+    cover = W._detail_cover(con)
+    cls = classify_voids(con, list(ids), cs, ce)
+    source, rows, total = _level1(con, ids, cs, ce, where, params, cover, "month" if whole_month else "range", cls=cls)
+    by_name = {v: k for k, v in ids.items()}
+    shown, rest = [], []
+    for r in rows:
+        if r["voids"] or r["reprints"]:
+            bills, reasons, more, reprints, rmore = bill_lists(con, by_name[r["branch"]], cs, ce, where, params, cls=cls, cap=cap)
+            if source != "detail":
+                bills, reasons, more = [], [], 0
+            shown.append({**r, "reasons": reasons, "bills": bills, "bills_more": more, "reprint_bills": reprints, "reprints_more": rmore})
+        else:
+            rest.append(r)
+    return {"available": True, "source": source, "range": [cs.isoformat(), ce.isoformat()], "total": total,
+            "bands": {"watch": W.T_VOID_WATCH, "fix": W.T_VOID_FIX}, "reissue_min": VOID_REISSUE_MIN, "cap": cap,
+            "branches": shown, "rest": {"branches": len(rest), "bills_total": sum(r["bills_total"] for r in rest)}}
 
 
 @ttl_cache
@@ -186,7 +246,8 @@ def report_voids(window: str = Query("month"), month: Optional[str] = Query(None
         out = {"available": True, "window": window, "range": [s.isoformat(), e.isoformat()], "label": W.range_label(s, e, th),
                "month_range": [cs.isoformat(), ce.isoformat()], "anchor": day.isoformat() if day else None,
                "windows": [k for k in WINDOWS if k == "month" or day],
-               "bands": {"watch": W.T_VOID_WATCH, "fix": W.T_VOID_FIX}, "min_bills_day": W.T_VOID_MIN_BILLS, "scope": branch or group or ""}
+               "bands": {"watch": W.T_VOID_WATCH, "fix": W.T_VOID_FIX}, "min_bills_day": W.T_VOID_MIN_BILLS, "scope": branch or group or "",
+               "reissue_min": VOID_REISSUE_MIN}
         if branch:
             bid = next(iter(ids))
             source, l2 = _level2(con, bid, ids[bid], s, e, where, params, cover, window)

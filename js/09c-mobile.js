@@ -2858,6 +2858,17 @@ function msVoidsBranch(name) {
   window.scrollTo(0, 0);
   msLoadVoids();
 }
+// level 2's class filter: ไม่ออกใหม่ (the alert's basis, the default) · ออกใหม่แล้ว · ทั้งหมด - kept for the session
+function _msVoidCls() {
+  let k = 'open';
+  try { k = sessionStorage.getItem('msVoidCls') || 'open'; } catch (e) { /* private mode: the default */ }
+  return ['all', 'open', 're'].includes(k) ? k : 'open';
+}
+function msVoidsCls(k) {
+  try { sessionStorage.setItem('msVoidCls', k); } catch (e) { /* private mode: this render only */ }
+  const box = document.getElementById('msVoids');
+  if (box && _msVoidData && _msVoidData.level === 2) box.innerHTML = msVoidsL2Html(_msVoidData);
+}
 function msVoidsWin(k) {
   try { sessionStorage.setItem('msVoidWin', k); } catch (e) { /* private mode: this render only */ }
   msLoadVoids();
@@ -2865,9 +2876,11 @@ function msVoidsWin(k) {
 // the "?" of the screen: the bands and what a reprint is
 function _msVoidHelp(j) {
   const B = j.bands || {};
-  return uiQ('voids-drill', 'บิลยกเลิก / พิมพ์ซ้ำ', `<p><b>อัตรายกเลิก</b> = บิลยกเลิก ÷ (บิลขาย + บิลยกเลิก) ในช่วงเวลาที่เลือก</p>`
+  return uiQ('voids-drill', 'บิลยกเลิก / พิมพ์ซ้ำ', `<p><b>อัตรายกเลิก</b> = บิลยกเลิกที่ไม่ออกใหม่ ÷ (บิลขาย + บิลยกเลิก) ในช่วงเวลาที่เลือก</p>`
     + `<p><b style="color:var(--bad-ink)">ต้องแก้</b> ตั้งแต่ ${B.fix}% · <b style="color:var(--amber-ink)">ต้องดู</b> ตั้งแต่ ${B.watch}%</p>`
     + `<p>ช่วง "เมื่อวาน" ต้องมีอย่างน้อย ${j.min_bills_day} บิลจึงสรุปผล</p>`
+    + `<p><b>ออกใหม่แล้ว</b> = มีบิลใหม่ที่สาขาเดียวกันภายใน ${j.reissue_min || 30} นาทีหลังยกเลิก จำนวนลูกค้าเท่ากัน หรือยอดต่างไม่เกิน 20% (เป็นการแก้บิล) · `
+    + `<b>ไม่ออกใหม่</b> = ไม่พบบิลใหม่ · อัตราและการเตือนนับเฉพาะ <b>ไม่ออกใหม่</b> รายละเอียดแสดงทุกบิล</p>`
     + `<p><b>บิลพิมพ์ซ้ำ</b> = บิลที่มีส่วนลดและพิมพ์ใบเสร็จมากกว่า 1 ครั้ง</p>`
     + `<p>บิลยกเลิกไม่มีรายการอาหาร เพราะระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p>`);
 }
@@ -2901,27 +2914,30 @@ async function msLoadVoids() {
 }
 function _msVoidHead(j, T, title) {
   const tone = _msVoidTone(T.level);
-  const rate = T.rate_pct != null ? `<b class="ms-vd-rate${tone ? ' is-' + tone : ''}">${T.rate_pct}%</b>` : '—';
+  const r = T.rate_open_pct != null ? T.rate_open_pct : T.rate_pct;
+  const rate = r != null ? `<b class="ms-vd-rate${tone ? ' is-' + tone : ''}">${r}%</b>` : '—';
   return `<div class="ms-vd-head"><span class="ms-vd-h1">${esc(title)} · ${esc(j.label || '')}</span>${_msVoidHelp(j)}</div>`
-    + `<p class="ms-vd-sum">ยกเลิก ${rate} · ${fmtN(T.voids)} บิล · ฿${fmtN(T.amount)} · พิมพ์ซ้ำ ${fmtN(T.reprints)} บิล</p>`
+    + `<p class="ms-vd-sum">ยกเลิกแล้วไม่ออกใหม่ ${rate} · ${fmtN(T.voids_open != null ? T.voids_open : T.voids)} บิล · ฿${fmtN(T.amount_open != null ? T.amount_open : T.amount)}`
+    + ` · <span class="ms-vd-all">รวมยกเลิกทั้งหมด ${fmtN(T.voids)} บิล</span> · พิมพ์ซ้ำ ${fmtN(T.reprints)} บิล</p>`
     + (j.source === 'month' ? `<p class="ms-vd-note">นับบิลยกเลิกทั้งเดือน (ไม่มีข้อมูลรายวันของช่วงนี้)</p>` : '');
 }
 // level 1 · every branch: company, then franchise; each sorted by the rate, the branches with no void at the bottom (grey)
 function msVoidsL1Html(j) {
   const rows = j.rows || [], T = j.total || {}, B = j.bands || {};
   if (j.source === 'none') return _msVoidChipsHtml(j) + uiEmpty({ t: 'ยังไม่มีข้อมูลบิลยกเลิกรายวันของช่วงนี้' });
-  const max = Math.max(1, ...rows.map(r => r.rate_pct || 0));
+  const max = Math.max(1, ...rows.map(r => r.rate_open_pct || 0));
   const row = r => {
     const zero = !r.voids, tone = zero ? '' : _msVoidTone(r.level);
     const col = tone === 'bad' ? 'var(--bad-ink)' : tone === 'watch' ? 'var(--amber-ink)' : 'var(--text-muted)';
     return uiRow2({ cls: 'ms-vd-br' + (zero ? ' ms-vd-zero' : ''), tone, title: esc(r.branch),
-      val: r.rate_pct != null ? r.rate_pct + '%' : '—', valTone: tone,
-      fact: `${fmtN(r.voids)} บิล · ฿${fmtN(r.amount)} · พิมพ์ซ้ำ ${fmtN(r.reprints)}${r.few ? ' · บิลน้อย' : ''}`,
-      bar: zero ? null : { pct: 100 * (r.rate_pct || 0) / max, col },
+      val: r.rate_open_pct != null ? r.rate_open_pct + '%' : '—', valTone: tone,
+      fact: `ไม่ออกใหม่ <b>${fmtN(r.voids_open)}</b> บิล · ฿${fmtN(r.amount_open)} · <span class="ms-vd-all">ทั้งหมด ${fmtN(r.voids)}</span> · พิมพ์ซ้ำ ${fmtN(r.reprints)}${r.few ? ' · บิลน้อย' : ''}`,
+      bar: zero ? null : { pct: 100 * (r.rate_open_pct || 0) / max, col },
       onGo: 'msVoidsBranch(this.dataset.br)', attrs: ` data-br="${esc(r.branch)}"` });
   };
   const grp = (t, list) => list.length ? `<div class="ms-section-title ms-vd-grp">${t} <span>${fmtN(list.length)} สาขา</span></div><div class="ms-card ms-r2-list">${list.map(row).join('')}</div>` : '';
-  const lv = T.rate_pct == null ? '' : T.rate_pct >= B.fix ? 'fix' : T.rate_pct >= B.watch ? 'watch' : '';
+  const tr = T.rate_open_pct != null ? T.rate_open_pct : T.rate_pct;
+  const lv = tr == null ? '' : tr >= B.fix ? 'fix' : tr >= B.watch ? 'watch' : '';
   return _msVoidChipsHtml(j) + _msVoidHead(j, { ...T, level: lv }, 'ทุกสาขา')
     + (rows.length ? grp('สาขาบริษัท', rows.filter(r => r.type !== 'franchise')) + grp('สาขาแฟรนไชส์', rows.filter(r => r.type === 'franchise'))
       : uiEmpty({ t: 'ไม่มีสาขาในช่วงนี้' }));
@@ -2930,10 +2946,14 @@ function msVoidsL1Html(j) {
 function msVoidsL2Html(j) {
   const H = j.header || {}, N = H.normal;
   const head = _msVoidChipsHtml(j) + _msVoidHead(j, H, j.branch)
-    + (N ? `<p class="ms-vd-note">ปกติของสาขา ${N.rate_pct}% (8 สัปดาห์ก่อนหน้า)</p>` : '');
+    + (N ? `<p class="ms-vd-note">ปกติของสาขา ${N.rate_open_pct != null ? N.rate_open_pct : N.rate_pct}% (8 สัปดาห์ก่อนหน้า)</p>` : '');
   const reasons = (j.reasons || []).length ? `<div class="ms-vd-reasons" role="list">` + j.reasons.map(r =>
     `<span class="ms-vd-reason" role="listitem">${esc(r.reason)} <b>${fmtN(r.n)}</b></span>`).join('') + '</div>' : '';
-  const bills = j.bills || [], CAP = 20;
+  const cls = _msVoidCls(), all = j.bills || [], CAP = 20;
+  const bills = all.filter(b => cls === 'all' || (cls === 'open' ? !b.reissued_as : !!b.reissued_as));
+  const nOpen = all.filter(b => !b.reissued_as).length;
+  const filt = all.length ? `<div class="ms-vw-chips ms-vd-cls-chips" role="group" aria-label="ประเภทบิลยกเลิก">` + [['all', 'ทั้งหมด', all.length], ['open', 'ไม่ออกใหม่', nOpen], ['re', 'ออกใหม่แล้ว', all.length - nOpen]].map(([k, t, n]) =>
+    `<button type="button" class="ms-vw-chip" aria-pressed="${k === cls}" onclick="msVoidsCls('${k}')">${t} ${fmtN(n)}</button>`).join('') + '</div>' : '';
   let lastDay = '', billsHtml = '';
   bills.forEach((b, i) => {
     const day = String(b.at || '').slice(0, 10), attr = dvMoreAttr('vd-bills', i, bills.length, CAP);
@@ -2942,18 +2962,20 @@ function msVoidsL2Html(j) {
       const same = bills.filter(x => String(x.at || '').slice(0, 10) === day);
       billsHtml += `<div class="ms-vd-day"${attr}>${_msDayTh(b.at)} <span>${fmtN(same.length)} บิล · ฿${fmtN(same.reduce((s, x) => s + (x.amount || 0), 0))}</span></div>`;
     }
-    billsHtml += uiRow2({ cls: 'ms-vd-bill', title: `${_msHm(b.at)} · ${esc(b.receipt || 'ไม่มีเลขที่บิล')}`, val: '฿' + fmtN(b.amount),
+    const k = all.indexOf(b);
+    billsHtml += uiRow2({ cls: 'ms-vd-bill', tone: b.reissued_as ? '' : 'bad', title: `${_msHm(b.at)} · ${esc(b.receipt || 'ไม่มีเลขที่บิล')}`, val: '฿' + fmtN(b.amount),
+      chips: b.reissued_as ? `<span class="ms-vd-cls">ออกใหม่แล้ว → ${esc(b.reissued_no || b.reissued_as)}</span>` : '<span class="ms-vd-cls is-open">ไม่ออกใหม่</span>',
       fact: esc([b.reason, b.user].filter(Boolean).join(' · ')) + (b.discount > 0 ? ` · มีส่วนลด ฿${fmtN(b.discount)}` : ''),
-      onGo: `msVoidBill('b',${i})`, attrs: attr });
+      onGo: `msVoidBill('b',${k})`, attrs: attr });
   });
   const reps = j.reprints || [];
-  const repHtml = reps.map((r, i) => uiRow2({ cls: 'ms-vd-bill', tone: 'watch', title: `${_msDayTh(r.at)} ${_msHm(r.at)} · ${esc(r.receipt)}`, val: '฿' + fmtN(r.total),
+  const repHtml = reps.map((r, i) => uiRow2({ cls: 'ms-vd-bill', tone: 'watch', title: `${_msDayTh(r.at)} ${_msHm(r.at)} · ${esc(r.no || r.receipt)}`, val: '฿' + fmtN(r.total),
     fact: `พิมพ์ ${fmtN(r.prints)} ครั้ง · ส่วนลด ฿${fmtN(r.discount)}${r.cashier ? ' · ' + esc(r.cashier) : ''}`,
     onGo: `msVoidBill('r',${i})`, attrs: dvMoreAttr('vd-reps', i, reps.length, CAP) })).join('');
   const more = n => n ? `<p class="ms-vd-note">และอีก ${fmtN(n)} บิล</p>` : '';
   return head
-    + `<div class="ms-section-title ms-vd-grp">บิลยกเลิก <span>${fmtN(H.voids)} บิล · ฿${fmtN(H.amount)}</span></div>`
-    + (bills.length ? reasons + `<div class="ms-card ms-r2-list">${billsHtml}</div>${dvMoreBtn('vd-bills', bills.length, CAP)}${more(j.bills_more)}`
+    + `<div class="ms-section-title ms-vd-grp">บิลยกเลิก <span>ไม่ออกใหม่ ${fmtN(H.voids_open)} · ทั้งหมด ${fmtN(H.voids)} บิล · ฿${fmtN(H.amount)}</span></div>`
+    + (all.length ? reasons + filt + (bills.length ? `<div class="ms-card ms-r2-list">${billsHtml}</div>${dvMoreBtn('vd-bills', bills.length, CAP)}` : uiEmpty({ t: 'ไม่มีบิลประเภทนี้ในช่วงนี้', icon: 'check' })) + more(j.bills_more)
       : uiEmpty({ t: j.source === 'detail' ? 'ไม่มีบิลยกเลิกในช่วงนี้' : 'ไม่มีรายการบิลยกเลิกรายบิลของช่วงนี้', icon: 'check' }))
     + `<div class="ms-section-title ms-vd-grp">บิลพิมพ์ซ้ำ <span>${fmtN(H.reprints)} บิล · ส่วนลด ฿${fmtN(H.reprint_baht)}</span></div>`
     + (reps.length ? `<div class="ms-card ms-r2-list">${repHtml}</div>${dvMoreBtn('vd-reps', reps.length, CAP)}${more(j.reprints_more)}`
@@ -2966,13 +2988,14 @@ async function msVoidBill(kind, i) {
   const b = (kind === 'b' ? j.bills : j.reprints || [])[i]; if (!b) return;
   const sh = document.getElementById('msSheet'), body = document.getElementById('msSheetBody'); if (!sh || !body) return;
   const kv = pairs => `<dl class="ph-rs-list">${pairs.filter(p => p[1] !== '' && p[1] != null).map(([h, v]) => `<div class="ph-rs-row"><dt>${esc(h)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
-  document.getElementById('msSheetTitle').textContent = kind === 'b' ? 'บิลยกเลิก ' + (b.receipt || '') : 'บิลพิมพ์ซ้ำ ' + b.receipt;
+  document.getElementById('msSheetTitle').textContent = kind === 'b' ? 'บิลยกเลิก ' + (b.receipt || '') : 'บิลพิมพ์ซ้ำ ' + (b.no || b.receipt);
   document.getElementById('msSheetSub').textContent = `${j.branch} · ${_msDayTh(b.at)} ${_msHm(b.at)}`;
   sh.classList.add('open', 'ph-rowsheet'); sh.scrollTop = 0; document.body.classList.add('ms-sheet-open');
   const back = document.getElementById('phSheetBack'); if (back) back.hidden = false;
   if (kind === 'b') {
     body.innerHTML = `<div class="ph-rs">` + kv([['เลขที่บิล', esc(b.receipt || 'ไม่มีเลขที่บิล')], ['เวลา', `${_msDayTh(b.at)} ${_msHm(b.at)}`], ['ยอดบิล', '฿' + fmtN(b.amount)],
-      ['เหตุผล', esc(b.reason)], ['ผู้ยกเลิก', esc(b.user)], ['ส่วนลด', b.discount > 0 ? '฿' + fmtN(b.discount) : '']])
+      ['เหตุผล', esc(b.reason)], ['ผู้ยกเลิก', esc(b.user)], ['ส่วนลด', b.discount > 0 ? '฿' + fmtN(b.discount) : ''],
+      ['บิลใหม่', b.reissued_as ? 'ออกใหม่แล้ว → ' + esc(b.reissued_no || b.reissued_as) : '<b style="color:var(--bad-ink)">ไม่ออกใหม่</b>']])
       + `<p class="ms-vd-note">บิลที่ยกเลิกไม่มีรายการอาหาร ระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p></div>`;
     return;
   }

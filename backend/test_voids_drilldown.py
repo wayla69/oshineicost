@@ -80,7 +80,7 @@ def test_level2_lists_the_window_bills_only_with_reasons_and_reprints(tmp_path):
     assert l2["reprints"] == [] and l2["bills_more"] == 0
     # the reprint definition: a discounted bill printed more than once (branch 2)
     _, l2b = V._level2(con, 2, ids[2], CS, CE, WHERE, {}, cover, "month")
-    assert l2b["reprints"] == [{"at": "2026-06-02T12:30:00", "receipt": "RP-1", "total": 1070, "discount": 50, "prints": 3, "cashier": "แคชเชียร์ ก"}]
+    assert l2b["reprints"] == [{"at": "2026-06-02T12:30:00", "receipt": "RP-1", "no": "RP-1", "total": 1070, "discount": 50, "prints": 3, "cashier": "แคชเชียร์ ก"}]
     assert l2b["bills"] == [] and l2b["header"]["reprints"] == 1
 
 
@@ -132,3 +132,89 @@ def test_the_phone_opens_the_drill_from_the_card_row():
     assert "_MS_VIEWS = ['summary', 'sales', 'branches', 'menu', 'profit', 'discounts', 'voids']" in mob
     assert "history.pushState({ phd: 'voids', vb: name }" in mob and "/api/reports/voids/bill?" in mob
     assert 'id="msv-voids"' in idx and 'id="msVoids"' in idx
+
+
+# ── 2026-10-31 (owner): a void followed by a new bill is a correction - the alert counts the voids NOT re-issued ──────────────
+def test_the_reissue_rule():
+    import rules
+    v = {"amount": 1000, "table": "", "customers": 0}
+    assert rules.void_reissue_match(v, {"amount": 1150, "table": "", "customers": 0})           # within ±20 %
+    assert not rules.void_reissue_match(v, {"amount": 1300, "table": "", "customers": 0})
+    assert rules.void_reissue_match({**v, "table": "12"}, {"amount": 50, "table": "12"})        # same table wins over the amount
+    assert not rules.void_reissue_match({**v, "table": "12"}, {"amount": 1000, "table": "7"})
+    assert rules.void_reissue_match({**v, "customers": 4}, {"amount": 9, "customers": 4})      # same customers when both carry one
+    assert not rules.void_reissue_match({**v, "customers": 4}, {"amount": 1000, "customers": 3})
+    assert rules.VOID_REISSUE_MIN == 30
+
+
+def _reissue_db(tmp_path):
+    con, ids = _db(tmp_path)
+    con.execute("CREATE TABLE pos_cancel_bill_detail(branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, reason_id INT, "
+                "amount REAL, cancel_user TEXT, discount REAL, customers INT, table_no TEXT)")
+    rows = [(1, "2026-05-20T12:00:00", "OLD", 100, 0, None),
+            (1, "2026-06-02T11:40:00", "V1", 2000, 0, "12"),    # T5 (table 12, 20 min later) re-issues it
+            (1, "2026-06-02T11:29:00", "V2", 2000, 0, "9"),     # T6 (table 9) comes 31 min later: not re-issued
+            (1, "2026-06-03T12:00:00", "V3", 1100, 0, None),    # no table: the fixture's 1,070 bill at 12:00 is within 20 %
+            (1, "2026-06-03T18:00:00", "V4", 500, 0, None)]     # nothing after it: not re-issued
+    con.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,2,?,'cashier',0,?,?)",
+                    [(b, d[:7], d, r, a, c, t) for b, d, r, a, c, t in rows])
+    for rc, at, tab in (("T5", "2026-06-02T12:00:00", "12"), ("T6", "2026-06-02T12:00:00", "9")):
+        con.execute("INSERT INTO sales_transaction(branch_id,receipt_no,sold_at,table_no,customer_count,food_subtotal,drink_subtotal,"
+                    "other_subtotal,discount,service_charge,total_inc_vat,source) VALUES(1,?,?,?,2,500,0,0,0,0,535,'Easy')", (rc, at, tab))
+    con.commit()
+    return con, ids
+
+
+def test_classify_marks_the_reissued_voids(tmp_path):
+    import rules
+    con, ids = _reissue_db(tmp_path)
+    cls = rules.classify_voids(con, [1, 2], CS, CE)
+    by = {r[1]: cls[r[0]] for r in con.execute("SELECT rowid, receipt_no FROM pos_cancel_bill_detail WHERE sale_date >= '2026-06'")}
+    assert by["V1"] == "T5" and by["V2"] is None and by["V4"] is None
+    assert by["V3"] == "2026-06-03-1001-1"                          # the fixture's bill (receipt "<day>-<bid>001-<bid>")
+
+
+def test_the_card_counts_only_the_voids_not_reissued(tmp_path):
+    con, ids = _reissue_db(tmp_path)
+    m = W.voids(con, ids, CS, CE, WHERE, {})["windows"]["month"]
+    r = next(x for x in m["rows"] if x["branch"] == ids[1])
+    assert (r["bills"], r["voids_open"], r["voids_reissued"]) == (4, 2, 2)              # every void stays in `bills`
+    tot = 3 + 2 + 4                                                                       # 3 fixture bills + T5/T6 + the 4 voids
+    assert r["rate_pct"] == round(4 / tot * 100, 2) and r["rate_open_pct"] == round(2 / tot * 100, 2)
+    assert r["level"] == W.void_level(2 / tot * 100) and r["amount_open"] == 2500
+    assert "ยกเลิกแล้วไม่ออกใหม่" in m["line"] and "รวมยกเลิกทั้งหมด 4" in m["line"]
+    # level 1 = the card, level 2 = level 1, the report's §7.1 = level 1
+    cover = W._detail_cover(con)
+    _, rows, _ = V._level1(con, ids, CS, CE, WHERE, {}, cover, "month")
+    l1 = next(x for x in rows if x["branch"] == ids[1])
+    assert (l1["voids"], l1["voids_open"], l1["rate_open_pct"], l1["level"]) == (r["bills"], r["voids_open"], r["rate_open_pct"], r["level"])
+    _, l2 = V._level2(con, 1, ids[1], CS, CE, WHERE, {}, cover, "month")
+    assert l2["header"]["voids_open"] == l1["voids_open"] and sum(1 for b in l2["bills"] if not b["reissued_as"]) == l1["voids_open"]
+    assert {b["receipt"]: b["reissued_as"] for b in l2["bills"]}["V1"] == "T5"
+    sec = V.report_section(con, CS, CE, WHERE, {}, whole_month=False)
+    assert sec["branches"]
+    for b in sec["branches"]:
+        x = next(y for y in rows if y["branch"] == b["branch"])
+        assert (b["voids"], b["voids_open"], b["amount"], b["rate_open_pct"], b["reprints"]) == \
+               (x["voids"], x["voids_open"], x["amount"], x["rate_open_pct"], x["reprints"])
+
+
+def test_the_report_section_caps_the_lists_and_names_the_rest(tmp_path):
+    con, ids = _db(tmp_path)
+    _detail(con, [(1, f"2026-06-02T{10 + i // 60:02d}:{i % 60:02d}:00", 999 + i) for i in range(25)] + [(1, "2026-05-20T12:00:00", 1)])
+    sec = V.report_section(con, CS, CE, WHERE, {}, cap=20)
+    b = sec["branches"][0]
+    assert len(b["bills"]) == 20 and b["bills_more"] == 5 and sec["rest"]["branches"] == 1     # branch 2 has neither
+    full = V.report_section(con, CS, CE, WHERE, {}, cap=None)
+    assert len(full["branches"][0]["bills"]) == 25 and full["branches"][0]["bills_more"] == 0
+
+
+def test_the_franchise_finding_uses_the_open_count(tmp_path):
+    from routers import franchise as F
+    con, ids = _reissue_db(tmp_path)
+    v = F.void_open(con, ids[1], "2026-06")
+    assert v["voids_open"] == 2 and v["voids_reissued"] == 2
+    flags = F._control_flags({"pct": None}, {"bills": 4, "baht": 5600, "rate_pct": 40.0, **v}, {"days": []})
+    item = next(f for f in flags["items"] if f["key"] == "voids")
+    assert "ไม่ออกใหม่ 2 ใบ" in item["text"] and "รวมยกเลิกทั้งหมด 4 ใบ" in item["text"]
+    assert F.void_open(con, ids[1], "2026-04") is None                 # the per-bill table does not cover April

@@ -882,6 +882,10 @@ def _controls(con, rep: dict, name: str, sel: str, scrub) -> dict:
     voids = {"bills": cbs.get("bills") or 0, "baht": cbs.get("amount") or 0, "rate_pct": cbs.get("cancel_rate"),
              "by_reason": [{"reason": scrub(r.get("reason")), "bills": r.get("bills"), "baht": r.get("amount")}
                            for r in ((cb.get("reasons") or []) if same else [])][:MIX_TOP]}
+    try:
+        voids.update(void_open(con, name, sel) or {})     # the finding is on the voids not re-issued (owner 2026-10-31)
+    except Exception as e:                                # pragma: no cover - the month's count still answers
+        print(f"[franchise] void classes unavailable: {e}")
     ca = extra_cash(month=sel, branch=name, group=None)
     s = ca.get("summary") or {}
     days = [{"date": x["day"], "over_short": _num(x.get("over_short"), 0)}
@@ -916,6 +920,29 @@ def _th_date(iso) -> str:
         return str(iso or "")
 
 
+def void_open(con, name: str, month: str) -> Optional[dict]:
+    """2026-10-31 (owner): the month's voided bills NOT re-issued (rules.classify_voids, through mgt_watch.void_counts - the
+    ตรวจวันนี้ card's own count) at one branch: {voids_open, amount_open, voids_reissued, rate_open_pct}, or None while the
+    per-bill table does not cover the month (the finding then stays on every void, as before)."""
+    from . import mgt_watch as W
+    row = con.execute("SELECT branch_id FROM branches WHERE name=?", (name,)).fetchone()
+    try:
+        y, m = int(str(month)[:4]), int(str(month)[5:7])
+    except ValueError:
+        return None
+    if not row:
+        return None
+    bid = row[0]
+    s, e = date(y, m, 1), date(y, m, _cal.monthrange(y, m)[1])
+    src, canc, bills = W.void_counts(con, {bid: name}, s, e, W._detail_cover(con), month_ok=False)
+    if src != "detail":
+        return None
+    cb, _amt, ob, oamt = canc.get(bid, (0, 0, 0, 0))
+    tot = bills.get(bid, 0) + cb
+    return {"voids_open": ob, "amount_open": round(oamt), "voids_reissued": cb - ob,
+            "rate_open_pct": round(ob / tot * 100, 2) if tot else None}
+
+
 def _control_flags(discount: dict, voids: dict, cash: dict) -> dict:
     """ควรดู / ต้องแก้ lines for the controls card, in the verdict's words (counts and baht, never a person)."""
     out = []
@@ -926,8 +953,15 @@ def _control_flags(discount: dict, voids: dict, cash: dict) -> dict:
         elif p > pol:
             out.append(("watch", "discount", f"ส่วนลดร้อยละ {_pct_text(p)} ของยอดขาย เกินเพดานร้อยละ {_pct_text(pol)}"))
     r = voids.get("rate_pct")
-    if r is not None and voids.get("bills"):
+    if voids.get("rate_open_pct") is not None:            # 2026-10-31 (owner): a void followed by a new bill is a correction
+        r = voids["rate_open_pct"]
+        what = (f"บิลยกเลิกแล้วไม่ออกใหม่ {voids['voids_open']:,} ใบ (฿{voids.get('amount_open') or 0:,.0f}) คิดเป็นร้อยละ {_pct_text(r)} "
+                f"ของบิลทั้งหมด (รวมยกเลิกทั้งหมด {voids['bills']:,} ใบ)")
+        if not voids.get("voids_open"):
+            r = None
+    else:
         what = f"บิลยกเลิก {voids['bills']:,} ใบ (฿{voids['baht'] or 0:,.0f}) คิดเป็นร้อยละ {_pct_text(r)} ของบิลทั้งหมด"
+    if r is not None and voids.get("bills"):
         if r > T_CANCEL_FIX:
             out.append(("fix", "voids", what + " สูงกว่าเกณฑ์ปกติ ควรตรวจสอบเหตุผลการยกเลิก"))
         elif r > T_CANCEL_WATCH:
@@ -1640,8 +1674,13 @@ def franchise_findings(summary: Optional[dict], insight: Optional[dict], decide:
             f"เพดาน {_pct1(dc.get('policy_pct'))}" + (f" · เกิน ฿{over:,.0f}" if over else ""), flags["discount"]["text"], "controls", "frcCtlDisc")
     v = C.get("voids") or {}
     if "voids" in flags:
-        add("voids", flags["voids"]["level"], "บิลยกเลิกสูง", _pct1(v.get("rate_pct")),
-            f"{int(v.get('bills') or 0):,} ใบ · ฿{float(v.get('baht') or 0):,.0f}", flags["voids"]["text"], "controls", "frcCtlVoids")
+        if v.get("rate_open_pct") is not None:           # the voids not re-issued, the total in brackets (owner 2026-10-31)
+            add("voids", flags["voids"]["level"], "ยกเลิกแล้วไม่ออกใหม่", _pct1(v.get("rate_open_pct")),
+                f"{int(v.get('voids_open') or 0):,} ใบ · ฿{float(v.get('amount_open') or 0):,.0f} · รวมยกเลิกทั้งหมด {int(v.get('bills') or 0):,}",
+                flags["voids"]["text"], "controls", "frcCtlVoids")
+        else:
+            add("voids", flags["voids"]["level"], "บิลยกเลิกสูง", _pct1(v.get("rate_pct")),
+                f"{int(v.get('bills') or 0):,} ใบ · ฿{float(v.get('baht') or 0):,.0f}", flags["voids"]["text"], "controls", "frcCtlVoids")
     rp = C.get("reprints") or {}
     if rp.get("bills"):
         add("reprints", "watch", "บิลพิมพ์ซ้ำที่มีส่วนลด", f"{int(rp['bills']):,} บิล", f"ส่วนลด ฿{float(rp.get('baht') or 0):,.0f}",

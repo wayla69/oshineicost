@@ -312,4 +312,13 @@ Pinned by `backend/test_voids_drilldown.py`.
    `msLoadVoids`). A branch row pushes `{phd:'voids', vb}`; back returns to level 1 at its scroll; level 2 passes level 1's `anchor` as
    `date` so it reads the same window. One branch in the picker opens level 2 straight away. A bill opens the row sheet (`msVoidBill`).
    Chips = the card's `msVoidWin`. Help behind "?": the bands, the reprint definition, why a void has no lines.
-
+3. **Re-issued voids (owner 2026-10-31, "เตือนเอาเฉพาะยอดที่ voided แล้วไม่มีการทำใหม่").** `rules.classify_voids`: a void at t is
+   re-issued when a live bill at the branch has `sold_at` in [t, t + `VOID_REISSUE_MIN` = 30 min] and the same table (both carry one),
+   else the same customers (both carry one; `pos_cancel_bill_detail.customers` = `Sale.NumOfCust`, added by the sync, optional), else an
+   amount within ±20 %. A live bill re-issues one void of its branch-day, so a class does not depend on the window. The card's level,
+   rows and line, the drill-down's level and sort, the franchise finding (`franchise.void_open`) are on the voids NOT re-issued
+   (`voids_open` / `amount_open` / `rate_open_pct`); `bills` / `amount` / `rate_pct` stay every void. Level 2 filters ทั้งหมด ·
+   ไม่ออกใหม่ (default) · ออกใหม่แล้ว; each bill carries `reissued_as`.
+4. **Report §7.1.** `voids_detail` in /api/reports/management = `routers/voids.report_section` over the report's cs..ce: level 1,
+   then every branch with a void or a reprint (worst open rate first) with its reasons and 20 bills a list; `management.xlsx` has the
+   sheets บิลยกเลิก / พิมพ์ซ้ำ (Voided bills / Reprinted bills) with every bill. `js/02-mgt-report.js` section `mgt-s6b` (brk).

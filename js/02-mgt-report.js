@@ -424,7 +424,12 @@ const MGT_I18N = {
     lgYoy:'YoY', lgTarget:'Target', lgVsTarget:'% target', lgOnTarget:'on target', lgNoTarget:'no target: new branch (no same month last year)',
     mktTitle:'Market context', mktAsOf:'data as of', mktBench:'Industry benchmark', mktChain:'this chain YoY', mktAhead:'— ahead of the industry', mktBehind:'— behind the industry', mktFx:'FX today',
     s4pre:'5. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4m:'months', s4post:')',
-    s5:'6. Branch League Table', s6:'7. Money-Leak Radar', s7:'8. Menu Cost / Head (by dish)',
+    s5:'6. Branch League Table', s6:'7. Money-Leak Radar', s6b:'7.1 Voided / Reprinted Bills by Branch',
+    vdChain:'All branches', vdOpen:'voided, not re-issued', vdAll:'all voids', vdReprints:'reprints', vdBills:'Voided bills', vdReprintBills:'Discounted bills printed more than once',
+    vdReissued:'re-issued', vdNotReissued:'not re-issued', vdDisc:'discount', vdPrints:'printed', vdTimes:'times', vdMore:'… {n} more bills (all in the Excel file)',
+    vdRest:'{n} branches with no void and no reprint ({b} bills)', vdNa:'No voided-bill data for this period.', vdNoBill:'no receipt no.',
+    vdFix:'act', vdWatch:'watch', vdOk:'normal', vdNoLines:'Per-bill list not kept for this period (monthly count only).',
+    vdRule:'Rate = voids not re-issued ÷ (bills + voids). Act from {fix}%, watch from {watch}%. Re-issued = a new bill at the branch within {min} min with the same customers or an amount within ±20 %. Reprint = a discounted bill printed more than once.', s7:'8. Menu Cost / Head (by dish)',
     s8:'9. Peak Hours & Dayparts', s9:'10. Table Turnover & Occupancy', s10:'11. Payment Channels — ',
     s11:'12. Buffet Price Tiers — Guests & Cost/Head',
     s12v:'13. Customer Voice — What Guests Said & the Fix Loop', naVoice:'No customer feedback in this period yet — collect reviews or QR-survey answers in the tab.',
@@ -554,7 +559,12 @@ const MGT_I18N = {
     lgYoy:'YoY', lgTarget:'เป้า', lgVsTarget:'% เป้า', lgOnTarget:'ถึงเป้า', lgNoTarget:'ไม่มีเป้า: สาขาใหม่ (ยังไม่มีเดือนเดียวกันปีก่อน)',
     mktTitle:'บริบทตลาด', mktAsOf:'ข้อมูล ณ', mktBench:'เกณฑ์อุตสาหกรรม', mktChain:'เครือเรา YoY', mktAhead:'— โตกว่าอุตสาหกรรม', mktBehind:'— โตช้ากว่าอุตสาหกรรม', mktFx:'ค่าเงินวันนี้',
     s4pre:'5. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4m:'เดือนล่าสุด', s4post:')',
-    s5:'6. ตารางจัดอันดับสาขา', s6:'7. เรดาร์จุดรั่วไหล', s7:'8. ต้นทุนเมนูต่อหัว (รายเมนู)',
+    s5:'6. ตารางจัดอันดับสาขา', s6:'7. เรดาร์จุดรั่วไหล', s6b:'7.1 บิลยกเลิก / พิมพ์ซ้ำ รายสาขา',
+    vdChain:'ทุกสาขา', vdOpen:'ยกเลิกแล้วไม่ออกใหม่', vdAll:'รวมยกเลิกทั้งหมด', vdReprints:'พิมพ์ซ้ำ', vdBills:'บิลยกเลิก', vdReprintBills:'บิลที่มีส่วนลดและพิมพ์มากกว่า 1 ครั้ง',
+    vdReissued:'ออกใหม่แล้ว', vdNotReissued:'ไม่ออกใหม่', vdDisc:'ส่วนลด', vdPrints:'พิมพ์', vdTimes:'ครั้ง', vdMore:'… อีก {n} บิล (ครบทุกบิลในไฟล์ Excel)',
+    vdRest:'อีก {n} สาขาไม่มีบิลยกเลิกและบิลพิมพ์ซ้ำ ({b} บิล)', vdNa:'ไม่มีข้อมูลบิลยกเลิกของช่วงนี้', vdNoBill:'ไม่มีเลขที่บิล',
+    vdFix:'ต้องแก้', vdWatch:'ต้องดู', vdOk:'ปกติ', vdNoLines:'ช่วงนี้ไม่มีรายการรายบิล (มีเฉพาะยอดรายเดือน)',
+    vdRule:'อัตรา = บิลยกเลิกที่ไม่ออกใหม่ ÷ (บิลขาย + บิลยกเลิก) · ต้องแก้ตั้งแต่ {fix}% ต้องดูตั้งแต่ {watch}% · ออกใหม่แล้ว = มีบิลใหม่ที่สาขาเดียวกันภายใน {min} นาที จำนวนลูกค้าเท่ากัน หรือยอดต่างไม่เกิน 20% · พิมพ์ซ้ำ = บิลที่มีส่วนลดและพิมพ์มากกว่า 1 ครั้ง', s7:'8. ต้นทุนเมนูต่อหัว (รายเมนู)',
     s8:'9. ชั่วโมงพีค & ช่วงเวลา', s9:'10. รอบหมุนเวียนโต๊ะ', s10:'11. ช่องทางการชำระเงิน — ',
     s11:'12. Tier ราคาบุฟเฟ่ต์ — คนทาน & ต้นทุน/หัว',
     s12v:'13. เสียงลูกค้า — ลูกค้าพูดอะไร & วงจรการแก้', naVoice:'ยังไม่มีเสียงลูกค้าในช่วงนี้ — เก็บรีวิวหรือคำตอบแบบสอบถาม QR ในแท็บ',
@@ -1455,6 +1465,48 @@ function renderMgtReport(j, jM, jF) {
        [T.reprintShort, lkRow(jF,'reprinted')], [T.zeroShort, lkRow(jF,'zero_gross')]]);
   })();
 
+  // §7.1 (owner 2026-10-31) — voided / reprinted bills grouped by branch: j.voids_detail = routers/voids.report_section, the
+  // drill-down's own builder over the report's period (one answer). Worst rate of voids NOT re-issued first; 20 bills a list.
+  const voidsSection = (() => {
+    const VD = j.voids_detail;
+    if (!VD || !VD.available) return naBox(T.vdNa);
+    const B = VD.bands || {}, TT = VD.total || {};
+    const ink = l => l === 'fix' ? 'var(--bad-ink)' : l === 'watch' ? 'var(--amber-ink)' : 'var(--text-secondary)';
+    const lvOf = r => r == null ? '' : r >= B.fix ? 'fix' : r >= B.watch ? 'watch' : 'ok';
+    const verdict = l => l === 'fix' ? T.vdFix : l === 'watch' ? T.vdWatch : l === 'ok' ? T.vdOk : '—';
+    const p1 = v => v == null ? '—' : v.toFixed(2) + '%';
+    const dt = at => String(at || '').replace('T', ' ').slice(0, 16);
+    const fill = (t, o) => t.replace(/\{(\w+)\}/g, (_, k) => o[k] != null ? o[k] : '');
+    const tl = lvOf(TT.rate_open_pct);
+    const head = `<p class="text-[13px] mb-1 mgt-atom">${T.vdChain}: <b style="color:${ink(tl)}">${p1(TT.rate_open_pct)}</b> ${T.vdOpen} · ${num(TT.voids_open)} ${T.bills} · ${baht(TT.amount_open)}`
+      + ` · <span class="text-slate-500">${T.vdAll} ${num(TT.voids)} (${p1(TT.rate_pct)})</span> · ${T.vdReprints} ${num(TT.reprints)} ${T.bills}</p>`
+      + `<p class="text-[11px] text-slate-500 mb-3 mgt-atom">${fill(T.vdRule, { fix: B.fix, watch: B.watch, min: VD.reissue_min })}</p>`;
+    const th = cols => `<thead><tr class="text-left text-slate-500 border-b border-slate-200">${cols.map((c, i) => `<th class="py-1 pr-2${i === 2 ? ' text-right' : ''}">${c}</th>`).join('')}</tr></thead>`;
+    const block = b => {
+      const reasons = (b.reasons || []).map(r => `${esc(r.reason)} ${num(r.n)}`).join(' · ');
+      const vRows = (b.bills || []).map(x => `<tr class="border-b border-slate-100"><td class="py-1 pr-2 whitespace-nowrap">${dt(x.at)}</td>`
+        + `<td class="py-1 pr-2">${esc(x.receipt || T.vdNoBill)}</td><td class="py-1 pr-2 text-right tabular-nums">${baht(x.amount)}</td>`
+        + `<td class="py-1 pr-2">${esc(x.reason)}${x.discount > 0 ? ` · ${T.vdDisc} ${baht(x.discount)}` : ''}</td><td class="py-1 pr-2">${esc(x.user)}</td>`
+        + `<td class="py-1 pr-2" style="color:${x.reissued_as ? 'var(--text-secondary)' : 'var(--bad-ink)'};font-weight:600">${x.reissued_as ? `${T.vdReissued} → ${esc(x.reissued_no || x.reissued_as)}` : T.vdNotReissued}</td></tr>`).join('');
+      const rRows = (b.reprint_bills || []).map(x => `<tr class="border-b border-slate-100"><td class="py-1 pr-2 whitespace-nowrap">${dt(x.at)}</td>`
+        + `<td class="py-1 pr-2">${esc(x.no || x.receipt)}</td><td class="py-1 pr-2 text-right tabular-nums">${baht(x.total)}</td>`
+        + `<td class="py-1 pr-2">${T.vdPrints} ${num(x.prints)} ${T.vdTimes} · ${T.vdDisc} ${baht(x.discount)}</td><td class="py-1 pr-2">${esc(x.cashier)}</td><td></td></tr>`).join('');
+      const more = n => n ? `<p class="text-[11px] text-slate-500 mt-1">${fill(T.vdMore, { n: num(n) })}</p>` : '';
+      return `<div class="mb-4"><div class="mgt-atom" style="border-left:3px solid ${ink(b.level)};padding-left:8px">`
+        + `<h3 class="text-[13px] font-bold" style="margin:0">${esc(b.branch)} <span style="color:${ink(b.level)}">${p1(b.rate_open_pct)} · ${verdict(b.level)}</span></h3>`
+        + `<p class="text-[12px] text-slate-600" style="margin:2px 0 4px">${T.vdOpen} ${num(b.voids_open)} ${T.bills} · ${baht(b.amount_open)} · `
+        + `<span class="text-slate-500">${T.vdAll} ${num(b.voids)} · ${baht(b.amount)}</span> · ${T.vdReprints} ${num(b.reprints)} ${T.bills}${reasons ? `<br><span class="text-slate-500">${reasons}</span>` : ''}</p></div>`
+        + (vRows ? `<p class="text-[11px] font-bold text-slate-500 mt-1">${T.vdBills}</p><table class="w-full text-xs">${th([isTH ? 'วันที่เวลา' : 'Date / time', isTH ? 'เลขที่บิล' : 'Receipt', isTH ? 'ยอด' : 'Amount', isTH ? 'เหตุผล' : 'Reason', isTH ? 'ผู้ยกเลิก' : 'Cancelled by', isTH ? 'ออกใหม่' : 'Re-issued'])}<tbody>${vRows}</tbody></table>${more(b.bills_more)}`
+          : (b.voids && VD.source !== 'detail' ? `<p class="text-[11px] text-slate-500">${T.vdNoLines}</p>` : ''))
+        + (rRows ? `<p class="text-[11px] font-bold text-slate-500 mt-2">${T.vdReprintBills}</p><table class="w-full text-xs">${th([isTH ? 'วันที่เวลา' : 'Date / time', isTH ? 'เลขที่บิล' : 'Receipt', isTH ? 'ยอดบิล' : 'Bill total', isTH ? 'พิมพ์ / ส่วนลด' : 'Prints / discount', isTH ? 'แคชเชียร์' : 'Cashier', ''])}<tbody>${rRows}</tbody></table>${more(b.reprints_more)}` : '')
+        + '</div>';
+    };
+    const R = VD.rest || {};
+    return head + (VD.branches || []).map(block).join('')
+      + (R.branches ? `<p class="text-[12px] text-slate-500 mgt-atom">${fill(T.vdRest, { n: num(R.branches), b: num(R.bills_total) })}</p>` : '')
+      + (!(VD.branches || []).length && !R.branches ? naBox(T.vdNa) : '');
+  })();
+
   // §8 split — Peak Hours
   const peakWithSplit = peakHtml + (() => {
     if (!hasSplit) return '';
@@ -1881,6 +1933,9 @@ function renderMgtReport(j, jM, jF) {
     // a weekly/daily pack, so it STARTS a sheet and lets its last panel flow — kept
     // whole it left that panel alone on a page of its own.
     { id:'mgt-s6',  c:'#dc2626', brk:true, t:T.s6, h:leakWithSplit },
+    // §7.1 (owner 2026-10-31): voided / reprinted bills by branch - long (20 bills a list a branch), so it starts a sheet and flows;
+    // a branch's header and every bill row never split (.mgt-atom, tr)
+    { id:'mgt-s6b', c:'#b91c1c', brk:true, t:T.s6b, h:voidsSection },
     { id:'mgt-s7',  c:'#059669', keep:true, t:T.s7, h:menu },
     { id:'mgt-s8',  c:'#0284c7', keep:true, t:T.s8, h:v8 + peakWithSplit },
     // §9 kept whole while its branch table fits a sheet (KPI row + ≤30 rows + split);

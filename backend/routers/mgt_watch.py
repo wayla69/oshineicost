@@ -275,10 +275,12 @@ def void_bounds(window, cs, ce, day):
     return day - _dt.timedelta(days=VOID_SPANS[window]), day
 
 
-def void_counts(con, ids, s, e, cover, month_ok) -> tuple:
-    """(source, {branch_id: (cancelled bills, baht)}, {branch_id: bills}) of one window s..e - the ONE count the card
-    (_void_window) and the drill-down (routers/voids.py) both read. source: detail (pos_cancel_bill_detail by day) | month
-    (the whole month of pos_cancel_bill, only when month_ok) | none."""
+def void_counts(con, ids, s, e, cover, month_ok, cls=None) -> tuple:
+    """(source, {branch_id: (cancelled bills, baht, NOT re-issued bills, their baht)}, {branch_id: bills}) of one window s..e -
+    the ONE count the card (_void_window), the drill-down (routers/voids.py) and the report's §7.1 read. source: detail
+    (pos_cancel_bill_detail by day, each void classed by rules.classify_voids - `cls` = a class map already computed over a
+    window that holds s..e) | month (the whole month of pos_cancel_bill, only when month_ok: no bill to class, so every void
+    counts as not re-issued) | none."""
     ph = ",".join("?" * len(ids))
     lo = cover[0] if cover else None
     # the oldest day the detail table holds may be cut part-way (it keeps the newest N bills): it covers s only from the next day,
@@ -286,12 +288,21 @@ def void_counts(con, ids, s, e, cover, month_ok) -> tuple:
     covered = bool(cover) and (lo < s.isoformat() or (cover[1] and lo <= s.isoformat()))
     if covered:
         source = "detail"
-        canc = {r[0]: (r[1] or 0, r[2] or 0) for r in con.execute(
-            f"SELECT branch_id, COUNT(*), SUM(amount) FROM pos_cancel_bill_detail WHERE branch_id IN ({ph}) "
-            f"AND date(sale_date) BETWEEN ? AND ? GROUP BY branch_id", list(ids) + [s.isoformat(), e.isoformat()])}
+        from rules import classify_voids
+        if cls is None:
+            cls = classify_voids(con, list(ids), s, e)
+        acc: dict = {}
+        for rid, bid, amt in con.execute(
+                f"SELECT rowid, branch_id, amount FROM pos_cancel_bill_detail WHERE branch_id IN ({ph}) "
+                f"AND date(sale_date) BETWEEN ? AND ?", list(ids) + [s.isoformat(), e.isoformat()]):
+            a = acc.setdefault(bid, [0, 0, 0, 0])
+            a[0] += 1; a[1] += amt or 0
+            if not cls.get(rid):
+                a[2] += 1; a[3] += amt or 0
+        canc = {k: tuple(v) for k, v in acc.items()}
     elif month_ok:
         source = "month"
-        canc = {r[0]: (r[1] or 0, r[2] or 0) for r in con.execute(
+        canc = {r[0]: (r[1] or 0, r[2] or 0, r[1] or 0, r[2] or 0) for r in con.execute(
             f"SELECT branch_id, SUM(bills), SUM(amount) FROM pos_cancel_bill WHERE period_month=? AND branch_id IN ({ph}) GROUP BY branch_id",
             [s.strftime("%Y-%m")] + list(ids))}
     else:
@@ -308,21 +319,31 @@ def reprint_rows(con, s, e, where, params) -> list:
         GROUP BY b.name ORDER BY COUNT(*) DESC""", {**params, "s": s.isoformat(), "e": e.isoformat()})]
 
 
-def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0) -> dict:
-    """One window's verdict: per-branch cancelled bills % of bills (numerator and denominator over s..e) + reprints."""
-    source, canc, bills = void_counts(con, ids, s, e, cover, month_ok)
+def _void_class(con, ids, cs, ce, day):
+    """The class map (rules.classify_voids) of every void the card's windows can hold: the month and the 15 days to `day`."""
+    from rules import classify_voids
+    lo = min(cs, day - _dt.timedelta(days=VOID_SPANS["half"])) if day else cs
+    return classify_voids(con, list(ids), lo, max(ce, day or ce))
+
+
+def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0, cls=None) -> dict:
+    """One window's verdict: per-branch cancelled bills % of bills (numerator and denominator over s..e) + reprints.
+    2026-10-31 (owner): the verdict (level, the rows named, the line) is on the voids NOT re-issued (rules.classify_voids):
+    bills / amount / rate_pct stay every void; voids_open / amount_open / rate_open_pct / voids_reissued are the alert's basis."""
+    source, canc, bills = void_counts(con, ids, s, e, cover, month_ok, cls)
     rows, few = [], 0
-    for bid, (cb, amt) in canc.items():
+    for bid, (cb, amt, ob, oamt) in canc.items():
         tot = bills.get(bid, 0) + cb
         if tot <= 0 or cb <= 0:
             continue
         if tot < min_bills:                         # a handful of bills says nothing - no verdict
             few += 1
             continue
-        rate = cb / tot * 100
-        rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2), "level": void_level(rate)})
+        rate, orate = cb / tot * 100, ob / tot * 100
+        rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2), "level": void_level(orate),
+                     "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": round(orate, 2), "voids_reissued": cb - ob})
     rep = reprint_rows(con, s, e, where, params)
-    n_bills = sum(bills.values()) + sum(cb for cb, _ in canc.values())
+    n_bills = sum(bills.values()) + sum(v[0] for v in canc.values())
     out = {"range": [s.isoformat(), e.isoformat()], "label": range_label(s, e, th), "source": source, "bills": n_bills}
     if min_bills and 0 < n_bills < min_bills and source != "none":
         return {**out, "available": True, "level": "none", "rows": [], "reprints": rep[:3], "few": True,
@@ -334,10 +355,14 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
         why = ("ยังไม่มีข้อมูลบิลยกเลิกรายวันของช่วงนี้" if th else "no daily cancel data for this window") if source == "none" \
             else ("ยังไม่มีข้อมูลบิลยกเลิกของช่วงนี้" if th else "no cancel data in this window")
         return {**out, "available": False, "level": "none", "rows": [], "reprints": [], "line": why}
-    bad = sorted((r for r in rows if r["level"] != "ok"), key=lambda r: (LEVELS[r["level"]], -r["rate_pct"]))
+    bad = sorted((r for r in rows if r["level"] != "ok"), key=lambda r: (LEVELS[r["level"]], -r["rate_open_pct"]))
     level = bad[0]["level"] if bad else ("watch" if rep else "ok")
     parts = []
-    if bad:
+    if bad and source == "detail":                  # the voids not re-issued, the total in brackets
+        parts.append(("ยกเลิกแล้วไม่ออกใหม่: " if th else "voids not re-issued: ") + " · ".join(
+            f"{r['branch']} {r['rate_open_pct']}% ({r['voids_open']} {'บิล' if th else 'bills'} ฿{r['amount_open']:,.0f} · "
+            + (f"รวมยกเลิกทั้งหมด {r['bills']})" if th else f"all voids {r['bills']})") for r in bad[:3]))
+    elif bad:
         parts.append(("ยกเลิกบิล: " if th else "voids: ") + " · ".join(f"{r['branch']} {r['rate_pct']}% ({r['bills']} {'บิล' if th else 'bills'} ฿{r['amount']:,.0f})" for r in bad[:3]))
     if rep:
         parts.append(("พิมพ์ซ้ำ: " if th else "reprints: ") + " · ".join(f"{r['branch']} {r['bills']} {'บิล' if th else 'bills'}" for r in rep[:3]))
@@ -352,19 +377,20 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
 def voids(con, ids, cs, ce, where, params, th=True) -> dict:
     t = "บิลยกเลิก / พิมพ์ซ้ำ" if th else "Voids / reprints"
     cover = _detail_cover(con)
-    month = _void_window(con, ids, cs, ce, where, params, th, cover, month_ok=True)
-    windows = {"month": month}
     try:
         from rules import latest_settled_day
         d = latest_settled_day(con, where=where.replace("st.", "t."), params=params)["day"]
     except Exception:                               # pragma: no cover - the month still answers
         d = None
-    if d:
-        day = min(_dt.date.fromisoformat(d[:10]), ce)
+    day = min(_dt.date.fromisoformat(d[:10]), ce) if d else None
+    cls = _void_class(con, ids, cs, ce, day)        # every void of every window classed once (a class is window-independent)
+    month = _void_window(con, ids, cs, ce, where, params, th, cover, month_ok=True, cls=cls)
+    windows = {"month": month}
+    if day:
         for k in ("day", "week", "half"):           # 15 วัน = half (owner 2026-10-31)
             s, e = void_bounds(k, cs, ce, day)
             windows[k] = _void_window(con, ids, s, e, where, params, th, cover, month_ok=False,
-                                      min_bills=T_VOID_MIN_BILLS if k == "day" else 0)
+                                      min_bills=T_VOID_MIN_BILLS if k == "day" else 0, cls=cls)
     common = {"bands": {"watch": T_VOID_WATCH, "fix": T_VOID_FIX}, "range": month["range"], "label": month["label"],
               "source": month["source"], "min_bills_day": T_VOID_MIN_BILLS, "windows": windows}
     if not month["available"]:

@@ -3550,12 +3550,26 @@ def report_management(
         except Exception as e:      # pragma: no cover — degraded, not broken
             print(f"[mgt] watch unavailable: {e}")
 
+    # 2026-10-31 (owner) §7.1 บิลยกเลิก / พิมพ์ซ้ำ รายสาขา: the drill-down's own builder (routers/voids.report_section) over cs..ce.
+    # The printed report only: the phone's month-to-date payload (mtd=1) has its own drill-down (/api/reports/voids), so it is not
+    # sent there (about 100 KB on a chain month)
+    voids_detail = None
+    if not ctx.get("mtd"):
+        try:
+            from routers import voids as _vd
+            with get_db() as _vcon:
+                voids_detail = _vd.report_section(_vcon, cs, ce, where, params, branch=branch, group=group,
+                                                  whole_month=(period == "monthly" and cs.day == 1 and (ce + _dt.timedelta(days=1)).day == 1))
+        except Exception as e:      # pragma: no cover — degraded, not broken
+            print(f"[mgt] §7.1 voids unavailable: {e}")
+
     return {
         "available": True,
         "period": period,
         "lang": ("th" if th else "en"),
         "label": label,
         "watch": watch,
+        "voids_detail": voids_detail,
         "comp_label": comp_label,
         **({"prev_label": ctx["prev_label"]} if ctx.get("prev_label") else {}),   # daily: what the sections under the league compare with
         "focus": focus,
@@ -4020,6 +4034,42 @@ def _xlsx_leak(*, NUM, autofit, header, j, wb):
     return {}
 
 
+def _xlsx_voids(*, NUM, autofit, header, j, wb, th, branch, group):
+    # §7.1 (owner 2026-10-31): every voided bill and every discounted reprint of the report's period, one sheet each - the
+    # drill-down's own builder (routers/voids.report_section) with no cap; the report's JSON holds 20 a list
+    import datetime as _d
+    from routers import voids as _vd
+    rng = j.get("range") or []
+    if len(rng) != 2:
+        return {}
+    cs, ce = _d.date.fromisoformat(rng[0]), _d.date.fromisoformat(rng[1])
+    base = ["st.source='Easy'", "b.name!='ALL'"]; params: dict = {}
+    scope_filter(base, params, branch, group)
+    with get_db() as con:
+        sec = _vd.report_section(con, cs, ce, " AND ".join(base), params, branch=branch, group=group,
+                                 whole_month=(j.get("period") == "monthly" and cs.day == 1 and (ce + _d.timedelta(days=1)).day == 1), cap=None)
+    if not sec.get("available"):
+        return {}
+    ws = wb.create_sheet("บิลยกเลิก" if th else "Voided bills")
+    header(ws, ["สาขา", "วันที่เวลา", "เลขที่บิล", "ยอดบิล", "เหตุผล", "ผู้ยกเลิก", "ส่วนลด", "ออกใหม่แล้ว", "ใบใหม่"] if th else
+           ["Branch", "Date / time", "Receipt", "Amount", "Reason", "Cancelled by", "Discount", "Re-issued", "New bill"])
+    for b in sec["branches"]:
+        for x in b["bills"]:
+            ws.append([b["branch"], str(x["at"]).replace("T", " ")[:16], x["receipt"], x["amount"], x["reason"], x["user"], x["discount"],
+                       ("ออกใหม่แล้ว" if th else "yes") if x.get("reissued_as") else ("ไม่ออกใหม่" if th else "no"), x.get("reissued_no") or ""])
+            ws.cell(ws.max_row, 4).number_format = NUM; ws.cell(ws.max_row, 7).number_format = NUM
+    autofit(ws)
+    ws = wb.create_sheet("พิมพ์ซ้ำ" if th else "Reprinted bills")
+    header(ws, ["สาขา", "วันที่เวลา", "เลขที่บิล", "ยอดบิล", "พิมพ์ (ครั้ง)", "ส่วนลด", "แคชเชียร์"] if th else
+           ["Branch", "Date / time", "Receipt", "Bill total", "Prints", "Discount", "Cashier"])
+    for b in sec["branches"]:
+        for x in b["reprint_bills"]:
+            ws.append([b["branch"], str(x["at"]).replace("T", " ")[:16], x.get("no") or x["receipt"], x["total"], x["prints"], x["discount"], x["cashier"]])
+            ws.cell(ws.max_row, 4).number_format = NUM; ws.cell(ws.max_row, 6).number_format = NUM
+    autofit(ws)
+    return {}
+
+
 def _xlsx_menu(*, BOLD, NUM2, PCT, autofit, header, j, pdelta, wb):
     # Sheet 4 — Menu Cost per Head
     ws = wb.create_sheet("Menu Cost per Head")
@@ -4334,6 +4384,8 @@ def report_management_xlsx(
     ctx.update(_xlsx_summary(Font=ctx.get("Font"), H=ctx.get("H"), NUM=ctx.get("NUM"), P=ctx.get("P"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
     ctx.update(_xlsx_branches(NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
     ctx.update(_xlsx_leak(NUM=ctx.get("NUM"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
+    ctx.update(_xlsx_voids(NUM=ctx.get("NUM"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb"),
+                           th=th, branch=branch, group=group))
     ctx.update(_xlsx_menu(BOLD=ctx.get("BOLD"), NUM2=ctx.get("NUM2"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
     ctx.update(_xlsx_trend(NUM=ctx.get("NUM"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), wb=ctx.get("wb")))
     ctx.update(_xlsx_peak(NUM=ctx.get("NUM"), PCT=ctx.get("PCT"), autofit=ctx.get("autofit"), header=ctx.get("header"), j=ctx.get("j"), pdelta=ctx.get("pdelta"), wb=ctx.get("wb")))
