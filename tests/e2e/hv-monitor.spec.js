@@ -146,8 +146,10 @@ for (const [name, opts, mode] of CASES) {
       }
       if (mode === 'touch') {
         await expect(page.locator('#tab-hvmonitor .ph-cl-card').first()).toBeVisible();
-        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
-        expect(figs).toEqual(['เปลี่ยน', 'สะสม', 'ต้นทุน/หัว']);
+        // phone review item 3 (2026-10-31): the card is two lines - the key figure's label is its data-l, the other figures are "label value" on line 2
+        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().evaluate((c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); }, ['เปลี่ยน', 'สะสม', 'ต้นทุน/หัว']);
+        expect(figs[0]).toBe('เปลี่ยน');                                   // the key figure; a figure with no value ('—') is not printed
+        expect(['สะสม', 'ต้นทุน/หัว']).toEqual(expect.arrayContaining(figs.slice(1)));
       } else {
         await expect(page.locator('#hvmTable')).toBeVisible();
         // text >= 12 px at 100 % (พอดีจอ shows the desktop layout zoomed to the screen; a double tap shows it at 100 %)
@@ -201,8 +203,10 @@ for (const [name, opts, mode] of CASES) {
       if (opts.isMobile) await expect.poll(() => page.evaluate(() => [...document.querySelectorAll('.ph-ans[data-tab="hvmonitor"] .ph-ans-k')].map(k => k.textContent.trim())))
         .toEqual(['ของแพงที่เปลี่ยนมากสุด', 'อันดับถัดไป', 'ต้นทุนอาหาร/หัว']);
       if (mode === 'touch') {
-        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
-        expect(figs).toEqual(['เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน']);
+        // phone review item 3: the key figure's label is its data-l; the others with a value are "label value" on line 2
+        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().evaluate((c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); }, ['เปลี่ยน', 'สาเหตุหลัก', 'ต้นทุน']);
+        expect(figs[0]).toBe('เปลี่ยน');
+        expect(['สาเหตุหลัก', 'ต้นทุน']).toEqual(expect.arrayContaining(figs.slice(1)));
       }
       // contrast >= 4.5:1 for the figures, the cause lines and สาขาที่ดัน (light and dark)
       const worst = await page.evaluate(() => {

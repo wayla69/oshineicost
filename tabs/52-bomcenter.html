@@ -419,7 +419,9 @@
   <!-- ── ingredient master ─────────────────────────────────────────────── -->
   <div id="bmc-pane-ing" style="display:none">
     <div id="bmcCodeReqCard" class="card p-4 mb-3" style="display:none"></div>
-    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+    <!-- phone review item 7: an empty register is this ONE card; the filters, the Excel tools and the editor wait for the first row -->
+    <div id="bmcIngEmpty" class="mb-3" style="display:none"></div>
+    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3" id="bmcIngTools">
       <input type="search" id="bmcIngQ" placeholder="ค้นหารหัส/ชื่อวัตถุดิบ…" oninput="bmcIngFilter()"
              style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:6px 10px;font-size:13px;background:var(--bg-input);color:var(--text-primary);width:220px">
       <select id="bmcIngKind" onchange="bmcIngFilter()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)">
@@ -446,7 +448,7 @@
       <span id="bmcIngStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcIngReport" class="mb-3"></div>
-    <div class="desk-note" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>
+    <div class="desk-note" id="bmcIngDesk" role="note"><span>ตัวแก้ไขนี้ใช้งานบนคอมพิวเตอร์</span><button type="button" class="shm-showall" onclick="deskShow(this)">แสดงบนโทรศัพท์</button></div>
     <div class="desk-only">
     <div id="bmcIngPagerTop" class="bmc-pager mb-2"></div>
     <div class="card p-4 overflow-x-auto">
@@ -559,24 +561,29 @@
 
   <!-- ── PR-S2 · ต้นทุนต่อจานรายเดือน ───────────────────────────────────── -->
   <div id="bmc-pane-dishcost" style="display:none">
-    <div class="card p-3 mb-3 flex flex-wrap items-center gap-3">
-      <span class="text-xs" style="color:var(--text-muted)">ต้นทุนต่อจานของเดือน <b id="bmcDcMonthLbl"></b></span>
-      <input type="search" id="bmcDcQ" placeholder="ค้นหารหัสหรือเมนู" aria-label="ค้นหารหัสหรือเมนู" oninput="bmcDcRender()" class="wt-find">
-      <div id="bmcDcChips"></div>
-      <span id="bmcDcSummary" class="text-xs" style="color:var(--text-muted)"></span>
-    </div>
-    <div class="card p-3 mb-3 flex flex-wrap items-center gap-2">
-      <!-- PR-AT (owner 2026-10-29): the month this list belongs to, chosen here - the Grand Menu month (ก.ย. 2569) through next month;
-           the page's shared month strip is hidden on this pane so there is one picker -->
-      <label class="text-xs font-semibold" style="color:var(--text-secondary)" for="bmcDcMonth">ต้นทุนของเดือน</label>
-      <select id="bmcDcMonth" onchange="bmcDcMonthChanged()" aria-label="เดือนของต้นทุนต่อจาน" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-weight:600;background:var(--bg-input);color:var(--text-primary)"></select>
-      <label class="bc-write" style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:7px 16px;font-size:13px;cursor:pointer">
-        นำเข้าไฟล์
-        <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcDcImport(this)">
-      </label>
-      <button type="button" class="wt-btn bc-write" onclick="bmcDcTemplate()">ดาวน์โหลดแม่แบบ</button>
-      <button type="button" class="wt-btn" onclick="bmcDcExport()">ดาวน์โหลด Excel</button>
-      <span id="bmcDcStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
+    <!-- PR-AT (owner 2026-10-29): the month this list belongs to, chosen here - the Grand Menu month (ก.ย. 2569) through next month;
+         the page's shared month strip is hidden on this pane so there is one picker.
+         Phone review item 8 (owner 2026-10-31): ONE filter row - the month and the search; the file actions sit under "⋯" on a phone
+         (inline on a desktop, .ui-more-pop); the source chips are the one status row under it -->
+    <div class="card p-3 mb-3">
+      <div class="ui-frow">
+        <div class="ui-fbar flex flex-wrap items-center gap-3">
+          <label class="text-xs font-semibold" style="color:var(--text-secondary)">ต้นทุนของเดือน
+            <select id="bmcDcMonth" onchange="bmcDcMonthChanged()" aria-label="เดือนของต้นทุนต่อจาน" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;font-weight:600;background:var(--bg-input);color:var(--text-primary)"></select></label>
+          <input type="search" id="bmcDcQ" placeholder="ค้นหารหัสหรือเมนู" aria-label="ค้นหารหัสหรือเมนู" oninput="bmcDcRender()" class="wt-find">
+        </div>
+        <div class="ui-more" id="bmcDcMore"><button type="button" class="ui-more-btn" aria-haspopup="true" aria-expanded="false" aria-label="เมนูเพิ่มเติม: ดาวน์โหลดและตัวเลือกอื่น" onclick="uiMoreToggle(this)">⋯</button><div class="ui-more-pop" role="menu">
+          <label class="bc-write" style="background:var(--accent);color:var(--on-accent);border-radius:var(--r-sm);padding:7px 16px;font-size:13px;cursor:pointer">
+            นำเข้าไฟล์
+            <input type="file" accept=".xlsx,.xlsm,.csv" style="display:none" onchange="bmcDcImport(this)">
+          </label>
+          <button type="button" class="wt-btn bc-write" onclick="bmcDcTemplate()">ดาวน์โหลดแม่แบบ</button>
+          <button type="button" class="wt-btn" onclick="bmcDcExport()">ดาวน์โหลด Excel</button>
+        </div></div>
+      </div>
+      <div id="bmcDcChips" class="mt-2"></div>
+      <span class="text-xs ui-ph-hide" style="color:var(--text-muted)">ต้นทุนต่อจานของเดือน <b id="bmcDcMonthLbl"></b> · <span id="bmcDcSummary"></span></span>
+      <span id="bmcDcStatus" class="text-[11px]" style="color:var(--text-muted)"></span>
     </div>
     <div id="bmcDcPreview" class="mb-3"></div>
     <div class="card p-4"><div id="bmcDcList"></div></div>

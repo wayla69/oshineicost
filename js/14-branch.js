@@ -386,7 +386,10 @@ function _brnHistPick(f) { uiStateFilter.set(f); Object.keys(_brnHistReg).forEac
 function _brnHist(id, rows, isDone, row, noun, none) {
   const box = document.getElementById(id);
   if (!box) return;
-  if (!rows.length) { delete _brnHistReg[id]; box.innerHTML = none || 'ยังไม่มีข้อมูล'; return; }
+  // phone review item 7 (owner 2026-10-31): a history card with nothing in it is hidden (its heading + "ยังไม่มี…" was a white card of no use)
+  const card = box.parentElement && box.parentElement.classList.contains('card') && box.parentElement.children.length <= 2 ? box.parentElement : null;
+  if (card) card.style.display = rows.length ? '' : 'none';
+  if (!rows.length) { delete _brnHistReg[id]; box.innerHTML = none || 'ยังไม่มีข้อมูล'; _brnRecvEmptySync(); return; }
   _brnHistReg[id] = { rows, isDone, row, noun };
   _brnHistDraw(id);
 }
@@ -697,7 +700,12 @@ function brnIssRender() {
         <div class="brn-boxes">${box(it, 'used', 'เบิกใช้', 'var(--accent)', v.used, it.prev_used, unit)}${box(it, 'waste', 'ของเสีย', 'var(--amber-ink)', v.waste, it.prev_waste, unit)}</div></div>
       <div id="brnIssE_${esc(it.code)}" class="brn-err" role="alert">${_brnIssBad(it.code) ? _BRN_QTY_ERR : ''}</div>
       <div id="brnIssX_${esc(it.code)}">${_brnIssReasonBox(it.code)}</div></div>`;
-  }).join('') : `<span class="text-xs" style="color:var(--text-muted)">${usedOnly ? 'ยังไม่มีรายการที่กรอก' : 'ไม่มีรายการในโซนนี้'}</span>`;
+  }).join('') : !all.length
+    // phone review item 7 (owner 2026-10-31): no item on the branch's list at all - ONE card (why + the manual's task), no zone bar or send bar
+    ? uiEmpty({ icon: 'box', t: 'ยังไม่มีรายการของในใบตัดเบิกของสาขา แจ้งประสานงานขายให้เพิ่มรายการ', act: 'วิธีใช้ใบตัดเบิก', go: "uiManualGo('mt-brn-issue')" })
+    : `<span class="text-xs" style="color:var(--text-muted)">${usedOnly ? 'ยังไม่มีรายการที่กรอก' : 'ไม่มีรายการในโซนนี้'}</span>`;
+  const listCard = document.getElementById('brnIssList');
+  ['.brn-zonebar', '.brn-sticky-bottom', '#brnIssForm'].forEach(sel => { const c = listCard && listCard.parentElement.querySelector(sel); if (c) c.style.display = all.length ? '' : 'none'; });
   brnIssActions();
 }
 
@@ -1145,6 +1153,26 @@ let _brnRcv = { mode: null, picked: [], vals: {}, q: '', pcs: {}, pk: {}, wts: {
 const _brnRcvDismissed = new Set();                              // orders whose form was closed by hand: not opened again by itself
 const _BRN_ACK_TERMS = 'ตรวจสภาพและจำนวนครบทุกรายการแล้ว รายการที่ไม่แจ้งของขาดวันนี้ถือว่ารับครบ แจ้งภายหลังอาจไม่ได้รับพิจารณา';
 
+// phone review item 7 (owner 2026-10-31): รับของ with nothing to receive, nothing received and nothing reported is ONE card - the words and
+// the one thing left to do here (บันทึกของที่รับเอง, which it opens); the parts fill in again as soon as one of them has a row
+function _brnRecvEmptySync() {
+  const el = document.getElementById('brnRecvEmpty');
+  if (!el) return;
+  const off = id => { const x = document.getElementById(id); return !x || x.style.display === 'none'; };
+  const hist = document.getElementById('brnRecvHistory'), hcard = hist && hist.parentElement;
+  const none = off('brnRecvOpen') && off('brnRecvOrder') && off('brnClaimCard') && !!hcard && hcard.style.display === 'none';
+  el.style.display = none ? '' : 'none';
+  el.innerHTML = none ? uiEmpty({ icon: 'inbox', t: 'ยังไม่มีของที่ต้องรับ', act: 'บันทึกของที่รับเอง', go: 'brnRecvManualOpen()' }) : '';
+  const man = document.getElementById('brnRecvManual');            // the card's button opens the form: no second heading under the card
+  if (man && !man.open) man.style.display = none ? 'none' : '';
+}
+function brnRecvManualOpen() {
+  const d = document.getElementById('brnRecvManual');
+  if (!d) return;
+  d.style.display = '';
+  d.open = true;
+  if (d.scrollIntoView) d.scrollIntoView({ block: 'start', behavior: 'smooth' });
+}
 async function brnLoadRecvOpen() {
   const box = document.getElementById('brnRecvOpen');
   if (!box) return;
@@ -1161,6 +1189,7 @@ async function brnLoadRecvOpen() {
       ? (sent.length ? `<div class="text-xs font-semibold mb-1" style="color:var(--text-primary)">ใบสั่งซื้อที่คลังจัดส่งแล้ว (${sent.length})</div>${sent.map(x => row(x, true)).join('')}` : '')
         + (waiting.length ? `<div class="text-xs font-semibold mt-2 mb-1" style="color:var(--text-muted)">ส่งแล้ว รอคลังจัดส่ง (${waiting.length})</div>${waiting.map(x => row(x, false)).join('')}` : '')
       : '';
+    _brnRecvEmptySync();
     // one order to receive = the page's one job: its form is already open (no scrolling, no extra tap)
     if (sent.length === 1 && !_brnRecvOrd && !_brnRcvDismissed.has(sent[0].order_id)) brnOpenReceive(sent[0].order_id, true);
   } catch (e) { box.style.display = 'none'; }
@@ -2779,6 +2808,10 @@ async function brnLoadClaims() {
           <div class="text-xs" style="color:var(--text-secondary)">รับแล้ว ${esc(fmtDayAt(o.received_at))} · ${o.lines} รายการ</div></div>
         ${_brnCanClaim() ? `<button class="brn-act brn-act-line" onclick="brnClaimOpen(${o.order_id})">แจ้งของขาด/เสีย</button>` : ''}</div>`).join('');
     // PR-D6: a claim is finished once it is decided (approved, not approved, cancelled); the ones waiting for the decision are shown (shared filter)
+    // item 7: nothing received and nothing reported - there is nothing to report on: the card is hidden
+    const card = document.getElementById('brnClaimCard');
+    if (card) card.style.display = ords.orders.length || cl.claims.length ? '' : 'none';
+    _brnRecvEmptySync();
     box.innerHTML = (recent || '<div class="text-xs" style="color:var(--text-muted)">ยังไม่มีใบสั่งซื้อที่บันทึกรับของแล้ว</div>')
       + (cl.claims.length ? `<div class="text-xs font-semibold mt-3" style="color:var(--text-primary)">ที่แจ้งไว้แล้ว</div><div id="brnClaimMine"></div>` : '');
     _brnHist('brnClaimMine', cl.claims, c => c.status !== 'submitted', c => { const st = _BRN_CLAIM_ST[c.status] || [c.status, 'var(--text-muted)'];

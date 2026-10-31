@@ -142,7 +142,12 @@ function _ohbMonthSync(k) {
   const el = document.getElementById('ohbMonth'), bar = document.getElementById('ohbMonthBar');
   if (!el) return;
   supplyMonthPick(el, _ohbMonthPrev(k));
-  if (bar) bar.style.display = _OHB_MONTH_PANES.includes(k) ? '' : 'none';
+  // phone review item 8 (owner 2026-10-31): on a phone the month of ใบตัดเบิกสาขา is the first chip of the pane's one filter row (the same
+  // control, moved - its id and handler stay); every other pane and a desktop keep it in the month strip
+  const lab = el.closest('label'), row = document.getElementById('ohbIsFbar');
+  const inRow = k === 'issues' && typeof phOn === 'function' && phOn() && !!row;
+  if (lab && row && bar) { if (inRow && lab.parentElement !== row) row.prepend(lab); else if (!inRow && lab.parentElement !== bar) bar.prepend(lab); }
+  if (bar) bar.style.display = _OHB_MONTH_PANES.includes(k) && !inRow ? '' : 'none';
 }
 function _ohbMonthVal() {
   const el = document.getElementById('ohbMonth');
@@ -561,6 +566,9 @@ function ohbRenderQueueList() {
   {
     const list = _ohbQShown(), f = uiStateFilter.get(), sp = uiStateFilter.split(_ohbQ.orders, _ohbQDone);
     uiStateFilter.bar('ohbStatusChips', { counts: sp.counts, f, pick: 'ohbQueuePick' });
+    // phone review item 7: a warehouse with no order has no filter card at all (it was an empty white strip above the empty list)
+    const fcard = document.getElementById('ohbStatusChips').closest('.card');
+    if (fcard) fcard.style.display = !_ohbQ.orders.length && _ohbIsWarehouse() ? 'none' : '';
     const shown = new Set(list.map(o => o.order_id));
     [..._ohbKeyedSel].forEach(i => { if (!shown.has(i)) _ohbKeyedSel.delete(i); });
     const byDay = {};
@@ -590,7 +598,9 @@ function ohbRenderQueueList() {
     box.innerHTML = days.length ? days.map(d => `<div class="flex flex-wrap items-baseline gap-x-4 gap-y-1 mt-4 mb-2"><span class="text-sm font-semibold" style="color:var(--text-primary)">วันส่ง ${esc(fmtDay(d))}</span>
         <span class="text-sm" style="color:var(--text-secondary)">${byDay[d].length} ใบสั่งซื้อ${dayTotal(byDay[d]) ? ' · ' + dayTotal(byDay[d]) : ''}</span></div>`
       + (phone ? byDay[d].map(_ohbCard).join('') : table(byDay[d]))).join('')
-      : (_ohbQ.orders.length ? uiStateFilter.empty(f, 'ohbQueuePick', 'ใบสั่งซื้อ') : '<span class="text-xs" style="color:var(--good-ink)">✓ ไม่มีใบสั่งซื้อในช่วงนี้</span>');
+      : (_ohbQ.orders.length ? uiStateFilter.empty(f, 'ohbQueuePick', 'ใบสั่งซื้อ')
+        // item 7: ONE card - nothing to confirm, and the manual's task for this desk
+        : uiEmpty({ icon: 'check', t: 'ไม่มีใบสั่งซื้อในช่วงนี้', act: 'วิธีใช้คิวใบสั่งซื้อ', go: `uiManualGo('${_ohbIsWarehouse() ? 'mt-wh-open' : 'mt-ss-queue'}')` }));
     _ohbKeySync();
   }
 }
@@ -1322,7 +1332,15 @@ function ohbRenderPerSales() {
   const cmp = !!(d.benchmark || d.purchase_benchmark);
   const pvs = v => v == null ? '–' : (v > 0 ? '+' : '') + _bmcNum(v, 1) + '%';
   const psrc = { price_file: 'ไฟล์ราคารายสาขา', orders: 'ใบสั่งซื้อที่ส่งจากไดกิโตะ กรุ๊ป' };
-  if (!d.branches.length) { box.style.display = 'none'; list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">ยังไม่มียอดขายในช่วงนี้</span>'; return; }
+  // phone review item 7 (owner 2026-10-31): a period where no branch has a figure (no sales, or no slip of usage: every value 0 / empty) is
+  // ONE card - why, and the page that fills it - instead of 28 rows of zeros and the chips above them
+  const used = b => (b.value_per_100k || 0) > 0 || (b.items || []).some(i => (i.per_100k || 0) > 0);
+  if (!d.branches.length || !d.branches.some(used)) {
+    box.style.display = 'none'; chips.innerHTML = '';
+    list.innerHTML = uiEmpty({ icon: 'doc', t: !d.branches.length ? 'ยังไม่มียอดขายในช่วงนี้' : 'ยังไม่มีใบตัดเบิกของสาขาในช่วงนี้ จึงยังคำนวณการใช้ต่อยอดขายไม่ได้',
+      act: 'ดูใบตัดเบิกสาขา', go: "supplyGo({tab:'orderhub',pane:'issues'})" });
+    return;
+  }
   // the centre without a branch chosen: one line per branch (pick one to open its items), then the chain's items
   if (!one) {
     // DV2: the branches rank by the baht their ingredient value sits away from the benchmark over the period, the largest first
@@ -1374,7 +1392,7 @@ async function ohbLoadPerSales() {
       const me = await _bmcJson(`${API}/api/bom-center/stock/me`);
       sel.innerHTML = supplyBranchOptions(me.branches || [], 'ทั้งเครือ (เปรียบเทียบรายสาขา)');
     }
-    list.innerHTML = '<span class="text-xs" style="color:var(--text-muted)">กำลังคำนวณ…</span>';
+    list.innerHTML = uiSkel(4);                               // item 7: grey rows while it computes, not a line of text
     _ohbPs = await _bmcJson(`${API}/api/bom-center/per-sales?${_ohbPsQS()}`);
     ohbRenderPerSales();
   } catch (e) { list.innerHTML = `<span class="text-xs" style="color:var(--bad-ink)">${esc(String(e.message || e))}</span>`; }
@@ -1447,6 +1465,15 @@ function ohbIsRender() {
   uiStateFilter.bar('ohbIsChips', { counts: sp.counts, f, pick: 'ohbIsPick' });
   const rows = f === 'all' ? d.rows : sp[f];
   const box = document.getElementById('ohbIsList');
+  // phone review item 7 (owner 2026-10-31): no slip and no day to follow in the range at all = ONE card (why + the manual's task); the
+  // per-branch summary, which could only say the same, is hidden with it
+  const sum = document.getElementById('ohbIsSummary');
+  if (!d.rows.length) {
+    box.innerHTML = uiEmpty({ icon: 'doc', t: 'ยังไม่มีใบตัดเบิกของสาขาในช่วงนี้', act: 'วิธีใช้ใบตัดเบิกสาขา', go: "uiManualGo('mt-ss-issues')" });
+    if (sum) { sum.style.display = 'none'; sum.innerHTML = ''; }
+    return;
+  }
+  if (sum) sum.style.display = '';
   if (!rows.length) { box.innerHTML = uiStateFilter.empty(f, 'ohbIsPick', 'วัน'); }
   else {
     let day = null, html = '';

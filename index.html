@@ -2402,6 +2402,12 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-ts-bad { background: var(--fix-t); color: var(--bad-ink); }
 .ph-ts-watch { background: var(--watch-t); color: var(--amber-ink); }
 .ph-ts-good { background: var(--good-t); color: var(--good-ink); }
+.ph-ts-neu { background: var(--neu-t); color: var(--neu-i); }   /* within the normal band: no verdict colour (owner 2026-10-31) */
+.ph-ptile .ph-ts { white-space: nowrap; font-variant-numeric: tabular-nums; }
+.ph-pt-t { flex: 1 1 auto; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
+.ph-pt-t .ph-ts { margin-left: 0; }
+/* phone review item 6: a department tile of the home grid carries ONE chip where its red badge sat (pages to look at, or ✓) */
+.ph-dept .ph-dept-st { position: absolute; top: 6px; right: 8px; margin: 0; }
 .ph-more > summary { min-height: 44px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); cursor: pointer; list-style: none; }
 .ph-more > summary::-webkit-details-marker { display: none; }
 .ph-more > summary::before { content: '›'; font-size: 18px; transition: transform .15s; }
@@ -2448,6 +2454,82 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ms-r2.is-open .ms-r2-x { display: block; }
 .ms-r2-list { padding-top: 2px; padding-bottom: 2px; }
 .ms-r2-list[hidden] { display: none; }
+/* 2026-10-31 phone review set 2 (docs/UI_REVIEW_MOBILE_2026-10-31.md items 3, 7, 8) - the shared pieces of js/01-core.js:
+   uiRow2 (.ui-r2: two fixed lines; a chip of <= 6 characters that never wraps, a thin bar), uiEmpty (one card per empty page),
+   uiSkel (grey blocks while loading), the "⋯" menu of a filter row (.ui-more) and the one-row filter bar (.ui-fbar). No gradients. */
+.ui-r2[hidden] { display: none; }
+.ui-r2 .ms-r2-b { min-height: 20px; }
+.ui-chip { flex: 0 0 auto; display: inline-block; max-width: 7.5em; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 700; line-height: 1.5;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis; background: var(--neu-t); color: var(--neu-i); }
+.ui-chip[data-tone="fix"] { background: var(--fix-t); color: var(--fix-i); }
+.ui-chip[data-tone="watch"] { background: var(--watch-t); color: var(--watch-i); }
+.ui-chip[data-tone="good"] { background: var(--good-t); color: var(--good-i); }
+.ui-r2-bar { flex: 0 0 56px; height: 6px; margin-left: auto; border-radius: 3px; background: var(--bg-subtle); overflow: hidden; }
+.ui-r2-bar > i { display: block; height: 100%; min-width: 2px; background: var(--neu-f); }
+.ui-r2-bar + .ms-r2-m { margin-left: 0; }
+.ui-empty { display: flex; flex-direction: column; align-items: center; gap: 8px; padding: 22px 16px; text-align: center; border: 1px dashed var(--border-control, var(--border));
+  border-radius: var(--r-md, 12px); background: var(--bg-card); color: var(--text-secondary); }
+.ui-empty-i { color: var(--text-secondary); }
+.ui-empty-t { font-size: 14px; line-height: 1.45; color: var(--text-primary); }
+.ui-empty-b { min-height: 44px; padding: 0 18px; border-radius: var(--r-md, 12px); border: 1px solid var(--accent); background: var(--bg-card); color: var(--accent);
+  font-size: 14px; font-weight: 700; cursor: pointer; }
+.ui-skel { display: flex; flex-direction: column; gap: 8px; padding: 4px 0; }
+.ui-skel-row, .ui-skel-kpi { display: block; border-radius: var(--r-md, 12px); background: var(--bg-subtle); animation: skeletonPulse 1.4s ease infinite; }
+.ui-skel-row { height: 52px; }
+/* item 7: a loading line on a phone (js/01-core.js phTextFloor marks it) is a grey bar; its words stay for a screen reader */
+body.ph-on .ui-skel-line { color: transparent !important; min-height: 40px; border-radius: var(--r-md, 12px); background: var(--bg-subtle) !important; animation: skeletonPulse 1.4s ease infinite; user-select: none; }
+body.ph-on .ui-skel-line:not(td):not(th) { display: block; }
+.ui-skel-kpi { height: 84px; }
+.ph-ov-grid > .ui-skel { grid-column: 1 / -1; }
+/* item 11: what a phone shows in place of a chart (js/01-core.js _phChartSwap) - a ranking (5 rows, ดูทั้งหมด) or one number + one word */
+.ph-chart-box { position: relative; width: 100%; }
+.ph-chart-alt { width: 100%; }
+.ph-rank-h { margin: 0 0 6px; font-size: 13px; font-weight: 700; color: var(--text-secondary); }
+.ph-rank-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ph-rank-list > li[hidden] { display: none; }
+.ph-rank-a { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.ph-rank-l { flex: 1 1 auto; min-width: 0; font-size: 14px; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-rank-v { flex: 0 0 auto; font-size: 14px; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ph-rank-bar { display: block; height: 6px; margin-top: 3px; border-radius: 3px; background: var(--bg-subtle); overflow: hidden; }
+.ph-rank-bar > i { display: block; height: 100%; }
+.ph-rank-all { width: 100%; margin-top: 8px; }
+.ph-chart-tile { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 6px 0; }
+.ph-chart-tile-l { font-size: 13px; color: var(--text-secondary); }
+.ph-chart-tile-v { font-size: 30px; font-weight: 800; line-height: 1.1; color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.ui-more-btn { display: none; }
+.ui-more-pop { display: contents; }
+.ui-frow { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 8px; }
+body.ph-on .ui-frow { flex-wrap: nowrap; align-items: center; gap: 6px; }
+body.ph-on .ui-fbar { flex: 1 1 auto; min-width: 0; display: flex !important; flex-wrap: nowrap !important; align-items: center !important; gap: 6px !important;
+  overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+body.ph-on .ui-frow > .ui-fbar { padding: 2px 0; margin: 0 !important; }
+body.ph-on .ui-fbar::-webkit-scrollbar { display: none; }
+body.ph-on .ui-fbar > label { flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px; min-height: 40px; margin: 0; padding: 0 2px 0 12px;
+  border: 1px solid var(--border-control, var(--border)); border-radius: 999px; background: var(--bg-card); font-size: 13px; color: var(--text-secondary); white-space: nowrap; }
+body.ph-on .ui-fbar > label br { display: none; }
+body.ph-on .ui-fbar > label select, body.ph-on .ui-fbar > label input { min-height: 36px; max-width: 150px !important; width: auto !important; border: 0 !important; background: transparent !important;
+  padding: 2px 6px !important; font-size: 14px !important; font-weight: 600; color: var(--text-primary) !important; }
+body.ph-on .ui-more { position: relative; flex: 0 0 auto; }
+body.ph-on .ui-more-btn { display: inline-flex; align-items: center; justify-content: center; width: 44px; height: 40px; border-radius: 999px;
+  border: 1px solid var(--border-control, var(--border)); background: var(--bg-card); color: var(--text-primary); font-size: 20px; font-weight: 700; line-height: 1; cursor: pointer; }
+body.ph-on .ui-more-btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+body.ph-on .ui-more-pop { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 40; min-width: 240px; max-width: calc(100vw - 32px);
+  flex-direction: column; align-items: stretch; gap: 4px; padding: 8px; border: 1px solid var(--border); border-radius: var(--r-md, 12px);
+  background: var(--bg-card); box-shadow: 0 8px 24px rgba(15, 23, 42, .18); }
+body.ph-on .ui-more.is-open .ui-more-pop { display: flex; }
+body.ph-on .ui-more-pop > button, body.ph-on .ui-more-pop > a, body.ph-on .ui-more-pop > label { min-height: 44px; display: flex; align-items: center; gap: 6px; width: 100%;
+  margin: 0; padding: 0 12px !important; border: 0 !important; border-radius: var(--r-sm, 8px); background: transparent !important; text-align: left; font-size: 14px !important;
+  color: var(--text-primary) !important; text-decoration: none; white-space: normal; }
+body.ph-on .ui-more-pop > button:hover, body.ph-on .ui-more-pop > a:hover { background: var(--bg-subtle) !important; }
+body.ph-on .ui-more-pop > span { padding: 2px 12px; font-size: 13px; color: var(--text-secondary); }
+body.ph-on .ui-more-pop br { display: none; }
+body.ph-on .ui-ph-hide { display: none !important; }
+body.ph-on .ui-fbar > input[type="search"], body.ph-on .ui-fbar > .wt-find { flex: 0 0 170px; min-height: 40px; margin: 0; border-radius: 999px; }
+body.ph-on .card.ui-fbar { padding: 8px 10px; }
+/* item 8: the state filter (uiStateFilter) is ONE row of horizontal tabs on a phone, 36 px tall, scrolled sideways when it is wider */
+body.ph-on .tskf-seg { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; margin-bottom: 8px; }
+body.ph-on .tskf-seg::-webkit-scrollbar { display: none; }
+body.ph-on .tskf-btn, body.ph-on #shmFilter .tskf-btn { flex: 0 0 auto; min-width: 0; min-height: 44px; padding: 0 12px; border-radius: 999px; white-space: nowrap; }
 @media (max-width: 700px) {
   body.ph-on #phNav { display: grid; }
   body.ph-on.ph-home #phHome { display: block; }
@@ -2552,25 +2634,29 @@ body.mgt-reading .content-area { padding-top: 10px; }
   body.ph-on .ph-cl-hit { flex: 1 1 auto; min-width: 0; min-height: 44px; display: flex; align-items: center; gap: 8px; padding: 10px 6px 10px 14px; margin: 0; background: transparent; border: 0;
     text-align: left; font: inherit; color: inherit; cursor: pointer; }
   body.ph-on .ph-cl-main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
-  body.ph-on .ph-cl-pill { align-self: flex-start; max-width: 100%; display: inline-block; margin-bottom: 2px; padding: 2px 10px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
+  /* phone review item 3 (2026-10-31): TWO fixed lines per card - .ph-cl-l1 the name + the one key figure; .ph-cl-l2 the chip (<= 6 characters,
+     never wraps) + one grey line + the sparkline as a thin strip */
+  body.ph-on .ph-cl-l1 { display: flex; align-items: baseline; gap: 10px; min-width: 0; }
+  body.ph-on .ph-cl-l2 { display: flex; align-items: center; gap: 6px; min-width: 0; margin-top: 2px; }
+  body.ph-on .ph-cl-pill { flex: 0 0 auto; max-width: 7.5em; display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12.5px; font-weight: 700;
     line-height: 1.5; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.ph-on .ph-cl-pill[data-tone="good"] { background: var(--good-t); color: var(--good-i); }
   body.ph-on .ph-cl-pill[data-tone="fix"] { background: var(--fix-t); color: var(--fix-i); }
   body.ph-on .ph-cl-pill[data-tone="watch"] { background: var(--watch-t); color: var(--watch-i); }
   body.ph-on .ph-cl-pill[data-tone="neu"] { background: var(--neu-t); color: var(--neu-i); }
   body.ph-on .ph-cl-pill.ph-cl-own { padding: 0; border-radius: 0; background: transparent; white-space: normal; display: flex; flex-wrap: wrap; gap: 4px; }
-  body.ph-on .ph-cl-t { font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); overflow-wrap: anywhere; }
-  body.ph-on .ph-cl-s { font-size: 13px; line-height: 1.4; color: var(--text-secondary); overflow-wrap: anywhere; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  body.ph-on .ph-cl-t { flex: 1 1 auto; min-width: 0; font-size: 15px; font-weight: 700; line-height: 1.35; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  body.ph-on .ph-cl-s { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.4; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.ph-on .ph-cl-kv { display: grid; gap: 2px; max-width: 260px; font-size: 13px; line-height: 1.4; color: var(--text-secondary); }
   body.ph-on .ph-cl-kv-r { display: flex; justify-content: space-between; gap: 12px; white-space: nowrap; }
   body.ph-on .ph-cl-figs { display: flex; gap: 8px; margin-top: 6px; }
-  body.ph-on .ph-cl-f { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; }
+  body.ph-on .ph-cl-f { flex: 0 0 auto; max-width: 50%; display: flex; flex-direction: column; text-align: right; }
   body.ph-on .ph-cl-fl { font-size: 12px; line-height: 1.35; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.ph-on .ph-cl-fv { font-size: 15px; line-height: 1.35; font-weight: 700; color: var(--text-primary); font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   body.ph-on .ph-cl-fs { display: flex; flex-direction: column; font-size: 12px; line-height: 1.35; font-weight: 600; color: var(--text-secondary); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
   body.ph-on .ph-cl-fb { font-weight: 500; }   /* figSub: the change and the base under a figure */
-  body.ph-on .ph-cl-spark { display: block; margin-top: 6px; }
-  body.ph-on .ph-cl-spark svg { display: block; width: 100%; height: auto; max-height: 64px; }
+  body.ph-on .ph-cl-spark { flex: 0 0 64px; display: block; height: 20px; overflow: hidden; }
+  body.ph-on .ph-cl-spark svg { display: block; width: 64px; height: 20px; }
   body.ph-on .ph-cl-chev { flex: 0 0 auto; padding: 0 6px; font-size: 24px; line-height: 1; color: var(--text-secondary); }
   body.ph-on .ph-cl-tick { flex: 0 0 48px; display: flex; align-items: center; justify-content: center; border-right: 1px solid var(--border-soft, #e6eaf0); cursor: pointer; }
   body.ph-on .ph-cl-tick input { width: 22px; height: 22px; margin: 0; }

@@ -107,15 +107,18 @@ function renderFeedback(d) {
   if (st) st.textContent = d.total ? `${d.total.toLocaleString()} เสียง · วิเคราะห์โดย ${eng || '—'}${d.unreplied ? ` · รอสาขาตอบ ${d.unreplied}` : ' · ไม่มีรายการรอตอบ'}${d.sla_breached ? ` (เกิน ${d.sla_days} วัน ${d.sla_breached})` : ''}${d.flagged ? ` · ⚑ ${d.flagged}` : ''}` : 'ยังไม่มีเสียงลูกค้าในช่วงที่เลือก';
   // kind chips + local branch chip
   const kinds = d.kinds || {}, total = Object.values(kinds).reduce((a, x) => a + x, 0);
-  document.getElementById('fbKindChips').innerHTML = _FB_KINDS.map(([k, label]) => `<button type="button" class="fb-chip${k === _fbKind ? ' on' : ''}" onclick="setFeedbackKind('${k}')">${label} ${k ? (kinds[k] || 0) : total}</button>`).join('');
+  document.getElementById('fbKindChips').innerHTML = !d.total && !_fbKind ? '' : _FB_KINDS.map(([k, label]) => `<button type="button" class="fb-chip${k === _fbKind ? ' on' : ''}" onclick="setFeedbackKind('${k}')">${label} ${k ? (kinds[k] || 0) : total}</button>`).join('');
   document.getElementById('fbBranchChip').innerHTML = _fbScope() ? `<span class="fb-chip on" title="บัญชีนี้เห็นเฉพาะสาขาของตน">สาขาของคุณ: ${_fbEsc(_fbScope())}</span>` :
     (_fbBranchLocal ? `<button type="button" class="fb-chip on" onclick="setFeedbackBranch('')" title="ล้างตัวกรองสาขา">สาขา: ${_fbEsc(_fbBranchLocal)} ✕</button>` : '');
   // empty state
   const empty = document.getElementById('fbEmpty');
+  // phone review item 7 (owner 2026-10-31): a period with no voice at all is ONE card (why + the one fix: นำเข้าเอง); the sections that
+  // would only print zeros and "ยังไม่มีข้อมูล" (tiles, trend, queue, AI, themes, actions, competitors, menus, the full list) are hidden
   if (!d.total) {
     empty.style.display = '';
-    empty.innerHTML = `<div class="fb-empty"><div class="text-3xl"></div><p class="font-semibold mt-1">ยังไม่มีเสียงลูกค้าในช่วงนี้ ${uiQ('fb:empty', 'ยังไม่มีเสียงลูกค้า', `<p>เปิดการดึงอัตโนมัติจาก Google / Facebook / Instagram ตาม Checklist หรือวาง/อัปโหลดรีวิวเองด้านล่าง${_fbBranchLocal || _fbKind ? ' · หรือลองล้างตัวกรองสาขา/ประเภท' : ''}</p>`)}</p><div class="flex justify-center gap-2 mt-3"><button class="fb-btn" onclick="switchTab('checklist')">ไปที่รายการตรวจสอบการเปิดใช้</button><button class="fb-ghost" onclick="toggleFeedbackImport()">นำเข้าเอง</button></div></div>`;
+    empty.innerHTML = uiEmpty({ icon: 'msg', t: `ยังไม่มีเสียงลูกค้าในช่วงนี้${_fbBranchLocal || _fbKind ? ' (ลองล้างตัวกรองสาขาหรือประเภท)' : ''}`, act: 'นำเข้าเอง', go: 'toggleFeedbackImport()' });
   } else { empty.style.display = 'none'; empty.innerHTML = ''; }
+  _fbDataShown(!!d.total);
   // KPI tiles
   const s = d.sentiment || {};
   const tile = (label, value, delta, sub, color) => `<div class="card fb-kpi" style="border-top-color:${color}"><div class="l">${label}</div><div class="v" style="color:${textInk(color)}">${value}</div><div class="d">${delta}</div>${sub ? `<div class="d">${sub}</div>` : ''}</div>`;
@@ -156,6 +159,16 @@ function renderFeedback(d) {
     '<p class="text-xs" style="color:var(--text-muted)">ยังไม่มีเสียงชมในช่วงนี้</p>';
 }
 
+// item 7: the data sections of the page = every block between the heading card and the import (fbImport) but the empty card itself;
+// hidden while the period is empty
+function _fbDataShown(on) {
+  const e = document.getElementById('fbEmpty'), head = document.querySelector('#tab-feedback .fb-head'), stop = document.getElementById('fbImport');
+  for (let el = head && head.nextElementSibling; el && el !== stop; el = el.nextElementSibling) {
+    if (el === e) continue;
+    if (on) { if (el.dataset.fbNodata) { el.style.display = el.dataset.fbNodata === '-' ? '' : el.dataset.fbNodata; delete el.dataset.fbNodata; } }
+    else if (!el.dataset.fbNodata) { el.dataset.fbNodata = el.style.display || '-'; el.style.display = 'none'; }
+  }
+}
 function _fbTrend(d) {
   const days = d.by_day || [], months = d.by_month || [];
   const useDays = days.length && days.length <= 70;

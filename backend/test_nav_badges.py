@@ -302,7 +302,9 @@ def test_the_badge_and_search_code_lives_in_the_slice_the_phone_loads_alone():
     assert "catch (e)" in refresh and "notifyError" not in refresh and "uiToast" not in refresh and "console.error" not in refresh
     # the phone shell starts it after the launcher slice is in, and draws the counts on its tiles, nav and search rows
     assert "navBadgesStart()" in _fn(MOB, "phBoot") and "pgSearchResults(" in _fn(MOB, "phSearchRender")
-    assert "nb: 't'" in MOB and "data-nb" in _fn(MOB, "phNavRender") and "data-nb=" in _fn(MOB, "phRenderDept")
+    assert "nb: 't'" in MOB and "data-nb" in _fn(MOB, "phNavRender") and "_phDtHtml(d, {" in _fn(MOB, "phRenderDept")
+    # phone review item 6 (2026-10-31): the department page draws its tiles through _phDtHtml - a tile with no status keeps the red badge
+    assert 'data-nb="${_navPageSpec(t.x.p)}"' in _fn(MOB, "_phDtHtml")
 
 
 def test_a_badge_is_a_red_count_with_an_accessible_name_on_every_surface():

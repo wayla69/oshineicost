@@ -55,14 +55,20 @@
   <!-- ── ใบตัดเบิกสาขา (PR-J4): ประสานงานขาย follows the branches' daily slips, reopens one with a reason;
        Accounting downloads the confirmed ones (docs/pilot/accounting_guide.html) ── -->
   <div id="ohb-pane-issues" style="display:none">
+    <!-- phone review item 8 (owner 2026-10-31): ONE filter row - สาขา · ตั้งแต่ · ถึง (the tab's month joins it on a phone, _ohbMonthSync);
+         the two downloads sit under "⋯" on a phone (inline on a desktop, .ui-more-pop); the state chips are the one status row under it -->
     <div class="card p-3 mb-3">
-      <div class="flex flex-wrap items-end gap-2 text-xs" style="color:var(--text-muted)">
-        <label>สาขา<br><select id="ohbIsBranch" data-branch-picker onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
-        <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
-        <span class="text-xs" style="padding-bottom:8px;color:var(--text-secondary)">ดาวน์โหลด เดือน<b id="ohbIsDlMonth"></b>:</span>
-        <button onclick="ohbIsXlsx()" title="เฉพาะใบที่สาขาส่งแล้ว ไม่รวมร่าง" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกสาขา (Excel)</button>
-        <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
+      <div class="ui-frow text-xs" style="color:var(--text-muted)">
+        <div class="ui-fbar flex flex-wrap items-end gap-2" id="ohbIsFbar">
+          <label>สาขา<br><select id="ohbIsBranch" data-branch-picker onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:240px"></select></label>
+          <label>ตั้งแต่<br><input type="date" id="ohbIsFrom" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+          <label>ถึง<br><input type="date" id="ohbIsTo" onchange="ohbLoadIssues()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:5px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></label>
+        </div>
+        <div class="ui-more" id="ohbIsMore"><button type="button" class="ui-more-btn" aria-haspopup="true" aria-expanded="false" aria-label="เมนูเพิ่มเติม: ดาวน์โหลดและตัวเลือกอื่น" onclick="uiMoreToggle(this)">⋯</button><div class="ui-more-pop" role="menu">
+          <span class="text-xs" style="padding-bottom:8px;color:var(--text-secondary)">ดาวน์โหลด เดือน<b id="ohbIsDlMonth"></b>:</span>
+          <button onclick="ohbIsXlsx()" title="เฉพาะใบที่สาขาส่งแล้ว ไม่รวมร่าง" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดใบตัดเบิกสาขา (Excel)</button>
+          <button onclick="ohbIsLogXlsx()" style="border:1px solid var(--border);border-radius:var(--r-sm);padding:6px 12px;font-size:13px;cursor:pointer;background:transparent;color:var(--text-primary)">ดาวน์โหลดบันทึกความล่าช้า (Excel)</button>
+        </div></div>
         <span id="ohbIsStatus" style="padding-bottom:6px"></span>
       </div>
       <div id="ohbIsChips" class="flex flex-wrap gap-1 mt-2"></div>

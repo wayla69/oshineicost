@@ -278,7 +278,8 @@ for (const [name, opts, mode] of CASES) {
       }
       if (mode === 'touch' && opts.isMobile) {
         await expect(page.locator('#tab-hvmonitor .ph-cl-card').first()).toBeVisible();
-        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().locator('.ph-cl-fl').allTextContents();
+        // phone review item 3 (2026-10-31): the card is two lines - the key figure's label is its data-l, the other figures are "label value" on line 2
+        const figs = await page.locator('#tab-hvmonitor .ph-cl-card').first().evaluate((c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); }, ['จากกินต่อหัว', 'จาน/หัว', 'จานที่ออก']);
         expect(figs).toEqual(['จากกินต่อหัว', 'จาน/หัว', 'จานที่ออก']);
       } else {
         await expect(page.locator('#hvpTable')).toBeVisible();

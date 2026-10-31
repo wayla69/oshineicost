@@ -199,8 +199,11 @@ test('เมนูพุ่ง (แตะง่าย 390): the card leads with 
   const c = await page.evaluate(() => {
     const [old, neu] = document.querySelectorAll('#dsSpike .ph-cl');
     const card = old.querySelector('.ph-cl-card');
-    const pill = (neu.querySelector('.ph-cl-card') || document.createElement('i')).querySelector('.sp-back-chip');
-    return { labels: [...card.querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()), pill: pill ? pill.textContent.trim() : '' };
+    // phone review item 3 (2026-10-31): the card is two lines - the key figure's label is its data-l, the other figures are "label value" on line 2
+    // the pill is a chip of <= 6 characters; its full words are its title
+    const pill = (neu.querySelector('.ph-cl-card') || document.createElement('i')).querySelector('.ph-cl-pill');
+    const lab = (c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); };
+    return { labels: lab(card, ['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']), pill: pill ? (pill.getAttribute('title') || pill.textContent).trim() : '' };
   });
   expect(c.labels).toEqual(['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
   expect(c.pill).toBe('กลับมาขาย 2 สาขา');
@@ -273,7 +276,7 @@ for (const [name, mode] of [['แตะง่าย', 'touch'], ['พอดี�
     expect(m.chip).toBe('12–18 ต.ค. เทียบ 5–11 ต.ค.');
     expect(m.sw).toBeLessThanOrEqual(390);
     if (mode === 'touch') {               // DV3: the card leads with ต้นทุนเพิ่มสุทธิ
-      const labels = await page.evaluate(() => [...document.querySelector('#dsSpike .ph-cl .ph-cl-card').querySelectorAll('.ph-cl-fl')].map(x => x.textContent.trim()));
+      const labels = await page.evaluate(() => { const lab = (c, want) => { const f = c.querySelector('.ph-cl-f'), s = (c.querySelector('.ph-cl-s') || {}).textContent || ''; return [f ? f.dataset.l : ''].concat(want.slice(1).filter(l => s.includes(l + ' '))); }; return lab(document.querySelector('#dsSpike .ph-cl .ph-cl-card'), ['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']); });
       expect(labels).toEqual(['ต้นทุนเพิ่มสุทธิ', 'สะสม', '+จาน']);
     }
     expect(errors).toEqual([]);

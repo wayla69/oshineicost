@@ -5,8 +5,10 @@
        stands, from GET /api/bom-center/todo (js/16-supplyhome.js). "งานของฉัน" is the one open block; the close list
        (only for a role that owns a step, filtered to its steps) and "งานของฝ่ายอื่น" (centre roles) are folded.
        The strip holds the module's shared month and branch (supplyCtx, 01-core.js). -->
-  <div id="shmCtxBar" class="card p-3 mb-3 flex flex-wrap items-center gap-3" style="position:sticky;top:0;z-index:5">
-    <span class="text-sm font-semibold" style="color:var(--text-primary)">หน้างาน</span>
+  <!-- phone review item 8 (owner 2026-10-31): on a phone the strip is ONE row of chips (เดือน · สาขา); the page name and today's date are the
+       phone header's (.ui-ph-hide), the state filter under it is one row of tabs -->
+  <div id="shmCtxBar" class="card p-3 mb-3 flex flex-wrap items-center gap-3 ui-fbar" style="position:sticky;top:0;z-index:5">
+    <span class="text-sm font-semibold ui-ph-hide" style="color:var(--text-primary)">หน้างาน</span>
     <span id="shmBranchName" class="text-sm font-semibold" style="color:var(--text-primary);display:none"></span>
     <label class="text-xs" id="shmMonthWrap" style="color:var(--text-muted)">เดือน
       <select id="shmMonth" class="supply-month" onchange="shmCtxChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary)"></select>
@@ -14,7 +16,7 @@
     <label class="text-xs" id="shmBranchWrap" style="color:var(--text-muted)">สาขา
       <select id="shmBranch" data-branch-picker onchange="shmCtxChanged()" style="border:1px solid var(--border-control);border-radius:var(--r-sm);padding:4px 8px;font-size:13px;background:var(--bg-input);color:var(--text-primary);max-width:220px"></select>
     </label>
-    <span id="shmNote" class="text-xs" style="color:var(--text-secondary)"></span>
+    <span id="shmNote" class="text-xs ui-ph-hide" style="color:var(--text-secondary)"></span>
     <span id="shmStatus" class="text-[11px] ml-auto" style="color:var(--text-muted)"></span>
   </div>
 
