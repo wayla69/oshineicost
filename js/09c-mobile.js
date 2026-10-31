@@ -78,7 +78,8 @@ async function phBoot() {
 function phRetryBoot() { const b = document.getElementById('phRetry'); if (b) b.disabled = true; phBoot(); }
 // PR-F1: the franchise owner's หน้าแรก IS ร้านของฉัน - the login opens on the page itself (no launcher of one tile); the bottom
 // navigation keeps หน้าแรก (this page) and ฉัน
-function phOpenFranchise() { _phDept = ''; return phOpenPage(() => switchTab('franchise')); }
+// phone B (2026-10-31): หน้าแรก while a detail screen of ร้านของฉัน is open goes back to its cards (frcHome, js/17-franchise.js)
+function phOpenFranchise() { _phDept = ''; return phOpenPage(() => { switchTab('franchise'); if (typeof frcHome === 'function') frcHome(); }); }
 // the width crossed 700 px (a turned phone, a dragged window): the shell comes or goes
 function phViewportChanged() {
   if (_phoneApp()) { if (!phOn()) { phBoot(); periodChipRole(); branchChipRender(); } return; }

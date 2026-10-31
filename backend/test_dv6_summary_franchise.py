@@ -198,7 +198,8 @@ def test_the_franchise_page_follows_the_top_bars_period():
     core = _js("js/01-core.js")
     assert "franchise: { load: () => loadFranchise(), follow: { period: { kinds: ['week', 'month'] } } }" in core
     frc = _js("js/17-franchise.js")
-    assert "frcMonthChanged" not in frc and "/api/franchise/decide?" in frc
+    # phone B (2026-10-31): เรื่องที่ควรดู of the period comes with the overview call (kind / pick), not its own /decide call
+    assert "frcMonthChanged" not in frc and "/api/franchise/overview?" in frc and "qs.set('pick', per.pick)" in frc
     assert re.search(r"function _frcPeriod\(\)[\s\S]*?gPeriodGet\(\)[\s\S]*?gPeriodResolve\(\)", frc)
     tab = _js("tabs/56-franchise.html")
     assert 'id="frcPeriodChip"' in tab and "phPeriodOpen()" in tab and "<select" not in tab

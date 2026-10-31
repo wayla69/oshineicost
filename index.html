@@ -2070,6 +2070,33 @@ body.role-branch #presetBar, body.role-franchise #presetBar { display: none !imp
    styles (.ms-*), the user chip beside the one tab-strip entry, nothing else in the chrome. */
 .frc-wrap { max-width: 720px; margin: 0 auto; }
 .frc-wrap .ms-section { padding: 0; }
+/* Phone B for the owner (2026-10-31, docs/PHONE_PLAN.md §11): the overview cards (.ph-ov-card, the management phone's own card), then ONE
+   detail screen in place: a section (.frc-sec) shows only under the detail its data-d names (#frcDetail.d-<name>). 2 columns on a phone,
+   3 on a desktop - one code path (js/17-franchise.js). */
+.frc-dt .frc-sec { display: none; }
+#tab-franchise:not(.frc-in-detail) #frcDetail { display: none; }
+#tab-franchise.frc-in-detail #frcOv { display: none; }
+.frc-dt.d-yesterday .frc-sec[data-d~="yesterday"], .frc-dt.d-month .frc-sec[data-d~="month"], .frc-dt.d-target .frc-sec[data-d~="target"],
+.frc-dt.d-cost .frc-sec[data-d~="cost"], .frc-dt.d-watch .frc-sec[data-d~="watch"], .frc-dt.d-controls .frc-sec[data-d~="controls"],
+.frc-dt.d-menu .frc-sec[data-d~="menu"], .frc-dt.d-voice .frc-sec[data-d~="voice"], .frc-dt.d-msg .frc-sec[data-d~="msg"]:not([hidden]) { display: block; }
+.frc-dt .frc-sec + .frc-sec { margin-top: 14px; }
+.frc-ov-grid { margin-bottom: 14px; }
+@media (min-width: 701px) { .frc-wrap { max-width: 960px; } #tab-franchise .frc-ov-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.frc-back { flex: 0 0 auto; min-width: 44px; min-height: 44px; margin: -6px 0 -6px -6px; border: 0; border-radius: var(--r-sm); background: transparent;
+  color: var(--text-primary); font-size: 28px; line-height: 1; cursor: pointer; }
+.frc-back:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.frc-fold { margin-top: 10px; }
+.ph-ov-v.frc-ov-sm { font-size: 17px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+/* a phone: the period chip names the period, so the status line of the head is not repeated; the head is one row */
+@media (max-width: 700px) { body.ph-on #tab-franchise #frcStatus { display: none; } body.ph-on #tab-franchise #frcHead { flex-wrap: nowrap; padding: 10px 12px; }
+  body.ph-on #tab-franchise #frcHead > .min-w-0 { flex: 1 1 auto; } }
+.frc-tbl tr.ui-hl td { background: var(--accent-soft) !important; }
+.frc-me .ms-section + .ms-section { margin-top: 12px; }
+.frc-dl-row { display: flex; flex-wrap: wrap; gap: 8px; padding: 12px; }
+#frcMe #frcPrint { background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border); }
+#phv-me .frc-me { margin-top: 12px; }
+/* the franchise owner's ฉัน: its own morning summary card (kind "franchise") is the one push card there */
+body.franchise-phone #phv-me #msPush { display: none !important; }
 /* PR-F1: download button, the "?" beside a section title, the food-cost floor chip, the target meter, the two tables
    (date / month column stays put while the figures scroll sideways on a 375 px phone) */
 .frc-dl { min-height: 40px; padding: 6px 14px; font-size: 14px; font-weight: 600; border: 0; border-radius: var(--r-sm); background: var(--accent); color: var(--on-accent); cursor: pointer; white-space: nowrap; }
@@ -2862,6 +2889,11 @@ body.ph-on .tskf-btn, body.ph-on #shmFilter .tskf-btn { flex: 0 0 auto; min-widt
   #tab-franchise .frc-tbl thead { display: table-header-group; }
   #tab-franchise .frc-tbl tr { break-inside: avoid; }
   #tab-franchise .ui-q { display: none !important; }
+  /* phone B: paper is the whole month - every section unfolded, no cards, no back arrow, no ฉัน block */
+  #tab-franchise #frcOv, #tab-franchise #frcMe, #tab-franchise #frcBack, #tab-franchise #frcDtTitle { display: none !important; }
+  #tab-franchise #frcDetail { display: block !important; }
+  #tab-franchise .frc-sec:not(#frcMsg) { display: block !important; }
+  #tab-franchise #frcBranchName { display: block !important; }
 }
 /* app-wide type (2026-10-19): table heads and section titles — after their base rules so these win (screen only, not the A4 report) */
 @media screen {

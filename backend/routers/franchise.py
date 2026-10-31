@@ -28,6 +28,8 @@ module only picks the numbers and words the owner may see - no maths of its own 
   GET /api/franchise/supply   (F3) วัตถุดิบจากส่วนกลาง: delivery rounds, purchases against sales, claims, late orders, over-use
   GET /api/franchise/daily    สรุปประจำวัน (owner 2026-10-27): the branch's last FINISHED day (rules.latest_settled_day) and its
                month so far - see the block at the end of this module
+  GET /api/franchise/overview (phone B, 2026-10-31) summary + insight + เรื่องที่ควรดู in one answer and the ควรดู findings with the
+               detail each one goes to (franchise_findings) - see the block at the end of this module
   GET /api/franchise/summary.xlsx  (F1) the same month as an Excel file: สรุป / รายวัน / 12 เดือน / เมนูขายดี (F3: + วัตถุดิบ). The Fly image has
                no Chrome, so no server PDF; the page has a print stylesheet (A4 portrait) for a paper copy
 
@@ -290,6 +292,13 @@ def _target(con, rep: dict, sales: dict, branch: str, month: str) -> dict:
     out.update({"month_target": round(tgt, 0), "to_date": round(to_date, 0), "elapsed_share_pct": _num(100.0 * share),
                 "weighting": how, "vs_to_date_pct": _num(100.0 * (mtd - to_date) / to_date) if to_date else None,
                 "of_month_pct": _num(100.0 * mtd / tgt)})
+    # phone B (2026-10-31): the เป้า card's run rate - what each day left must sell to reach the month target, against what a day has
+    # sold so far (management's pace.run_rate rule: need_per_day <= 0 = ถึงเป้าแล้ว)
+    left = int(P.get("days_total") or 0) - int(P.get("days_elapsed") or 0)
+    if not sales.get("month_complete") and left > 0:
+        done = int(P.get("days_elapsed") or 0)
+        out.update({"days_left": left, "need_per_day": round((tgt - mtd) / left, 0),
+                    "normal_per_day": round(mtd / done, 0) if done else None})
     return out
 
 
@@ -522,6 +531,9 @@ def franchise_summary_data(branch_id: int, month: Optional[str] = None) -> dict:
             _gp_target(gp, name, sel)
         if gp is not None and sel:
             gp["coverage"] = _safe("coverage", lambda: _coverage(con, branch_id, sel))
+        if gp is not None:
+            from rules import food_cost_target
+            gp["food_cost_target_pct"] = food_cost_target(con)       # the ONE target (owner 2026-10-25: <= 58 % ในเป้า)
         target = _safe("target", lambda: _target(con, rep, sales, name, sel)) if sales is not None and sel else None
         empty = {"months": [], "latest": None}
         trend = _safe("trend", lambda: _trend_12m(name), empty) if sales is not None else empty
@@ -877,7 +889,11 @@ def _controls(con, rep: dict, name: str, sel: str, scrub) -> dict:
     cash = {"net": _num(s.get("net"), 0) if days else None, "short_total": _num(s.get("short_total"), 0) if days else None,
             "over_total": _num(s.get("over_total"), 0) if days else None, "short_days": s.get("short_days") if days else None,
             "days_counted": len(days), "days": days}
-    return {"discount": discount, "voids": voids, "cash": cash, "flags": _control_flags(discount, voids, cash)}
+    # phone B (2026-10-31): the discounted bills printed more than once - the report's own money-leak signal (reports.py leak.reprinted:
+    # discount > 0 AND print_times > 1), counts and baht only
+    rp = (rep.get("leak") or {}).get("reprinted") or {}
+    reprints = {"bills": int(rp.get("bills") or 0), "baht": _num(rp.get("baht") or 0, 0), "available": bool(rp) and not rp.get("unavailable")}
+    return {"discount": discount, "voids": voids, "cash": cash, "reprints": reprints, "flags": _control_flags(discount, voids, cash)}
 
 
 _TH_MON = ("ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค.")
@@ -952,7 +968,9 @@ def _voice(name: str, sel: str, scrub) -> dict:
     avg, pavg = sm.get("avg_rating"), prev.get("avg_rating")
     return {"available": bool(sm.get("total") or reviews), "month": sel, "rating_avg": avg, "reviews_month": sm.get("total") or 0,
             "rating_avg_prev": pavg, "reviews_prev": prev.get("total"),
-            "rating_change": round(avg - pavg, 2) if avg is not None and pavg is not None else None, "latest": reviews}
+            "rating_change": round(avg - pavg, 2) if avg is not None and pavg is not None else None, "latest": reviews,
+            # phone B (2026-10-31): the month's reviews nobody has answered yet and the negative ones (the เสียงลูกค้า card's count)
+            "unreplied": int(sm.get("unreplied") or 0), "negative": int((sm.get("sentiment") or {}).get("neg") or 0)}
 
 
 def franchise_insight_data(branch_id: int, month: Optional[str] = None) -> dict:
@@ -1575,3 +1593,113 @@ def franchise_daily(request: Request, branch_id: Optional[int] = Query(None)):
     with get_db() as con:
         bid, _ = _resolve_branch(con, request, branch_id)
     return franchise_daily_data(bid)
+
+
+# ── phone B for the owner (owner 2026-10-31, "เริ่มเลย"): GET /api/franchise/overview ─────────────────────────────────────
+# ร้านของฉัน is overview cards first (เมื่อวาน · เดือนนี้ · เป้า · ต้นทุนอาหาร · ควรดู · การควบคุม · เมนู · เสียงลูกค้า · ติดต่อสำนักงานใหญ่),
+# each opening a detail screen (js/17-franchise.js). The cards need the month summary, the F2 insight and เรื่องที่ควรดู at once, so this
+# endpoint returns the three payloads the page used to fetch one by one (the same functions, run side by side) plus ONE list of findings
+# for the ควรดู card, built from those figures only (franchise_findings: no query of its own). /summary, /insight and /decide stay for the
+# Excel file, the morning push and head office.
+#   findings   [{kind, level 'fix'|'watch', title, val, chip, fact, more, go: {d: detail screen, el: element id on it}}], fix first.
+#              kinds and their thresholds (one place each):
+#                discount     the month's discount over the ceiling (controls.discount; > 2 x ceiling = fix)       -> การควบคุม
+#                voids        voided bills over T_CANCEL_WATCH % of bills (> T_CANCEL_FIX = fix)                    -> การควบคุม
+#                reprints     discounted bills printed more than once (the report's leak.reprinted), any = watch    -> การควบคุม
+#                cash         the controls' cash flag (a day short by T_CASH_DAY_FIX, or T_CASH_SHORT_DAYS_WATCH days) -> การควบคุม
+#                food_cost    food cost % of the month over the ONE target (rules.food_cost_target) = fix           -> ต้นทุนอาหาร
+#                costly       a high-value group eaten T_COSTLY_VS_AVG % or more per customer above เฉลี่ยทุกสาขา, with
+#                             plates over the average (decide.costly; at most COSTLY_SHOWN)                          -> ต้นทุนอาหาร
+#                below_normal finished days of the month at or under rules.BELOW_NORMAL_PCT against their normal
+#                             (rules.daily_baseline; fix when one is at or under BIG_BELOW_NORMAL_PCT)               -> เดือนนี้
+#                voice        reviews of the month not answered yet, or negative ones                               -> เสียงลูกค้า
+T_COSTLY_VS_AVG = 10.0
+COSTLY_SHOWN = 2
+
+
+def _pct1(v) -> str:
+    return "—" if v is None else f"{float(v):.1f}".rstrip("0").rstrip(".") + "%"
+
+
+def franchise_findings(summary: Optional[dict], insight: Optional[dict], decide: Optional[dict] = None) -> list:
+    """The ควรดู list of ONE branch from the payloads the page already has (see the block comment above). Pure: no query."""
+    from rules import BELOW_NORMAL_PCT, BIG_BELOW_NORMAL_PCT
+    S, I, D = summary or {}, insight or {}, decide or {}
+    out = []
+
+    def add(kind, level, title, val, fact, more, d, el):
+        out.append({"kind": kind, "level": level, "title": title, "val": val, "chip": "ต้องแก้" if level == "fix" else "ควรดู",
+                    "fact": fact, "more": more, "go": {"d": d, "el": el}})
+
+    C = I.get("controls") or {}
+    flags = {f.get("key"): f for f in ((C.get("flags") or {}).get("items") or [])}
+    dc = C.get("discount") or {}
+    if "discount" in flags:
+        over = dc.get("over_policy_baht")
+        add("discount", flags["discount"]["level"], "ส่วนลดเกินเพดาน", _pct1(dc.get("pct")),
+            f"เพดาน {_pct1(dc.get('policy_pct'))}" + (f" · เกิน ฿{over:,.0f}" if over else ""), flags["discount"]["text"], "controls", "frcCtlDisc")
+    v = C.get("voids") or {}
+    if "voids" in flags:
+        add("voids", flags["voids"]["level"], "บิลยกเลิกสูง", _pct1(v.get("rate_pct")),
+            f"{int(v.get('bills') or 0):,} ใบ · ฿{float(v.get('baht') or 0):,.0f}", flags["voids"]["text"], "controls", "frcCtlVoids")
+    rp = C.get("reprints") or {}
+    if rp.get("bills"):
+        add("reprints", "watch", "บิลพิมพ์ซ้ำที่มีส่วนลด", f"{int(rp['bills']):,} บิล", f"ส่วนลด ฿{float(rp.get('baht') or 0):,.0f}",
+            f"บิลที่มีส่วนลดและพิมพ์ซ้ำ {int(rp['bills']):,} บิล ส่วนลดรวม ฿{float(rp.get('baht') or 0):,.0f} ควรตรวจสอบเหตุผลการพิมพ์ซ้ำ",
+            "controls", "frcCtlReprint")
+    if "cash" in flags:
+        cs = C.get("cash") or {}
+        add("cash", flags["cash"]["level"], "เงินสดขาด", f"{int(cs.get('short_days') or 0):,} วัน",
+            f"รวม ฿{-(float(cs.get('short_total') or 0)):,.0f}", flags["cash"]["text"], "controls", "frcCtlCash")
+    g = S.get("gp") or {}
+    fc, tgt = g.get("food_cost_pct"), g.get("food_cost_target_pct")
+    if fc is not None and tgt is not None and fc > tgt:
+        add("food_cost", "fix", "ต้นทุนอาหารเกินเป้า", _pct1(fc), f"เป้า ≤{_pct1(tgt)} · เกิน {fc - tgt:.1f} จุด",
+            f"ต้นทุนอาหารร้อยละ {_pct_text(fc)} ของยอดขาย เกินเป้าร้อยละ {_pct_text(tgt)} อยู่ {fc - tgt:.1f} จุด", "cost", "frcGp")
+    groups = [x for x in ((D.get("costly") or {}).get("groups") or [])
+              if (x.get("vs_avg_pct") or 0) >= T_COSTLY_VS_AVG and (x.get("over_avg_plates") or 0) > 0]
+    for x in sorted(groups, key=lambda r: -(r.get("over_avg_plates") or 0))[:COSTLY_SHOWN]:
+        add("costly", "watch", f"{x['label']} ต่อลูกค้าสูง", f"+{x['vs_avg_pct']:.0f}%",
+            f"เกินเฉลี่ยทุกสาขา {x['over_avg_plates']:,.0f} จาน",
+            f"{x['label']} {x.get('per_head') or 0:.2f} จานต่อลูกค้า สูงกว่าเฉลี่ยทุกสาขา ({x.get('avg_per_head') or 0:.2f}) "
+            f"ร้อยละ {x['vs_avg_pct']:.0f} คิดเป็น {x['over_avg_plates']:,.0f} จาน", "cost", "frcCostly-" + str(x.get("slug") or ""))
+    days = [r for r in ((S.get("sales") or {}).get("daily") or [])
+            if r.get("vs_normal_pct") is not None and r["vs_normal_pct"] <= BELOW_NORMAL_PCT]
+    if days:
+        last = days[-1]
+        big = any(r["vs_normal_pct"] <= BIG_BELOW_NORMAL_PCT for r in days)
+        add("below_normal", "fix" if big else "watch", "วันที่ยอดต่ำกว่าปกติ", f"{len(days):,} วัน",
+            f"ล่าสุด {_th_date(last['date'])} {last['vs_normal_pct']:+.1f}%".replace("-", "−"),
+            f"เดือนนี้มี {len(days):,} วันที่ยอดขายต่ำกว่าปกติตั้งแต่ร้อยละ {-BELOW_NORMAL_PCT:.0f} ขึ้นไป "
+            f"ล่าสุดวันที่ {_th_date(last['date'])} ต่ำกว่าปกติร้อยละ {-last['vs_normal_pct']:.1f}", "month", "frcD-" + last["date"])
+    vo = I.get("voice") or {}
+    un, neg = int(vo.get("unreplied") or 0), int(vo.get("negative") or 0)
+    if un or neg:
+        add("voice", "watch", "รีวิวรอตอบ" if un else "รีวิวติ", f"{un or neg:,} รีวิว",
+            (f"ติ {neg:,} · " if neg and un else "") + (f"คะแนน {vo['rating_avg']:.1f}" if vo.get("rating_avg") is not None else "เดือนนี้"),
+            f"รีวิวของเดือนนี้ที่ยังไม่มีคำตอบ {un:,} รีวิว รีวิวติ {neg:,} รีวิว", "voice", "frcVoice")
+    out.sort(key=lambda f: 0 if f["level"] == "fix" else 1)
+    return out
+
+
+def franchise_overview_data(branch_id: int, month: Optional[str], kind: str = "month", pick: Optional[str] = None) -> dict:
+    """The three payloads of the page, side by side (each opens its own connection), and the findings built from them."""
+    from concurrent.futures import ThreadPoolExecutor
+    with ThreadPoolExecutor(max_workers=3) as ex:
+        fs = ex.submit(franchise_summary_data, branch_id, month)
+        fi = ex.submit(franchise_insight_data, branch_id, month)
+        fd = ex.submit(_safe, "decide", lambda: _plainj(franchise_decide_payload(branch_id, kind, pick)))
+        summary, insight, decide = fs.result(), fi.result(), fd.result()
+    return {"summary": summary, "insight": insight, "decide": decide,
+            "findings": franchise_findings(summary, insight, decide) if summary.get("available") else []}
+
+
+@router.get("/api/franchise/overview")
+def franchise_overview(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE), kind: str = Query("month"),
+                       pick: Optional[str] = Query(None, pattern=DATE_RE), branch_id: Optional[int] = Query(None)):
+    """ร้านของฉัน · the overview cards: summary + insight + เรื่องที่ควรดู + the ควรดู findings (same branch rules as the summary)."""
+    if kind not in DECIDE_KINDS:
+        raise HTTPException(400, "ช่วงเวลาต้องเป็นสัปดาห์ (week) หรือเดือน (month)")
+    with get_db() as con:
+        bid, _ = _resolve_branch(con, request, branch_id)
+    return franchise_overview_data(bid, month, kind, pick)

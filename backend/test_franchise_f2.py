@@ -116,7 +116,9 @@ def test_the_payload_has_the_agreed_shape(world, f2data):
         assert set(x) == {"type", "sales_share", "sales_share_prev", "tag_share", "tag_share_prev", "delivery"}
     assert {"hours", "peak_hour", "dayparts", "heat", "heat_basis", "heat_best"} <= set(d["peak"])
     c = d["controls"]
-    assert {"discount", "voids", "cash", "flags"} == set(c)
+    # phone B (2026-10-31): + reprints (the report's leak.reprinted, counts and baht only) for the การควบคุม card and its ควรดู finding
+    assert {"discount", "voids", "cash", "reprints", "flags"} == set(c)
+    assert {"bills", "baht", "available"} == set(c["reprints"])
     assert {"pct", "policy_pct", "baht", "over_policy_baht", "by_reason", "by_coupon"} == set(c["discount"])
     assert {"bills", "baht", "rate_pct", "by_reason"} == set(c["voids"])
     assert {"net", "short_total", "over_total", "short_days", "days_counted", "days"} == set(c["cash"])
