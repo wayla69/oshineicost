@@ -937,9 +937,11 @@ def void_open(con, name: str, month: str) -> Optional[dict]:
     src, canc, bills = W.void_counts(con, {bid: name}, s, e, W._detail_cover(con), month_ok=False)
     if src != "detail":
         return None
-    cb, _amt, ob, oamt = canc.get(bid, (0, 0, 0, 0))
+    cnt = canc.get(bid, (0, 0, 0, 0, 0))
+    cb, _amt, ob, oamt = cnt[:4]
+    zb = cnt[4] if len(cnt) > 4 else 0
     tot = bills.get(bid, 0) + cb
-    return {"voids_open": ob, "amount_open": round(oamt), "voids_reissued": cb - ob,
+    return {"voids_open": ob, "amount_open": round(oamt), "voids_reissued": cb - ob - zb, "voids_zero": zb,
             "rate_open_pct": round(ob / tot * 100, 2) if tot else None}
 
 

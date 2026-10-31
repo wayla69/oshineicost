@@ -288,21 +288,24 @@ def void_counts(con, ids, s, e, cover, month_ok, cls=None) -> tuple:
     covered = bool(cover) and (lo < s.isoformat() or (cover[1] and lo <= s.isoformat()))
     if covered:
         source = "detail"
-        from rules import classify_voids
+        from rules import VOID_ZERO, classify_voids
         if cls is None:
             cls = classify_voids(con, list(ids), s, e)
         acc: dict = {}
         for rid, bid, amt in con.execute(
                 f"SELECT rowid, branch_id, amount FROM pos_cancel_bill_detail WHERE branch_id IN ({ph}) "
                 f"AND date(sale_date) BETWEEN ? AND ?", list(ids) + [s.isoformat(), e.isoformat()]):
-            a = acc.setdefault(bid, [0, 0, 0, 0])
+            a = acc.setdefault(bid, [0, 0, 0, 0, 0])
             a[0] += 1; a[1] += amt or 0
-            if not cls.get(rid):
-                a[2] += 1; a[3] += amt or 0
+            c = cls.get(rid)
+            if not c:
+                a[2] += 1; a[3] += amt or 0           # not re-issued: the alert's basis
+            elif c == VOID_ZERO:
+                a[4] += 1                             # an empty bill: neither open nor re-issued (owner 2026-10-31)
         canc = {k: tuple(v) for k, v in acc.items()}
     elif month_ok:
         source = "month"
-        canc = {r[0]: (r[1] or 0, r[2] or 0, r[1] or 0, r[2] or 0) for r in con.execute(
+        canc = {r[0]: (r[1] or 0, r[2] or 0, r[1] or 0, r[2] or 0, 0) for r in con.execute(
             f"SELECT branch_id, SUM(bills), SUM(amount) FROM pos_cancel_bill WHERE period_month=? AND branch_id IN ({ph}) GROUP BY branch_id",
             [s.strftime("%Y-%m")] + list(ids))}
     else:
@@ -332,7 +335,9 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
     bills / amount / rate_pct stay every void; voids_open / amount_open / rate_open_pct / voids_reissued are the alert's basis."""
     source, canc, bills = void_counts(con, ids, s, e, cover, month_ok, cls)
     rows, few = [], 0
-    for bid, (cb, amt, ob, oamt) in canc.items():
+    for bid, cnt in canc.items():
+        cb, amt, ob, oamt = cnt[:4]
+        zb = cnt[4] if len(cnt) > 4 else 0
         tot = bills.get(bid, 0) + cb
         if tot <= 0 or cb <= 0:
             continue
@@ -341,7 +346,8 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
             continue
         rate, orate = cb / tot * 100, ob / tot * 100
         rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2), "level": void_level(orate),
-                     "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": round(orate, 2), "voids_reissued": cb - ob})
+                     "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": round(orate, 2), "voids_reissued": cb - ob - zb,
+                     "voids_zero": zb})
     rep = reprint_rows(con, s, e, where, params)
     n_bills = sum(bills.values()) + sum(v[0] for v in canc.values())
     out = {"range": [s.isoformat(), e.isoformat()], "label": range_label(s, e, th), "source": source, "bills": n_bills}

@@ -860,6 +860,9 @@ def upsell_pair(day) -> tuple:
 # so a void's class never depends on the window it is read in (a window is whole days). The matched receipt is `reissued_as`.
 VOID_REISSUE_MIN = 30
 VOID_REISSUE_AMOUNT_TOL = 0.20
+# Owner 2026-10-31 ("ตัด"): a void of ฿0 is an empty bill, not money that went missing - it can never match a new bill, so it
+# is its own class: left out of the alert count (voids_open) and of the re-issued count, shown in the details as บิลเปล่า.
+VOID_ZERO = "zero"
 
 
 def _ts(x):
@@ -920,6 +923,9 @@ def classify_voids(con, branch_ids, s, e) -> dict:
     keys = {b: [x["at"] for x in lst] for b, lst in bills.items()}
     win, used = _d.timedelta(minutes=VOID_REISSUE_MIN), set()
     for rid, bid, at, amt, tab, cust in vrows:
+        if abs(float(amt or 0)) < 0.005:
+            out[rid] = VOID_ZERO
+            continue
         day = str(at)[:10]
         t, lst = _ts(at), bills.get(bid)
         if not t or not lst:

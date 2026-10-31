@@ -2881,6 +2881,7 @@ function _msVoidHelp(j) {
     + `<p>ช่วง "เมื่อวาน" ต้องมีอย่างน้อย ${j.min_bills_day} บิลจึงสรุปผล</p>`
     + `<p><b>ออกใหม่แล้ว</b> = มีบิลใหม่ที่สาขาเดียวกันภายใน ${j.reissue_min || 30} นาทีหลังยกเลิก จำนวนลูกค้าเท่ากัน หรือยอดต่างไม่เกิน 20% (เป็นการแก้บิล) · `
     + `<b>ไม่ออกใหม่</b> = ไม่พบบิลใหม่ · อัตราและการเตือนนับเฉพาะ <b>ไม่ออกใหม่</b> รายละเอียดแสดงทุกบิล</p>`
+    + `<p><b>บิลเปล่า</b> = บิลยกเลิกยอด ฿0 ไม่ใช่เงินที่หาย จึงไม่นับในการเตือนและไม่นับเป็นออกใหม่ แสดงในรายละเอียดเท่านั้น</p>`
     + `<p><b>บิลพิมพ์ซ้ำ</b> = บิลที่มีส่วนลดและพิมพ์ใบเสร็จมากกว่า 1 ครั้ง</p>`
     + `<p>บิลยกเลิกไม่มีรายการอาหาร เพราะระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p>`);
 }
@@ -2950,9 +2951,10 @@ function msVoidsL2Html(j) {
   const reasons = (j.reasons || []).length ? `<div class="ms-vd-reasons" role="list">` + j.reasons.map(r =>
     `<span class="ms-vd-reason" role="listitem">${esc(r.reason)} <b>${fmtN(r.n)}</b></span>`).join('') + '</div>' : '';
   const cls = _msVoidCls(), all = j.bills || [], CAP = 20;
-  const bills = all.filter(b => cls === 'all' || (cls === 'open' ? !b.reissued_as : !!b.reissued_as));
-  const nOpen = all.filter(b => !b.reissued_as).length;
-  const filt = all.length ? `<div class="ms-vw-chips ms-vd-cls-chips" role="group" aria-label="ประเภทบิลยกเลิก">` + [['all', 'ทั้งหมด', all.length], ['open', 'ไม่ออกใหม่', nOpen], ['re', 'ออกใหม่แล้ว', all.length - nOpen]].map(([k, t, n]) =>
+  // owner 2026-10-31 ("ตัด"): a ฿0 void is บิลเปล่า - its own class, not in the alert, listed under ทั้งหมด and its own chip
+  const bills = all.filter(b => cls === 'all' || (cls === 'open' ? !b.reissued_as && !b.zero : cls === 'zero' ? !!b.zero : !!b.reissued_as));
+  const nOpen = all.filter(b => !b.reissued_as && !b.zero).length, nZero = all.filter(b => b.zero).length;
+  const filt = all.length ? `<div class="ms-vw-chips ms-vd-cls-chips" role="group" aria-label="ประเภทบิลยกเลิก">` + [['all', 'ทั้งหมด', all.length], ['open', 'ไม่ออกใหม่', nOpen], ...(nZero ? [['zero', 'บิลเปล่า', nZero]] : []), ['re', 'ออกใหม่แล้ว', all.length - nOpen]].map(([k, t, n]) =>
     `<button type="button" class="ms-vw-chip" aria-pressed="${k === cls}" onclick="msVoidsCls('${k}')">${t} ${fmtN(n)}</button>`).join('') + '</div>' : '';
   let lastDay = '', billsHtml = '';
   bills.forEach((b, i) => {
@@ -2963,8 +2965,8 @@ function msVoidsL2Html(j) {
       billsHtml += `<div class="ms-vd-day"${attr}>${_msDayTh(b.at)} <span>${fmtN(same.length)} บิล · ฿${fmtN(same.reduce((s, x) => s + (x.amount || 0), 0))}</span></div>`;
     }
     const k = all.indexOf(b);
-    billsHtml += uiRow2({ cls: 'ms-vd-bill', tone: b.reissued_as ? '' : 'bad', title: `${_msHm(b.at)} · ${esc(b.receipt || 'ไม่มีเลขที่บิล')}`, val: '฿' + fmtN(b.amount),
-      chips: b.reissued_as ? `<span class="ms-vd-cls">ออกใหม่แล้ว → ${esc(b.reissued_no || b.reissued_as)}</span>` : '<span class="ms-vd-cls is-open">ไม่ออกใหม่</span>',
+    billsHtml += uiRow2({ cls: 'ms-vd-bill', tone: b.reissued_as || b.zero ? '' : 'bad', title: `${_msHm(b.at)} · ${esc(b.receipt || 'ไม่มีเลขที่บิล')}`, val: '฿' + fmtN(b.amount),
+      chips: b.zero ? '<span class="ms-vd-cls">บิลเปล่า ฿0</span>' : b.reissued_as ? `<span class="ms-vd-cls">ออกใหม่แล้ว → ${esc(b.reissued_no || b.reissued_as)}</span>` : '<span class="ms-vd-cls is-open">ไม่ออกใหม่</span>',
       fact: esc([b.reason, b.user].filter(Boolean).join(' · ')) + (b.discount > 0 ? ` · มีส่วนลด ฿${fmtN(b.discount)}` : ''),
       onGo: `msVoidBill('b',${k})`, attrs: attr });
   });
@@ -2995,7 +2997,7 @@ async function msVoidBill(kind, i) {
   if (kind === 'b') {
     body.innerHTML = `<div class="ph-rs">` + kv([['เลขที่บิล', esc(b.receipt || 'ไม่มีเลขที่บิล')], ['เวลา', `${_msDayTh(b.at)} ${_msHm(b.at)}`], ['ยอดบิล', '฿' + fmtN(b.amount)],
       ['เหตุผล', esc(b.reason)], ['ผู้ยกเลิก', esc(b.user)], ['ส่วนลด', b.discount > 0 ? '฿' + fmtN(b.discount) : ''],
-      ['บิลใหม่', b.reissued_as ? 'ออกใหม่แล้ว → ' + esc(b.reissued_no || b.reissued_as) : '<b style="color:var(--bad-ink)">ไม่ออกใหม่</b>']])
+      ['บิลใหม่', b.zero ? 'บิลเปล่า ฿0 · ไม่นับในการเตือน' : b.reissued_as ? 'ออกใหม่แล้ว → ' + esc(b.reissued_no || b.reissued_as) : '<b style="color:var(--bad-ink)">ไม่ออกใหม่</b>']])
       + `<p class="ms-vd-note">บิลที่ยกเลิกไม่มีรายการอาหาร ระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p></div>`;
     return;
   }

@@ -426,7 +426,7 @@ const MGT_I18N = {
     s4pre:'5. Revenue Trend (last 8 ', s4d:'days', s4w:'weeks', s4m:'months', s4post:')',
     s5:'6. Branch League Table', s6:'7. Money-Leak Radar', s6b:'7.1 Voided / Reprinted Bills by Branch',
     vdChain:'All branches', vdOpen:'voided, not re-issued', vdAll:'all voids', vdReprints:'reprints', vdBills:'Voided bills', vdReprintBills:'Discounted bills printed more than once',
-    vdReissued:'re-issued', vdNotReissued:'not re-issued', vdDisc:'discount', vdPrints:'printed', vdTimes:'times', vdMore:'… {n} more bills (all in the Excel file)',
+    vdReissued:'re-issued', vdNotReissued:'not re-issued', vdZero:'empty bill (฿0)', vdDisc:'discount', vdPrints:'printed', vdTimes:'times', vdMore:'… {n} more bills (all in the Excel file)',
     vdRest:'{n} branches with no void and no reprint ({b} bills)', vdNa:'No voided-bill data for this period.', vdNoBill:'no receipt no.',
     vdFix:'act', vdWatch:'watch', vdOk:'normal', vdNoLines:'Per-bill list not kept for this period (monthly count only).',
     vdRule:'Rate = voids not re-issued ÷ (bills + voids). Act from {fix}%, watch from {watch}%. Re-issued = a new bill at the branch within {min} min with the same customers or an amount within ±20 %. Reprint = a discounted bill printed more than once.', s7:'8. Menu Cost / Head (by dish)',
@@ -561,7 +561,7 @@ const MGT_I18N = {
     s4pre:'5. แนวโน้มยอดขาย (8 ', s4d:'วันล่าสุด', s4w:'สัปดาห์ล่าสุด', s4m:'เดือนล่าสุด', s4post:')',
     s5:'6. ตารางจัดอันดับสาขา', s6:'7. เรดาร์จุดรั่วไหล', s6b:'7.1 บิลยกเลิก / พิมพ์ซ้ำ รายสาขา',
     vdChain:'ทุกสาขา', vdOpen:'ยกเลิกแล้วไม่ออกใหม่', vdAll:'รวมยกเลิกทั้งหมด', vdReprints:'พิมพ์ซ้ำ', vdBills:'บิลยกเลิก', vdReprintBills:'บิลที่มีส่วนลดและพิมพ์มากกว่า 1 ครั้ง',
-    vdReissued:'ออกใหม่แล้ว', vdNotReissued:'ไม่ออกใหม่', vdDisc:'ส่วนลด', vdPrints:'พิมพ์', vdTimes:'ครั้ง', vdMore:'… อีก {n} บิล (ครบทุกบิลในไฟล์ Excel)',
+    vdReissued:'ออกใหม่แล้ว', vdNotReissued:'ไม่ออกใหม่', vdZero:'บิลเปล่า (฿0)', vdDisc:'ส่วนลด', vdPrints:'พิมพ์', vdTimes:'ครั้ง', vdMore:'… อีก {n} บิล (ครบทุกบิลในไฟล์ Excel)',
     vdRest:'อีก {n} สาขาไม่มีบิลยกเลิกและบิลพิมพ์ซ้ำ ({b} บิล)', vdNa:'ไม่มีข้อมูลบิลยกเลิกของช่วงนี้', vdNoBill:'ไม่มีเลขที่บิล',
     vdFix:'ต้องแก้', vdWatch:'ต้องดู', vdOk:'ปกติ', vdNoLines:'ช่วงนี้ไม่มีรายการรายบิล (มีเฉพาะยอดรายเดือน)',
     vdRule:'อัตรา = บิลยกเลิกที่ไม่ออกใหม่ ÷ (บิลขาย + บิลยกเลิก) · ต้องแก้ตั้งแต่ {fix}% ต้องดูตั้งแต่ {watch}% · ออกใหม่แล้ว = มีบิลใหม่ที่สาขาเดียวกันภายใน {min} นาที จำนวนลูกค้าเท่ากัน หรือยอดต่างไม่เกิน 20% · พิมพ์ซ้ำ = บิลที่มีส่วนลดและพิมพ์มากกว่า 1 ครั้ง', s7:'8. ต้นทุนเมนูต่อหัว (รายเมนู)',
@@ -1488,7 +1488,7 @@ function renderMgtReport(j, jM, jF) {
       const vRows = (b.bills || []).map(x => `<tr class="border-b border-slate-100"><td class="py-1 pr-2 whitespace-nowrap">${dt(x.at)}</td>`
         + `<td class="py-1 pr-2">${esc(x.receipt || T.vdNoBill)}</td><td class="py-1 pr-2 text-right tabular-nums">${baht(x.amount)}</td>`
         + `<td class="py-1 pr-2">${esc(x.reason)}${x.discount > 0 ? ` · ${T.vdDisc} ${baht(x.discount)}` : ''}</td><td class="py-1 pr-2">${esc(x.user)}</td>`
-        + `<td class="py-1 pr-2" style="color:${x.reissued_as ? 'var(--text-secondary)' : 'var(--bad-ink)'};font-weight:600">${x.reissued_as ? `${T.vdReissued} → ${esc(x.reissued_no || x.reissued_as)}` : T.vdNotReissued}</td></tr>`).join('');
+        + `<td class="py-1 pr-2" style="color:${x.reissued_as || x.zero ? 'var(--text-secondary)' : 'var(--bad-ink)'};font-weight:600">${x.zero ? T.vdZero : x.reissued_as ? `${T.vdReissued} → ${esc(x.reissued_no || x.reissued_as)}` : T.vdNotReissued}</td></tr>`).join('');
       const rRows = (b.reprint_bills || []).map(x => `<tr class="border-b border-slate-100"><td class="py-1 pr-2 whitespace-nowrap">${dt(x.at)}</td>`
         + `<td class="py-1 pr-2">${esc(x.no || x.receipt)}</td><td class="py-1 pr-2 text-right tabular-nums">${baht(x.total)}</td>`
         + `<td class="py-1 pr-2">${T.vdPrints} ${num(x.prints)} ${T.vdTimes} · ${T.vdDisc} ${baht(x.discount)}</td><td class="py-1 pr-2">${esc(x.cashier)}</td><td></td></tr>`).join('');
