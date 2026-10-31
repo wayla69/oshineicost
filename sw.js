@@ -163,7 +163,7 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch (err) { d = { title: 'Oshinei', body: e.data ? e.data.text() : '' }; }
   const title = d.title || 'Oshinei';
   e.waitUntil(self.registration.showNotification(title, {
-    body: d.body || '', icon: '/pwa/icon-192.png', badge: '/pwa/icon-192.png',
+    body: d.body || '', icon: '/pwa/icon-192.png', badge: '/pwa/badge-96.png',   // the badge must be a white-on-transparent silhouette: Android paints a colour icon as a white square
     tag: d.tag || 'oshinei', renotify: true, data: { url: d.url || '/' }, lang: 'th',
   }));
 });
