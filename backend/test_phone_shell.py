@@ -69,6 +69,9 @@ def test_the_phone_shell_adds_no_route_and_no_endpoint_of_its_own():
     # data-trust lines under it read the Daily Brief's branch scorecard (an existing route). Nothing else is fetched.
     assert sorted(set(re.findall(r"api\(`\$\{API\}(/api/[a-z/-]+)", SHELL))) == ["/api/bom-center/todo", "/api/home/branch-scorecard", "/api/home/brief"]
     assert "fetch(" not in SHELL
+    # 2026-10-31: a department's own หน้าแรก reads its hero from the badges answer the shell already has (GET /api/nav/badges `hero`,
+    # js/18-launcher.js _NB.hero) - deliberately no call of its own (test_dept_home.py)
+    assert "_NB.hero" in SHELL and "function _phDeptHome(" in SHELL
     # a tile opens through the existing functions
     assert "deptOpenPage(p)" in SHELL and "supplyGo({ tab: e.tab, pane: e.pane })" in SHELL and "_shmOpen(g.first.go)" in SHELL
     # the shell loads js/18-launcher.js alone and the other slices on the first page, so the phone-first boot stays light
@@ -138,7 +141,7 @@ def test_the_bottom_navigation_per_role():
     # a page the login may not open is left out of its bar (a role with three entries shows three)
     assert [i["label"] for i in items("salessupport", "p => p.pane !== 'claims'")] == ["หน้าแรก", "คิวใบสั่งซื้อ", "ใบตัดเบิกสาขา", "ฉัน"]
     # หน้าแรก of Sales Support and the analyst is หน้างาน, of marketing สรุปประจำวัน; the others open the launcher
-    assert items("salessupport")[0]["tab"] == "supplyhome" and items("analyst")[0]["tab"] == "supplyhome" and items("marketing")[0]["tab"] == "home"
+    assert items("salessupport")[0]["tab"] == "supplyhome" and items("analyst")[0]["tab"] == "supplyhome" and items("marketing")[0]["tab"] is None   # 2026-10-31: its own department home
     assert items("management")[0]["tab"] is None and items("warehouse")[0]["tab"] is None
 
 

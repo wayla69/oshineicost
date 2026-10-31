@@ -16,7 +16,9 @@ Nothing heavy: todo.build is COUNT/EXISTS on bc_* tables (no report query). The 
 A login pinned to a branch is scoped to that branch by todo.build; a role that cannot read หน้างาน gets an empty `pages`.
 """
 from . import todo as _td
-from .clock import now_bkk
+from datetime import datetime, time
+
+from .clock import BKK, now_bkk
 
 # the owner words of the role in `owner_th` (js/01-core.js _SHM_ROLE_OWNERS - keep the two in step)
 ROLE_OWNERS = {
@@ -75,9 +77,18 @@ def build(con, role, modules, scoped_branch=None, today=None, now=None) -> dict:
     except (PermissionError, ValueError):
         d = None                                              # a pinned account whose branch is gone: no badges, no error
     total = 0
-    if d:
-        for it in mine_open(d, role, modules):
-            k = page_key(it.get("go"))
-            pages[k] = pages.get(k, 0) + 1
-            total += 1
-    return {"pages": pages, "total": total, "at": (now or now_bkk()).isoformat(timespec="seconds")}
+    mine = mine_open(d, role, modules) if d else []
+    for it in mine:
+        k = page_key(it.get("go"))
+        pages[k] = pages.get(k, 0) + 1
+        total += 1
+    out = {"pages": pages, "total": total, "at": (now or now_bkk()).isoformat(timespec="seconds")}
+    # 2026-10-31 (phone review item 4): the department hero of หน้าแรก, read from the SAME list (dept_hero.py); only the HQ departments
+    # without the chain sales hero get one - management, operation, branch and franchise answers are unchanged
+    from . import dept_hero as _dh
+    if now is None and today is not None:                    # the clock todo.build read: 08:00 of `today` (tests)
+        now = datetime.combine(today, time(8, 0), tzinfo=BKK)
+    hero = _dh.build(con, d, role, modules, mine, now=now) if d else None
+    if hero:
+        out["hero"] = hero
+    return out

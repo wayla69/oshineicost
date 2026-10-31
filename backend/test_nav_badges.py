@@ -162,7 +162,9 @@ def test_every_role_may_read_it_and_none_is_refused(client, auth_on, pinned):
         r = c.get("/api/nav/badges")
         assert r.status_code == 200, (role, r.status_code, r.text[:200])
         d = r.json()
-        assert set(d) == {"pages", "total", "at"} and isinstance(d["pages"], dict), role
+        # 2026-10-31: the HQ departments without the chain sales hero also get `hero` (test_dept_home.py pins it)
+        want = {"pages", "total", "at"} | ({"hero"} if role in ("warehouse", "salessupport", "accounting", "analyst", "innovation", "marketing") else set())
+        assert set(d) == want and isinstance(d["pages"], dict), (role, set(d))
         assert d["total"] == sum(d["pages"].values()), role
         assert all(isinstance(k, str) and isinstance(n, int) and n >= 1 for k, n in d["pages"].items()), role
         assert auth.path_allowed("GET", "/api/nav/badges", auth.modules_for_role(role)), role

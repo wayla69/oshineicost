@@ -325,7 +325,9 @@ function lnchTasksAll() { _deptFocus = null; shmFilterSet(_lnchFilter()); supply
 const _NB_EVERY_MS = 5 * 60 * 1000, _NB_MIN_GAP_MS = 45 * 1000, _NB_KEEP_MS = 15 * 60 * 1000;
 // PR-F4: `messages` of the answer = the unread franchise message threads on a page ({franchise: n} the owner, {fmsg: n} head office). They
 // light the page's badge (and so its department) like a task, but never the "งานของฉัน" total: a message is not a task.
-const _NB = { pages: /** @type {Record<string, number>} */ ({}), msgs: /** @type {Record<string, number>} */ ({}), at: 0, tried: 0, busy: false, started: false };
+// 2026-10-31 (phone review item 4): `hero` of the answer = the department hero of the phone's หน้าแรก (bom_center/dept_hero.py), read from the
+// same open list; null for management, operation, branch and franchise (js/09c-mobile.js phDeptHeroApply draws it).
+const _NB = { pages: /** @type {Record<string, number>} */ ({}), msgs: /** @type {Record<string, number>} */ ({}), hero: /** @type {any} */ (null), at: 0, tried: 0, busy: false, started: false };
 function _navPageSpec(p) { return 'p:' + p.tab + (p.pane ? ':' + p.pane : ''); }
 function _navKeyCount(k) { return (_NB.pages[k] || 0) + (_NB.msgs[k] || 0); }
 function navPageCount(p) { return _navKeyCount(p.tab + (p.pane ? ':' + p.pane : '')); }
@@ -367,10 +369,12 @@ async function navBadgesRefresh(force) {
     const j = await getJSON('/api/nav/badges');                    // throws on a non-2xx answer
     if (!j || !j.pages || typeof j.pages !== 'object') throw new Error('shape');
     _NB.pages = j.pages; _NB.msgs = (j.messages && typeof j.messages === 'object') ? j.messages : {}; _NB.at = Date.now();
+    _NB.hero = (j.hero && typeof j.hero === 'object') ? j.hero : null;
   } catch (e) {
-    if (Date.now() - _NB.at > _NB_KEEP_MS) { _NB.pages = {}; _NB.msgs = {}; }     // no badges rather than an old number; nothing is shown about the failure
+    if (Date.now() - _NB.at > _NB_KEEP_MS) { _NB.pages = {}; _NB.msgs = {}; _NB.hero = null; }     // no badges rather than an old number; nothing is shown about the failure
   } finally { _NB.busy = false; }
   navBadgesApply();
+  if (typeof phDeptHeroApply === 'function') phDeptHeroApply();     // the phone's department hero and tiles (js/09c-mobile.js)
 }
 function navBadgesStart() {
   if (_NB.started) return;

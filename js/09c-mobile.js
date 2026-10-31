@@ -169,7 +169,8 @@ const _PH_BARS = {
   marketing: [{ label: 'ลูกค้าและบุฟเฟ่ต์', tab: 'buffetperf', icon: 'users' }, { label: 'วิเคราะห์เมนู', tab: 'menu', icon: 'book' }, { label: 'เสียงลูกค้า', tab: 'feedback', icon: 'msg' }],
   innovation: [{ label: 'ทะเบียนวัตถุดิบ', tab: 'bomcenter', pane: 'ing', icon: 'db' }],
 };
-const _PH_HOME_TAB = { salessupport: 'supplyhome', analyst: 'supplyhome', marketing: 'home' };
+// 2026-10-31: marketing's หน้าแรก is its own department home (เสียงลูกค้า), no longer the chain's สรุปประจำวัน
+const _PH_HOME_TAB = { salessupport: 'supplyhome', analyst: 'supplyhome' };
 function _phRole() { return (window.AUTH && window.AUTH.enabled && window.AUTH.role) || 'management'; }
 // may this login open the page? the launcher's own rule when its slice is loaded (deptPageAllowed: the tab, stock mode, the supply item's roles)
 function _phPageOk(p) {
@@ -246,7 +247,7 @@ function phRenderHome() {
   host.innerHTML = kind === 'branch' ? _phBranchHome() : _phCentreHome();
   try { navBadgesApply(); navBadgesRefresh(false); } catch (e) { /* PR-D4: no launcher slice, no counts */ }
   phLoadTasks();
-  if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
+  if (kind === 'centre' && hasModule('sales.overview') && !_phDeptHeroKey()) phLoadYesterday();
   if (kind === 'centre' && hasModule('report.management')) phOvLoad();     // phone B: the overview cards
 }
 // U2: the header shows the name a person recognises (display name, else the Thai role label), never the login ID
@@ -254,8 +255,8 @@ function _phUserId() { const a = window.AUTH || {}; return a.enabled ? (typeof l
 // PR-MA: ค้นหา is the magnifier of the header (top right, beside the avatar); the avatar opens ฉัน
 function _phInitial() { return (_phUserId() || 'ฉ').trim().charAt(0).toUpperCase() || 'ฉ'; }
 // phone B (owner 2026-10-30): the hero sits under the one header (#phTop: the title, the chips, ฉัน) - the date and the magnifier, then the figure
-function _phHero(inner) {
-  return `<section class="ph-hero" aria-label="เมื่อวาน"><div class="ph-hero-top"><span class="ph-hero-date">${esc(lnchDateLabel())}</span>`
+function _phHero(inner, label) {
+  return `<section class="ph-hero" aria-label="${esc(label || 'เมื่อวาน')}"><div class="ph-hero-top"><span class="ph-hero-date">${esc(lnchDateLabel())}</span>`
     + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button></div>${inner}</section>`;
 }
 // the phone home grid: the person's own department(s) (js/18-launcher.js deptHome; management sees all)
@@ -265,6 +266,8 @@ function _phDeptTiles(rows) {
       + `<span class="ph-badge">${_deptSvg(d.icon, 26)}</span><span class="ph-dept-n">${esc(d.label)}</span><span class="ph-cnt" data-dept="${d.key}" hidden></span></a>`; }).join('');
 }
 function _phCentreHome() {
+  const dk = _phDeptHeroKey();
+  if (dk) return _phDeptHome(dk);                     // 2026-10-31: a department of its own work, not the chain's sales
   const vis = deptHome();
   // phone B: for the owner the hero IS the full-width เมื่อวาน card of the overview - a tap opens its detail (the day + every branch)
   const yest = hasModule('sales.overview')
@@ -282,6 +285,95 @@ function _phCentreHome() {
       : `<section class="ph-body" aria-labelledby="phDeptH"><h2 class="ph-sec" id="phDeptH">${_deptRole() === 'management' ? 'แผนก' : 'แผนกของฉัน'}</h2>`
         + (vis.length ? `<div class="ph-depts">${_phDeptTiles(vis)}</div>` : '<p class="ph-empty">บัญชีนี้ยังไม่มีหน้าที่เปิดได้</p>')
         + '</section>');
+}
+// ── หน้าแรก of a department (owner 2026-10-31, docs/UI_REVIEW_MOBILE_2026-10-31.md items 4 + 6) ───────────────────────────────────
+// Every HQ department answers "วันนี้ต้องทำอะไร" for ITSELF: the hero is its own headline number + one line + the one page to open
+// (`hero` of GET /api/nav/badges, bom_center/dept_hero.py - the same open list as the red badges and หน้างาน). The chain sales hero stays
+// for report.management and operation only; branch and franchise keep their own screens. Under the hero: งานของฉัน, then the department's
+// pages - the ones with work first, each with ONE count or status (red overdue · amber waiting · green nothing open); a page with no status
+// folds under "หน้าอื่น (n)". The other departments the role may open come last, and not at all for a role with only its own.
+const _PH_DEPT_HERO = { warehouse: 'wh', salessupport: 'ss', accounting: 'acc', analyst: 'ana', innovation: 'kit', marketing: 'mkt' };
+function _phDeptHeroKey() {
+  if (typeof hasModule === 'function' && hasModule('report.management')) return '';
+  const k = _PH_DEPT_HERO[_phRole()] || '';
+  return k && typeof DEPARTMENTS === 'object' && DEPARTMENTS.some(d => d.key === k) ? k : '';
+}
+function _phDeptHome(dk) {
+  const d = DEPARTMENTS.find(x => x.key === dk);
+  const others = deptVisible().filter(r => !r.home);
+  return _phHero(`<div id="phDh">${_phDhHtml(d)}</div>`, `งานของ${d.label}วันนี้`)
+    + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
+    + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
+    + `<section class="ph-body" id="phDt" aria-labelledby="phDeptH" style="--dk:var(--dept-${d.hue}-ink)">${_phDtHtml(d)}</section>`
+    + (others.length ? `<section class="ph-body ph-others" aria-labelledby="phOthH"><h2 class="ph-sec" id="phOthH">แผนกอื่น</h2><div class="ph-depts">${_phDeptTiles(others)}</div></section>` : '');
+}
+// the page a hero opens: one this login may open, else nothing (the button then opens งานของฉัน); its name is _phPageLabel's (ฉัน, below)
+function _phGoOk(go) {
+  return !!(go && go.tab && tabAllowed(go.tab) && (!go.pane || _phPageOk({ tab: go.tab, pane: go.pane })));
+}
+function _phDhHtml(d) {
+  const h = typeof _NB === 'object' ? _NB.hero : null;
+  if (!h || h.dept !== d.key) {
+    return `<div class="ph-yest ph-dh" aria-busy="true"><span class="ph-yest-l">${esc(d.label)}</span><span class="ph-yest-v">…</span></div>`;
+  }
+  const zero = h.n == null;
+  const go = _phGoOk(h.go) ? h.go : null, pl = go ? _phPageLabel(go.tab, go.pane).label : '';
+  const act = go ? `เปิด${pl || 'หน้างาน'}` : 'ดูงานของฉัน';
+  const value = zero ? '<span class="ph-dh-ok">ไม่มีงานค้าง</span>'
+    : `${fmtN(h.n)}${h.unit ? ` <small>${esc(h.unit)}</small>` : ''}${h.tone === 'bad' ? ' <span class="ph-cz ph-cz-bad">เร่งด่วน</span>' : ''}`;
+  const lbl = zero ? d.label : `${d.label} · ${h.label}`;
+  return `<button type="button" class="ph-yest ph-dh" id="phDhBtn" data-tone="${esc(h.tone || '')}" onclick="phDeptHeroGo()" aria-label="${esc(lbl)} ${esc(zero ? 'ไม่มีงานค้าง' : fmtN(h.n) + ' ' + (h.unit || ''))} ${esc(act)}">`
+    + `<span class="ph-yest-l">${esc(lbl)}</span><span class="ph-yest-v">${value}</span>`
+    + (h.line ? `<span class="ph-dh-line">${esc(h.line)}</span>` : '')
+    + `<span class="ph-dh-act">${esc(act)} ›</span></button>`;
+}
+function phDeptHeroGo() {
+  const h = typeof _NB === 'object' ? _NB.hero : null, go = h && _phGoOk(h.go) ? h.go : null;
+  if (!go) { phOpenTasks(); return; }
+  _deptCur = null; _deptFocus = null;
+  phOpenPage(() => (go.pane ? _shmOpen(go) : switchTab(go.tab)));
+}
+// a page's status for its tile: {n, tone} for open work (the badge count) or a figure waiting on another department ({info}), {tone:'good'}
+// where the department's duties are all done, null = no status (folded under หน้าอื่น)
+function _phTileState(h, k) {
+  if (!h) return null;
+  const p = (h.pages || {})[k];
+  if (p && p.n) return { n: p.n, tone: p.tone === 'bad' ? 'bad' : 'watch' };
+  const i = (h.info || {})[k];
+  if (i) return { n: i, tone: 'watch', info: true };
+  return (h.known || []).includes(k) ? { tone: 'good' } : null;
+}
+function _phDtHtml(d) {
+  const row = deptVisible().find(r => r.dept.key === d.key);
+  const pages = row ? row.pages : [];
+  const h = typeof _NB === 'object' && _NB.hero && _NB.hero.dept === d.key ? _NB.hero : null;
+  const tiles = pages.map(x => ({ x, st: _phTileState(h, x.p.tab + (x.p.pane ? ':' + x.p.pane : '')) }));
+  const rank = t => !t.st ? 4 : t.st.tone === 'bad' ? 0 : t.st.n && !t.st.info ? 1 : t.st.n ? 2 : 3;
+  tiles.sort((a, b) => (rank(a) - rank(b)) || (((b.st && b.st.n) || 0) - ((a.st && a.st.n) || 0)) || (a.x.i - b.x.i));
+  const tile = t => {
+    const st = t.st;
+    const chip = !st ? '' : st.n ? `<b class="ph-ts ph-ts-${st.tone}" aria-label="${st.info ? 'รอ' : 'ค้าง'} ${fmtN(st.n)}">${fmtN(st.n)}</b>`
+      : '<b class="ph-ts ph-ts-good" role="img" aria-label="เรียบร้อย">✓</b>';     // a check, not a word: the page name keeps the room
+    return `<a href="#" class="ph-ptile" onclick="phOpenDeptPage('${d.key}',${t.x.i});return false">${_deptSvg(t.x.p.icon, 28)}<span>${esc(t.x.p.label)}</span>${chip}</a>`;
+  };
+  const head = `<h2 class="ph-sec" id="phDeptH">${esc(d.label)}</h2>`;
+  // no answer yet (or none for this login): every page as before, no status and nothing folded
+  if (!h) return head + `<div class="ph-ptiles">${tiles.map(tile).join('')}</div>`;
+  const shown = tiles.filter(t => t.st), rest = tiles.filter(t => !t.st);
+  return head + (shown.length ? `<div class="ph-ptiles">${shown.map(tile).join('')}</div>` : '')
+    + (rest.length ? `<details class="ph-more"${shown.length ? '' : ' open'}><summary>หน้าอื่น (${fmtN(rest.length)})</summary><div class="ph-ptiles">${rest.map(tile).join('')}</div></details>` : '');
+}
+// redraw the hero and the tiles in place when the badges answer arrives (js/18-launcher.js navBadgesRefresh); the fold keeps its state
+function phDeptHeroApply() {
+  const dk = _phView === 'home' && phOn() && _phKind() === 'centre' ? _phDeptHeroKey() : '';
+  const hb = document.getElementById('phDh'), dt = document.getElementById('phDt');
+  if (!dk || !hb || !dt) return;
+  const d = DEPARTMENTS.find(x => x.key === dk);
+  hb.innerHTML = _phDhHtml(d);
+  const fold = dt.querySelector('details.ph-more'), wasOpen = fold ? fold.open : null;
+  dt.innerHTML = _phDtHtml(d);
+  const again = dt.querySelector('details.ph-more');
+  if (again && wasOpen != null) again.open = wasOpen;
 }
 function _phSubHead(name, sub, hue, icon) {
   return `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${hue}-ink);--dt:var(--dept-${hue}-tint);--df:var(--dept-${hue}-f);--df2:var(--dept-${hue}-f2)"><span class="ph-badge ph-badge-sm">${_deptSvg(icon, 24)}</span>`

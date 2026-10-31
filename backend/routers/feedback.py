@@ -500,6 +500,23 @@ def _needs_reply(r) -> bool:
         (r.get("sentiment") == "neg" or (r.get("rating") is not None and float(r["rating"]) <= 3))
 
 
+def reply_counts(con) -> tuple:
+    """(waiting, past SLA) over every voice - the queue of เสียงลูกค้า by _needs_reply / _sla_breached (the phone hero of การตลาด, routers/nav.py).
+    Only the unanswered rows with an external id are read: the rule needs no other row."""
+    _ensure(con)
+    today = _thai_today()
+    cols = ("kind", "contact", "external_id", "reply_text", "reply_status", "sentiment", "rating", "rated_at")
+    rows = con.execute(f"SELECT {', '.join(cols)} FROM customer_feedback"
+                       " WHERE external_id IS NOT NULL AND COALESCE(reply_text,'')='' AND COALESCE(reply_status,'') NOT IN ('pending','sent')").fetchall()
+    n = late = 0
+    for t in rows:
+        r = dict(zip(cols, tuple(t)))
+        if _needs_reply(r):
+            n += 1
+            late += _sla_breached(r, today)
+    return n, late
+
+
 def _reply_channel(row) -> str:
     """Where a queued reply can go: google (review resource name), facebook (a
     comment id), tiktok (video/comment ids), manual (a Facebook recommendation,

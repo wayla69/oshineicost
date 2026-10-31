@@ -76,11 +76,11 @@ Phone B (owner 2026-10-30): a management login has ONE bottom bar (`#phNav`) on 
 | analyst | หน้างาน | ต้นทุนต่อจาน (badge) | ราคารายเดือน (badge) | ไฟล์ราคา (badge) | ฉัน |
 | accounting | launcher | ใบสรุปตัดเบิก (badge) | P&L รายสาขา | GP รายสาขา | ฉัน |
 | operation | launcher | ใบตัดเบิกสาขา (badge) | ผลต่างตัดเบิกรายวัน (badge) | ส่วนลด | ฉัน |
-| marketing | สรุปประจำวัน | ลูกค้าและบุฟเฟ่ต์ | วิเคราะห์เมนู | เสียงลูกค้า | ฉัน |
+| marketing | launcher (department home) | ลูกค้าและบุฟเฟ่ต์ | วิเคราะห์เมนู | เสียงลูกค้า | ฉัน |
 | innovation | launcher | ทะเบียนวัตถุดิบ | — | — | ฉัน |
 | branch / franchise | unchanged | | | | |
 
-Where หน้าแรก opens a page (หน้างาน, สรุปประจำวัน), a second tap on หน้าแรก while that page is open goes to the department launcher.
+Where หน้าแรก opens a page (หน้างาน), a second tap on หน้าแรก while that page is open goes to the department launcher.
 
 **ค้นหา** is the magnifier in the header: top right beside the avatar on the home hero and in a page's top bar. The search itself is unchanged. **ฉัน** starts with "หน้าที่เปิดล่าสุด", the last three pages opened on this device, as big tiles.
 
@@ -209,3 +209,23 @@ management report's daily headline and league (`headline.basis = "normal"`; the 
 sections keep the same weekday last week, `prev_label`), ร้านของฉัน · สรุปประจำวัน and its daily table, the morning push
 and the drop alert. Week / month / year comparisons keep the period pattern (เทียบช่วงก่อน · เทียบปีก่อน), and the
 period pages' **วัน** view (ยอดขายรายวัน) keeps it too.
+
+## 9. A department's own หน้าแรก (owner 2026-10-31, UI review items 4 + 6)
+
+The chain sales hero (เมื่อวาน vs ปกติ) stays only for a login with `report.management` and for operation. Every other HQ department -
+warehouse, salessupport, accounting, analyst, innovation, marketing - gets a **department hero** instead (`_phDeptHome`, js/09c-mobile.js):
+one headline number, one line, one button that opens the page of the work. Branch and franchise homes are unchanged.
+
+* **Data:** `hero` of `GET /api/nav/badges` (`backend/bom_center/dept_hero.py`), built from the same open list as the red badges and
+  หน้างาน (`nav_badges.mine_open`) - no new endpoint, no call of the shell's own (`_NB.hero`, redrawn by `phDeptHeroApply` when the badges
+  refresh). Marketing (no หน้างาน) reads the เสียงลูกค้า queue by the page's own rule (`feedback.reply_counts`).
+* **Per role:** คลัง = ใบที่ต้องยืนยันยอดส่ง + time left to 14:00 (or ยืนยันครบ / วันนี้ไม่มีรอบ + the next cutoff) → คิวใบสั่งซื้อ ·
+  ประสานงานขาย = ใบตัดเบิกยังไม่ส่ง / เคลมรอพิจารณา / ใบสั่งซื้อยังไม่คีย์บัญชี, line = ใบสั่งซื้อในคิว + รอบส่งที่เลื่อนวันนี้ ·
+  บัญชี = ใบสรุปตัดเบิกพร้อมบันทึก n สาขา, line = the close step + รอสาขา ·
+  ฝ่ายวิเคราะห์ = เมนูยังไม่มีต้นทุนต่อจาน / ไฟล์ราคารอตรวจ / ขนาดบรรจุรอตรวจ / … · ครัว = its recipe tasks (full mode), line = the menus without
+  a dish cost → ต้นทุนต่อจาน · การตลาด = เสียงลูกค้ารอตอบ, line = past the reply time → เสียงลูกค้า.
+  Open work that is none of the named figures shows as "งานของฉัน n งาน". Nothing open → "ไม่มีงานค้าง" (green) + the next thing.
+* **Tiles:** the department's pages, work first; ONE chip each - red = overdue, amber = waiting (own task count = the page badge, or a
+  figure waiting on another department), green ✓ = the department's duties on that page are done. Pages with no status fold under
+  "หน้าอื่น (n)". The other departments the role may open (แผนกอื่น) come last, and not at all for a role with only its own.
+
