@@ -25,12 +25,16 @@ router = APIRouter()
 @ttl_cache
 def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str] = Query(None),
                           branch: Optional[str] = Query(None)):
-    """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head,
-    7-day sparkline, vs trailing-7-day average %, vs same-weekday-last-week %, and
-    a status (above/below normal). REVENUE ONLY (total_inc_vat/1.07 − service_charge).
-    DV2: vs_avg_baht = the focus day minus the 7-day normal in baht; branches are ranked by it (most below normal first)
-    and the top bar's branch narrows the list."""
+    """Per-branch scorecard for a focus day: revenue, customers, bills, rev/head, an 8-day sparkline and THE daily
+    comparison - against "ปกติ", the median of the same weekday over the 8 weeks before (rules.daily_baseline; owner
+    2026-10-31, the one daily baseline of the app). REVENUE ONLY (total_inc_vat/1.07 − service_charge).
+    Each branch: normal (baht), normal_customers, normal_rph, normal_weeks, vs_normal_pct, vs_normal_baht, the cause
+    (cust_vs_normal_pct, rph_vs_normal_pct, discount_pct against discount_pct_normal), status (down | up | ok | nobase |
+    missing) and below_normal - THE "ต่ำกว่าปกติ" verdict every screen counts (below_count). `chain` = the scope summed per
+    day against its own median: the figure the phone hero and the Daily Brief headline quote.
+    DV2: branches are ranked by vs_normal_baht (most below normal first)."""
     import datetime as _dt
+    from rules import (BASELINE_WEEKS, baseline_dates, baseline_from_days, baseline_label, chain_baseline, daily_series)
     base = ["t.source='Easy'", "b.name!='ALL'"]; params: dict = {}
     scope_filter(base, params, branch, group)
     where = " AND ".join(base)
@@ -45,54 +49,43 @@ def home_branch_scorecard(date: Optional[str] = Query(None), group: Optional[str
         fy, fm, fd = (int(x) for x in focus.split("-"))
         fdate = _dt.date(fy, fm, fd)
         start = fdate - _dt.timedelta(days=7)
-        days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # incl focus
-        rows = con.execute(f"""
-            SELECT b.name branch, date(t.sold_at) d,
-                   ROUND({net_revenue_sum('t')},2) rev, SUM(t.customer_count) cust, COUNT(*) bills,
-                   ROUND(COALESCE(SUM(t.discount),0),2) disc
-            FROM sales_transaction t JOIN branches b ON b.branch_id=t.branch_id
-            WHERE {where} AND date(t.sold_at) BETWEEN :s AND :e
-            GROUP BY b.name, date(t.sold_at)""",
-            {**params, "s": start.isoformat(), "e": focus}).fetchall()
-        bm: dict = {}
-        for r in rows:
-            bm.setdefault(r["branch"], {})[r["d"]] = {"rev": r["rev"] or 0, "cust": r["cust"] or 0, "bills": r["bills"], "disc": r["disc"] or 0}
+        days = [(start + _dt.timedelta(days=i)).isoformat() for i in range(8)]   # the sparkline, incl focus
+        per = daily_series(con, where, params, days + baseline_dates(focus))
         out = []
-        for nm, dm in bm.items():
+        for nm, dm in per.items():
+            if not any(dm.get(d, {}).get("bills") for d in days):
+                continue                                 # no sale in the sparkline week: not a row (closed_branches below)
+            bl = baseline_from_days(dm, focus)
+            N = bl["normal"]
             spark = [round(dm.get(d, {}).get("rev", 0), 0) for d in days]
             today = dm.get(focus, {})
             trev, tcust, tbills = today.get("rev", 0), today.get("cust", 0), today.get("bills", 0)
-            prior = [dm.get(d, {}).get("rev", 0) for d in days[:-1]]
-            prior = [x for x in prior if x > 0]
-            avg7 = sum(prior) / len(prior) if prior else 0
-            wow = dm.get(days[0], {}).get("rev")        # same weekday last week
-            # PR-PD (owner 2026-10-29, no. 1) · the cause behind a day below normal, so the call is about the right thing:
-            # the customers against their 7-day normal, the spend per head against its normal, the day's discount share
-            pdays = [dm[d] for d in days[:-1] if dm.get(d, {}).get("rev", 0) > 0]
-            cust7 = sum(x["cust"] for x in pdays) / len(pdays) if pdays else 0
-            rph7 = (sum(x["rev"] for x in pdays) / sum(x["cust"] for x in pdays)) if pdays and sum(x["cust"] for x in pdays) else 0
-            tdisc = today.get("disc", 0)
-            cause = {"cust_vs_avg_pct": round((tcust - cust7) / cust7 * 100, 1) if cust7 else None,
-                     "rph_vs_avg_pct": round((trev / tcust - rph7) / rph7 * 100, 1) if (tcust and rph7) else None,
-                     "discount_pct": round(tdisc / (trev + tdisc) * 100, 1) if (trev + tdisc) > 0 else None,
-                     "discount_pct_avg7": (round(sum(x["disc"] for x in pdays) / (sum(x["rev"] for x in pdays) + sum(x["disc"] for x in pdays)) * 100, 1)
-                                           if pdays and (sum(x["rev"] for x in pdays) + sum(x["disc"] for x in pdays)) > 0 else None)}
-            vs_avg = round((trev - avg7) / avg7 * 100, 1) if avg7 else None
-            vs_wow = round((trev - wow) / wow * 100, 1) if wow else None
-            status = "up" if (vs_avg is not None and vs_avg >= 10) else \
-                     "down" if (vs_avg is not None and vs_avg <= -10) else "ok"
             out.append({"branch": nm, "revenue": trev, "customers": tcust, "bills": tbills,
                         "rev_per_head": round(trev / tcust, 1) if tcust else None,
-                        "spark": spark, "avg7": round(avg7, 0),
-                        "vs_avg_baht": round(trev - avg7, 0) if avg7 else None,
-                        "vs_avg_pct": vs_avg, "wow": wow, "vs_wow_pct": vs_wow, "status": status,
+                        "spark": spark,
+                        "normal": round(N["revenue"], 0) if N["revenue"] is not None else None,
+                        "normal_customers": N["customers"], "normal_rph": N["rev_per_head"],
+                        "normal_weeks": N["n_weeks"],
+                        "vs_normal_baht": bl["vs_normal_baht"], "vs_normal_pct": bl["vs_normal_pct"],
+                        # PR-PD (owner 2026-10-29, no. 1) · the cause behind a day below normal, on the same normal
+                        "cust_vs_normal_pct": bl["cust_vs_normal_pct"], "rph_vs_normal_pct": bl["rph_vs_normal_pct"],
+                        "discount_pct": bl["discount_pct"], "discount_pct_normal": N["discount_pct"],
+                        "status": bl["status"], "below_normal": bl["below_normal"],
                         # PR-PD no. 4: a branch with sales in the window but none on the focus day = its data has not
                         # arrived (or it was shut that day); never a "−100 %" to call about
-                        "reported": trev > 0, **cause})
-        out.sort(key=lambda r: (r["vs_avg_baht"] is None, r["vs_avg_baht"] if r["vs_avg_baht"] is not None else 0, -r["revenue"]))
+                        "reported": trev > 0})
+        out.sort(key=lambda r: (r["vs_normal_baht"] is None, r["vs_normal_baht"] if r["vs_normal_baht"] is not None else 0, -r["revenue"]))
         # owner 2026-10-26: a closed branch is not a row (rules.closed_branches: the focus day and the 7 days before it)
         out = drop_closed(out, closed_branches(con, [(start.isoformat(), focus)], keep=branch))
-    return {"date": focus, "days": days, "branches": out,
+        ch = chain_baseline(con, per, focus, keep=branch)     # the brief's own chain figure (rules.daily_baseline)
+    chain = {"revenue": ch["revenue"], "customers": ch["customers"], "bills": ch["bills"],
+             "normal": round(ch["normal"]["revenue"], 0) if ch["normal"]["revenue"] is not None else None,
+             "normal_weeks": ch["normal"]["n_weeks"], "normal_dates": ch["normal"]["dates"],
+             "vs_normal_pct": ch["vs_normal_pct"], "vs_normal_baht": ch["vs_normal_baht"], "status": ch["status"]}
+    nw = max((r["normal_weeks"] for r in out), default=0)
+    return {"date": focus, "days": days, "branches": out, "chain": chain,
+            "baseline_weeks": BASELINE_WEEKS, "normal_label": baseline_label(nw), "normal_label_short": baseline_label(nw, short=True),
+            "below_count": sum(1 for r in out if r["below_normal"]),
             "reported": sum(1 for r in out if r["reported"]), "missing": [r["branch"] for r in out if not r["reported"]],
             "skipped_day": None if date else settled["skipped_day"], "skipped_bills": None if date else settled["skipped_bills"]}
 
@@ -569,12 +562,9 @@ def home_brief(branch: Optional[str] = Query(None)):
             dow_names = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"]
             dow_label = dow_names[yd.weekday()]
             current_month = yd.strftime("%Y-%m")
-            import datetime as _dtt
-            wow_date_str = (_dt.strptime(yesterday, "%Y-%m-%d") - _dtt.timedelta(days=7)).strftime("%Y-%m-%d")
         except Exception:
             dow_label = ""
             current_month = yesterday[:7]
-            wow_date_str = None
 
         # Branch filter
         branch_filter = ""
@@ -598,20 +588,12 @@ def home_brief(branch: Optional[str] = Query(None)):
               {branch_filter}
         """, branch_params).fetchone()
 
-        # Revenue same day last week
-        wow_row = None
-        if wow_date_str:
-            wow_params = dict(branch_params)
-            wow_params["yesterday"] = wow_date_str
-            wow_row = con.execute(f"""
-                SELECT ROUND({net_revenue_sum('st')}, 2) AS revenue
-                FROM sales_transaction st
-                JOIN branches b ON b.branch_id = st.branch_id
-                WHERE DATE(st.sold_at) = :yesterday
-                  AND st.source = 'Easy'
-                  AND b.name != 'ALL'
-                  {branch_filter}
-            """, wow_params).fetchone()
+        # THE daily comparison (owner 2026-10-31): the day against "ปกติ" - the median of the same weekday over the 8 weeks
+        # before (rules.daily_baseline, the chain = the branches trading now summed per day; the scorecard's `chain`)
+        from rules import daily_baseline
+        _bw = ["t.source='Easy'", "b.name!='ALL'"] + (["b.name=:branch"] if branch else [])
+        base_day = daily_baseline(con, " AND ".join(_bw), {"branch": branch} if branch else {}, day=yesterday, keep=branch)
+
 
         # MTD revenue: day 1 .. the settled day (PR-PP2 - the day still trading never enters a to-date window;
         # this summed the whole calendar month, today's first bills included)
@@ -697,7 +679,13 @@ def home_brief(branch: Optional[str] = Query(None)):
         "tx_yesterday": yest_row["tx_count"] if yest_row else 0,
         "customer_yesterday": yest_row["customer_count"] if yest_row else 0,
         "avg_ticket_yesterday": yest_row["avg_ticket"] if yest_row else 0,
-        "revenue_wow": wow_row["revenue"] if wow_row else None,
+        # the one daily baseline (rules.daily_baseline): the median of the same weekday over the 8 weeks before
+        "revenue_normal": (base_day or {}).get("normal", {}).get("revenue"),
+        "normal_weeks": (base_day or {}).get("normal", {}).get("n_weeks", 0),
+        "revenue_vs_normal_pct": (base_day or {}).get("vs_normal_pct"),
+        "normal_status": (base_day or {}).get("status"),
+        "normal_label": (base_day or {}).get("label"),
+        "normal_label_short": (base_day or {}).get("label_short"),
         "mtd_revenue": mtd_row["mtd_revenue"] if mtd_row else 0,
         "mtd_days": mtd_row["mtd_days"] if mtd_row else 0,
         "yesterday_by_branch": [dict(r) for r in yest_branch_rows],

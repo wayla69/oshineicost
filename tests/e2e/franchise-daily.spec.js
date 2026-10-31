@@ -50,7 +50,7 @@ test('ร้านของฉัน on a phone · สรุปประจำ�
   const hero = card.locator('.frc-hero');
   await expect(hero).toBeVisible();
   await expect(hero).toContainText(await page.evaluate(v => '฿' + fmtN(v), api.day.revenue));
-  await expect(hero).toContainText('ก่อน');
+  await expect(hero).toContainText(/เทียบปกติ|ยังไม่มีฐาน/);   // the one daily baseline (rules.daily_baseline, 2026-10-31)
   await expect(hero).not.toContainText('ปีก่อน');
   await expect(card.locator('.frc-tile')).toHaveCount(4);
   await expect(card.locator('.frc-tiles')).toContainText('ต้นทุนอาหาร');

@@ -60,7 +60,8 @@ Definitions that are not a plain copy of an engine's field
                                 over the orders processed with a delivery day in the month that has passed
   discipline.claims_month       claims raised in the month (not cancelled)
   discount_pct            report headline.discount_pct (discount over sales); policy ceiling headline.discount_policy_pct
-  daily[].vs_last_week_pct  net sales of the day against the same weekday seven days earlier (null when either has no sales)
+  daily[].vs_normal_pct  net sales of the day against its normal ("ปกติ", rules.daily_baseline: the median of the same weekday
+                          over the 8 weeks before, days without bills skipped); null with fewer than 2 such weeks (normal_weeks)
   target.to_date          month target x the elapsed share of the month. While the month is open the share is weighted by
                           weekday exactly as the report's projection is (pace.proj_method 'dow': mtd / projected); without
                           that, elapsed days / days in the month; a complete month: the full target
@@ -198,14 +199,15 @@ def _daily(con, sales: dict, bid: int, last_day: Optional[str]):
     grouped query on the dashboard's own revenue rule (rules.net_revenue_sum: bill total / 1.07 less service charge).
     Only FINISHED days (rules.closed_day_clause): the report already ends its month-to-date window on the last finished
     day, and the clause keeps the day still trading out even when a caller passes a later day. A day without bills is null."""
-    from rules import closed_day_clause, net_revenue_sum
+    from rules import BASELINE_WEEKS, baseline_from_days, closed_day_clause, net_revenue_sum
     if not last_day:
         return
     end = date.fromisoformat(last_day)
     first = end.replace(day=1)
-    start = min(end - timedelta(days=29), first - timedelta(days=7))      # the table's first week compares with the month before
+    # the table's first day compares with its normal: the same weekday over the 8 weeks before (rules.daily_baseline)
+    start = min(end - timedelta(days=29), first - timedelta(days=7 * BASELINE_WEEKS))
     rows = {r[0]: (r[1], r[2], r[3]) for r in con.execute(
-        f"SELECT date(t.sold_at), ROUND({net_revenue_sum('t')},2), COUNT(*), COALESCE(SUM(t.customer_count),0) "
+        f"SELECT date(t.sold_at), {net_revenue_sum('t')}, COUNT(*), COALESCE(SUM(t.customer_count),0) "
         f"FROM sales_transaction t WHERE t.branch_id=:bid AND t.source='Easy' "
         f"AND t.sold_at >= :s AND t.sold_at < :e AND {closed_day_clause('t.sold_at')} GROUP BY date(t.sold_at)",
         {"bid": bid, "s": start.isoformat(), "e": (end + timedelta(days=1)).isoformat()})}
@@ -218,16 +220,19 @@ def _daily(con, sales: dict, bid: int, last_day: Optional[str]):
                            for i in range(30)]
     sales["last_day"] = {"date": last_day, "revenue": rev(last_day) if last_day in rows else 0.0,
                          "bills": rows[last_day][1] if last_day in rows else 0}
+    by_day = {d: {"rev": r[0] or 0, "bills": r[1] or 0, "cust": r[2] or 0, "disc": 0} for d, r in rows.items()}
     table = []
     for i in range((end - first).days + 1):
         dd = first + timedelta(days=i)
-        d, wk = dd.isoformat(), (dd - timedelta(days=7)).isoformat()
+        d = dd.isoformat()
         r = rows.get(d)
-        cur, prev = rev(d), rev(wk)
+        cur = rev(d)
+        bl = baseline_from_days(by_day, d)
         table.append({"date": d, "weekday": TH_DOW[dd.weekday()], "revenue": cur,
                       "bills": r[1] if r else None, "customers": int(r[2]) if r else None,
                       "per_bill": _num(r[0] / r[1], 0) if r and r[1] else None,
-                      "vs_last_week_pct": _num(100.0 * (cur - prev) / prev) if cur is not None and prev else None})
+                      "vs_normal_pct": bl["vs_normal_pct"] if cur is not None else None,
+                      "normal_weeks": bl["normal"]["n_weeks"]})
     sales["daily"] = table
     sales["daily_through"] = table[-1]["date"] if table else None
 
@@ -603,9 +608,9 @@ def franchise_workbook(d: dict, supply: Optional[dict] = None):
             ws.append([f"สรุป: {word}", "", line])
 
     ws = wb.create_sheet()
-    _sheet(ws, "รายวัน", ["วันที่", "วัน", "ยอดขาย (ไม่รวม VAT)", "จำนวนบิล", "จำนวนลูกค้า", "เฉลี่ยต่อบิล", "เทียบวันเดียวกันสัปดาห์ก่อน (%)"],
+    _sheet(ws, "รายวัน", ["วันที่", "วัน", "ยอดขาย (ไม่รวม VAT)", "จำนวนบิล", "จำนวนลูกค้า", "เฉลี่ยต่อบิล", "เทียบปกติ (%) · ค่ากลางวันเดียวกัน 8 สัปดาห์"],
            f"{head} · เฉพาะวันที่ปิดการขายแล้ว")
-    _xl_rows(ws, [(x["date"], x["weekday"], x["revenue"], x["bills"], x["customers"], x["per_bill"], x["vs_last_week_pct"])
+    _xl_rows(ws, [(x["date"], x["weekday"], x["revenue"], x["bills"], x["customers"], x["per_bill"], x["vs_normal_pct"])
                   for x in s.get("daily") or []], [None, None, _FX_BAHT, "#,##0", "#,##0", _FX_BAHT, _FX_PCT])
 
     ws = wb.create_sheet()
@@ -992,7 +997,7 @@ def _thai_today() -> date:
 
 def franchise_morning_payload(d: dict, ins: Optional[dict], today: Optional[date] = None) -> Optional[dict]:
     """Title + body of the morning push, from the summary (franchise_summary_data) and the controls (franchise_insight_data):
-    the last finished day's net sales against the same weekday a week earlier (summary.sales.daily), the month so far against
+    the last finished day's net sales against its normal (summary.sales.daily: the median of the same weekday over 8 weeks), the month so far against
     the target to date (summary.target, F1) and the number of ต้องแก้ lines (the verdict's, plus the controls' voids and cash;
     the discount line is already the verdict's own, so it is counted once). None when the summary has no finished day."""
     s = (d or {}).get("sales") or {}
@@ -1001,11 +1006,11 @@ def franchise_morning_payload(d: dict, ins: Optional[dict], today: Optional[date
         return None
     row = next((x for x in (s.get("daily") or []) if x.get("date") == ld), None) or {}
     rev = row.get("revenue") if row else (s.get("last_day") or {}).get("revenue")
-    wk = row.get("vs_last_week_pct")
+    wk = row.get("vs_normal_pct")
     today = today or _thai_today()
     dd = date.fromisoformat(ld)
     when = "เมื่อวาน" if dd == today - timedelta(days=1) else "วันล่าสุดที่ปิดการขาย"
-    chip = f" {'▲' if wk >= 0 else '▼'}{abs(wk):.1f}% เทียบวัน{TH_DOW[dd.weekday()]}ก่อน" if wk is not None else ""
+    chip = f" {'▲' if wk >= 0 else '▼'}{abs(wk):.1f}% เทียบปกติ" if wk is not None else ""
     title = f"ร้านของฉัน · {when} ({_th_date(ld)}) ฿{_fmt_k(rev)}{chip}"
     bits = []
     t = d.get("target") or {}
@@ -1447,8 +1452,8 @@ def franchise_decide(request: Request, kind: str = Query("week"), pick: Optional
 # trading. The day does NOT follow the top bar's period: it is always the branch's last finished day.
 #   day     rules.latest_settled_day on the branch's own bills (closed_day_clause, and it steps back over a finished day the
 #           POS has not posted yet). Net sales on the dashboard's revenue rule (rules.net_revenue_sum: bill total / 1.07 less
-#           service charge), bills, customers, per head and per bill; vs_last_week_pct = against the same weekday seven days
-#           earlier (null when either day has no sales). discount_pct = discount over the PRE-discount base (rules.
+#           service charge), bills, customers, per head and per bill; vs_normal_pct = against its normal (rules.daily_baseline:
+#           the median of the same weekday over the 8 weeks before; null under 2 such weeks, normal_weeks says how many). discount_pct = discount over the PRE-discount base (rules.
 #           discount_base_row, the report's and the Discounts tab's base) against the policy ceiling (rules.
 #           discount_policy_pct): level 'good' within it, 'watch' above it, 'fix' above twice it (the controls card's bands).
 #           food_cost_pct = period_cost.cost_sum over the one day (the cost engine of the period pattern) against the ONE
@@ -1464,18 +1469,20 @@ def franchise_decide(request: Request, kind: str = Query("week"), pick: Optional
 #           same revenue rule and the report's weekday-fair projection (rules.month_projection) for the target to date
 def _daily_day(con, bid: int, name: str, day: str) -> dict:
     import period_cost as PC
-    from rules import (discount_base_row, discount_policy_pct, food_cost_status_th, food_cost_target, net_revenue_sum)
+    from rules import (daily_baseline, discount_base_row, discount_policy_pct, food_cost_status_th, food_cost_target,
+                       net_revenue_sum)
     d = date.fromisoformat(day)
-    wk = (d - timedelta(days=7)).isoformat()
     rows = {r[0]: r for r in con.execute(
         f"SELECT date(t.sold_at), {net_revenue_sum('t')}, COUNT(*), COALESCE(SUM(t.customer_count),0), "
         f"COALESCE(SUM(t.discount),0), SUM({discount_base_row('t')}) FROM sales_transaction t "
-        f"WHERE t.branch_id=:bid AND t.source='Easy' AND date(t.sold_at) IN (:d, :w) GROUP BY date(t.sold_at)",
-        {"bid": bid, "d": day, "w": wk})}
-    cur, prev = rows.get(day), rows.get(wk)
+        f"WHERE t.branch_id=:bid AND t.source='Easy' AND date(t.sold_at) = :d GROUP BY date(t.sold_at)",
+        {"bid": bid, "d": day})}
+    cur = rows.get(day)
     rev = _num(cur[1], 2) if cur else None
     bills, cust = (cur[2], int(cur[3])) if cur else (0, 0)
-    prev_rev = prev[1] if prev else None
+    # THE daily comparison: the day against "ปกติ" (rules.daily_baseline - the scorecard's own figure for this branch)
+    bl = (daily_baseline(con, "t.source='Easy' AND t.branch_id=:bid", {"bid": bid}, day=day, by_branch=True) or {}).get(name) or {}
+    nb = bl.get("normal") or {}
     disc = _num(100.0 * cur[4] / cur[5]) if cur and cur[5] else None
     pol = float(discount_policy_pct(con))
     dlevel = None if disc is None else "fix" if disc > 2 * pol else "watch" if disc > pol else "good"
@@ -1485,8 +1492,8 @@ def _daily_day(con, bid: int, name: str, day: str) -> dict:
     return {"date": day, "weekday": TH_DOW[d.weekday()], "revenue": rev, "bills": bills, "customers": cust,
             "per_head": _num(rev / cust, 0) if rev is not None and cust else None,
             "per_bill": _num(rev / bills, 0) if rev is not None and bills else None,
-            "last_week_date": wk,
-            "vs_last_week_pct": _num(100.0 * (rev - prev_rev) / prev_rev) if rev is not None and prev_rev else None,
+            "normal": _num(nb.get("revenue"), 2) if nb.get("revenue") is not None else None, "normal_weeks": nb.get("n_weeks", 0),
+            "vs_normal_pct": bl.get("vs_normal_pct"), "normal_status": bl.get("status"), "normal_label": bl.get("label_short"),
             "discount_pct": disc, "discount_policy_pct": _num(pol), "discount_level": dlevel,
             "food_cost_pct": fpct, "food_cost_target_pct": _num(tgt),
             "food_cost_status_th": food_cost_status_th(fpct, tgt) if fpct is not None else None,

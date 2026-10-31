@@ -107,8 +107,10 @@ def test_the_scorecard_carries_the_cause_and_whether_the_day_arrived(tmp_path, m
     con.execute("INSERT INTO branches(branch_id, name) VALUES(3, 'สาขาทดสอบ')")
     con.execute("INSERT INTO branches(branch_id, name) VALUES(4, 'สาขาเงียบ')")
     focus = dt.date(2026, 5, 17)
-    for i in range(1, 8):                                            # the seven days before: 4 guests, ฿1,000 net, ฿20 off
-        d = focus - dt.timedelta(days=i)
+    # the same weekday on each of the 8 weeks before (the normal, rules.daily_baseline: 4 guests, ฿1,000 net, ฿20 off) and the
+    # days between (the sparkline week)
+    days = sorted({focus - dt.timedelta(days=7 * k) for k in range(1, 9)} | {focus - dt.timedelta(days=i) for i in range(1, 8)})
+    for d in days:
         _bill(con, 3, f"S3-{d}", f"{d}T12:00:00", 1070.0, 20.0, cust=4)
         _bill(con, 4, f"S4-{d}", f"{d}T12:00:00", 1070.0, 20.0, cust=4)
     _bill(con, 3, f"S3-{focus}", f"{focus}T12:00:00", 535.0, 100.0, cust=2)   # the focus day: half the guests, the same spend per head, a heavy discount
@@ -129,9 +131,10 @@ def test_the_scorecard_carries_the_cause_and_whether_the_day_arrived(tmp_path, m
         d = json.loads(d.body)
     rows = {r["branch"]: r for r in d["branches"]}
     r3 = rows["สาขาทดสอบ"]
-    assert r3["reported"] is True and r3["vs_avg_pct"] == -50.0
-    assert r3["cust_vs_avg_pct"] == -50.0 and r3["rph_vs_avg_pct"] == 0.0
-    assert r3["discount_pct"] == round(100 / 600 * 100, 1) and r3["discount_pct_avg7"] == round(20 / 1020 * 100, 1)
+    assert r3["reported"] is True and r3["vs_normal_pct"] == -50.0 and r3["normal_weeks"] == 8
+    assert r3["cust_vs_normal_pct"] == -50.0 and r3["rph_vs_normal_pct"] == 0.0
+    assert r3["discount_pct"] == round(100 / 600 * 100, 1) and r3["discount_pct_normal"] == round(20 / 1020 * 100, 1)
+    assert r3["below_normal"] is True and r3["status"] == "down" and d["below_count"] == 1
     if "สาขาเงียบ" in rows:                                           # no bills on the focus day: its data has not arrived, never "−100 %"
         assert rows["สาขาเงียบ"]["reported"] is False
         assert "สาขาเงียบ" in d["missing"]

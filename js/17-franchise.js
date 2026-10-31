@@ -214,16 +214,17 @@ function _frcDaily(s) {
   const rows = ((s && s.daily) || []).slice().reverse();
   if (!rows.length) return '';
   const help = '<p>ยอดขายไม่รวม VAT และไม่รวมค่าบริการ แสดงเฉพาะวันที่ปิดการขายแล้ว วันที่ยังเปิดขายอยู่ไม่นำมาแสดง</p>'
-    + '<p>เทียบสัปดาห์ก่อน = ยอดขายของวันนั้นเทียบกับวันเดียวกันของสัปดาห์ก่อนหน้า เช่น วันจันทร์เทียบวันจันทร์</p>';
+    + '<p>เทียบปกติ = ยอดขายของวันนั้นเทียบกับค่ากลางของวันเดียวกันใน 8 สัปดาห์ก่อน เช่น วันจันทร์เทียบค่ากลางของวันจันทร์ 8 สัปดาห์ '
+    + 'วันที่ร้านไม่มียอดขายไม่นำมาคิด ถ้ามีข้อมูลน้อยกว่า 2 สัปดาห์จะยังไม่เทียบ</p>';
   const body = rows.map(x => {
     const we = ['เสาร์', 'อาทิตย์'].includes(x.weekday);
     return `<tr${we ? ' class="frc-we"' : ''}><td>${esc(_frcDay(x.date))} <span class="frc-dow">${esc(x.weekday || '')}</span></td>`
-      + `<td class="n">${x.revenue == null ? _FRC_NA : fmtN(x.revenue)}</td><td class="n">${_frcDelta(x.vs_last_week_pct)}</td>`
+      + `<td class="n">${x.revenue == null ? _FRC_NA : fmtN(x.revenue)}</td><td class="n">${_frcDelta(x.vs_normal_pct)}</td>`
       + `<td class="n">${x.bills == null ? _FRC_NA : fmtN(x.bills)}</td><td class="n">${x.customers == null ? _FRC_NA : fmtN(x.customers)}</td>`
       + `<td class="n">${x.per_bill == null ? _FRC_NA : fmtN(x.per_bill)}</td></tr>`;
   }).join('');
   return `<div class="ms-section"><div class="ms-section-title frc-title">ยอดขายรายวัน ${uiQ('frc:daily', 'ยอดขายรายวัน', help)}</div>`
-    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วันที่</th><th class="n">ยอดขาย (฿)</th><th class="n">เทียบสัปดาห์ก่อน</th><th class="n">บิล</th>`
+    + `<div class="frc-tbl-wrap"><table class="frc-tbl"><thead><tr><th>วันที่</th><th class="n">ยอดขาย (฿)</th><th class="n">เทียบปกติ</th><th class="n">บิล</th>`
     + `<th class="n">ลูกค้า</th><th class="n">ต่อบิล (฿)</th></tr></thead><tbody>${body}</tbody></table></div></div>`;
 }
 
@@ -325,7 +326,6 @@ function _frcRender(d) {
 // #frcDay is its own slot in tabs/56-franchise.html, above ติดต่อสำนักงานใหญ่ and the month cards: it loads on its own and stays when the
 // month summary fails. The loading line shows only on the first load (a reload keeps the card until the new one is drawn).
 const _FRC_DAY_LOADING = `<div class="ms-section"><div class="ms-card"><div class="ms-row" style="${_FRC_MUTED};font-size:13px">กำลังโหลดสรุปประจำวัน…</div></div></div>`;
-const _FRC_DOW_SHORT = { 'จันทร์': 'จ.', 'อังคาร': 'อ.', 'พุธ': 'พ.', 'พฤหัสบดี': 'พฤ.', 'ศุกร์': 'ศ.', 'เสาร์': 'ส.', 'อาทิตย์': 'อา.' };
 const _FRC_LEVEL_INK = { good: 'var(--good-ink)', watch: 'var(--amber-ink)', fix: 'var(--bad-ink)' };
 async function _frcGetJson(url) {
   const r = await fetch(`${API}${url}`);
@@ -359,15 +359,14 @@ function _frcDayTile(label, value, acc, sub, ink) {
 function _frcDayCard(d) {
   if (!d || !d.available || !d.day) return '';
   const D = d.day;
-  const dow = _FRC_DOW_SHORT[D.weekday] || D.weekday || '';
   const help = '<p>วันที่แสดงคือวันล่าสุดที่ปิดการขายแล้ว วันที่ยังเปิดขายอยู่ไม่นำมาแสดง และไม่เปลี่ยนตามช่วงเวลาที่เลือกด้านบน</p>'
-    + '<p>ยอดขายไม่รวม VAT และไม่รวมค่าบริการ · เทียบวันเดียวกันของสัปดาห์ก่อน เช่น วันพฤหัสบดีเทียบวันพฤหัสบดี</p>'
+    + '<p>ยอดขายไม่รวม VAT และไม่รวมค่าบริการ · เทียบปกติ = ค่ากลางของวันเดียวกันใน 8 สัปดาห์ก่อน เช่น วันพฤหัสบดีเทียบค่ากลางของวันพฤหัสบดี 8 สัปดาห์ วันที่ร้านไม่มียอดขายไม่นำมาคิด</p>'
     + '<p>ต้นทุนอาหารของวันเทียบเป้าของบริษัท เมนูที่ยังไม่มีต้นทุนนับเป็น 0 บาท ตัวเลขจึงเป็นค่าต่ำสุด · ส่วนลดคิดจากยอดก่อนหักส่วนลด เทียบเพดานส่วนลด</p>'
     + '<p>ยอดเดือนนี้เทียบเดือนก่อนและปีก่อนในช่วงวันเดียวกัน · เป้า = เป้าที่กำหนดไว้ หรือยอดเดือนเดียวกันของปีก่อน เส้นตั้งบนแถบคือเป้าถึงวันนี้ · บิลยกเลิกมีข้อมูลเป็นรายเดือน</p>';
   const late = d.skipped_day ? `<span class="frc-hchip">ข้อมูล ${esc(_frcDay(d.skipped_day))} ยังเข้าไม่ครบ</span>` : '';
   const hero = `<div class="frc-hero"><div class="lbl">${esc(D.weekday || '')} ${esc(_frcDay(D.date))} · ยอดขาย (ไม่รวม VAT และค่าบริการ)</div>`
     + `<div class="num">${_frcBaht(D.revenue)}</div>`
-    + `<div class="cmp">${_frcHeroChip(dow + ' ก่อน', D.vs_last_week_pct)}${late}</div></div>`;
+    + `<div class="cmp">${_frcHeroChip(normalLbl(D.normal_weeks, true), D.vs_normal_pct)}${late}</div></div>`;
   const fc = D.food_cost_pct;
   const fcLevel = fc == null ? null : fc <= D.food_cost_target_pct ? 'good' : 'fix';
   const fcWord = fcLevel === 'good' ? `ในเป้า ${_frcPctText(D.food_cost_target_pct)}` : D.food_cost_status_th;

@@ -196,3 +196,16 @@ To register a table, add it to `PAGE_CARDS` (js/01-core.js, keyed like `PAGE_PHO
   - a category axis with more than six labels names its first, middle and last label;
   - labels follow the VZ2 collision rule.
 - **Charts in fit:** drawn for the size they are shown at, i.e. canvas pixels = drawn width × device pixel ratio. That holds at rest and again after a double tap to 100 %, so they are never a stretched bitmap.
+
+## 8. One daily baseline (owner 2026-10-31, UI review no. 12)
+
+Every DAILY comparison compares the day with **ปกติ** = the median of the same weekday over the 8 weeks before
+(`rules.daily_baseline` / `baseline_from_days`; a weekday without bills is skipped; under 2 weeks = no verdict, pill
+"ยังไม่มีฐาน"; 2..7 weeks = "ปกติจาก n สัปดาห์"; full = "เทียบปกติ (ค่ากลาง 8 สัปดาห์)" on the desktop, "เทียบปกติ" on
+the phone). "ต่ำกว่าปกติ" = 8 % or more under it (`rules.BELOW_NORMAL_PCT`), counted once from the scorecard
+(`below_normal`, `below_count`). On it: the phone hero and the เมื่อวาน detail, `/api/home/brief`
+(`revenue_vs_normal_pct`), `/api/home/branch-scorecard` (branches + `chain`), the Daily Brief tiles and table, the
+management report's daily headline and league (`headline.basis = "normal"`; the menu, daypart, payment and GP-bridge
+sections keep the same weekday last week, `prev_label`), ร้านของฉัน · สรุปประจำวัน and its daily table, the morning push
+and the drop alert. Week / month / year comparisons keep the period pattern (เทียบช่วงก่อน · เทียบปีก่อน), and the
+period pages' **วัน** view (ยอดขายรายวัน) keeps it too.

@@ -1,5 +1,5 @@
 attachment; filename=management_daily_2026-06-03.xlsx
-## Summary 22x4 widths={'A': 37.0, 'B': 24.0, 'C': 23.0, 'D': 7.0}
+## Summary 22x4 widths={'A': 37.0, 'B': 22.0, 'C': 23.0, 'D': 7.0}
 A1	'Oshinei — Management Summary Report'		b	
 A2	'Report'			
 B2	'Daily'			
@@ -7,7 +7,7 @@ C2	'Wednesday, 3 Jun 2026'
 A3	'Scope'			
 B3	'BranchA'			
 A4	'Compared with'			
-B4	'same weekday last week'			
+B4	'normal (no base yet)'			
 A5	'Latest data day'			
 B5	'2026-06-03'			
 A7	'Headline metric'		bc	0F766E
@@ -231,7 +231,7 @@ B2	'Daily · Wednesday, 3 Jun 2026'
 A3	'Period covered'		b	
 B3	'2026-06-03 → 2026-06-03'			
 A4	'Compared with'		b	
-B4	'same weekday last week'			
+B4	'normal (no base yet)'			
 A5	'Scope'		b	
 B5	'BranchA'			
 A6	'Days in period'		b	

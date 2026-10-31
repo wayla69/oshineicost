@@ -368,12 +368,12 @@ def test_the_message_builder_without_keys_still_records_what_it_would_send(pushe
 def test_the_payload_words(monkeypatch):
     from routers import franchise as F
     d = {"available": True, "sales": {"last_day": {"date": "2026-10-20", "revenue": 52300.0}, "mtd": 900000.0,
-                                      "daily": [{"date": "2026-10-20", "revenue": 52300.0, "vs_last_week_pct": -4.2}]},
+                                      "daily": [{"date": "2026-10-20", "revenue": 52300.0, "vs_normal_pct": -4.2}]},
          "target": {"source": "manual", "vs_to_date_pct": 3.25}, "verdict": {"fix": ["a"]}}
     ins = {"controls": {"flags": {"items": [{"level": "fix", "key": "discount"}, {"level": "fix", "key": "voids"},
                                             {"level": "watch", "key": "cash"}]}}}
     p = F.franchise_morning_payload(d, ins, today=date(2026, 10, 21))
-    assert p["title"] == "ร้านของฉัน · เมื่อวาน (20 ต.ค.) ฿52.3K ▼4.2% เทียบวันอังคารก่อน"
+    assert p["title"] == "ร้านของฉัน · เมื่อวาน (20 ต.ค.) ฿52.3K ▼4.2% เทียบปกติ"
     assert p["body"] == "ยอดสะสมเดือนนี้สูงกว่าเป้าถึงวันนี้ 3.2% · ต้องแก้ 2 รายการ"        # the discount line counted once
     p = F.franchise_morning_payload({**d, "target": {"source": "none"}, "verdict": {"fix": []}}, None, today=date(2026, 10, 25))
     assert p["title"].startswith("ร้านของฉัน · วันล่าสุดที่ปิดการขาย (20 ต.ค.)") and p["body"].endswith("ไม่มีรายการต้องแก้")

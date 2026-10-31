@@ -46,7 +46,7 @@ MAX_FAILS = 5                                   # a dead endpoint is dropped aft
 ALERT_FROM_HOUR = 7                             # drop alerts start once the 06:00 sync has settled
 ALERT_EVERY_MIN = 10
 STALE_HOUR = 13                                 # after the 12:00 sync: yesterday still missing = stuck
-DROP_PCT = -40.0                                # under BOTH the 7-day average and the same weekday last week
+DROP_PCT = -40.0                                # under the normal: the median of the same weekday over 8 weeks
 DROP_MIN_AVG = 5000.0                           # ex-VAT baht/day — a tiny branch's noise is not an alert
 CASH_SHORT_MIN = 2000.0                         # a day's cash count short by at least this (baht)
 DISC_RATE_MIN = 5.0                             # a branch-day's discount ≥ 5% of its sales …
@@ -385,25 +385,22 @@ def _th_day(iso: str) -> str:
 
 
 def morning_payload(brief: dict, scorecard: dict) -> Optional[dict]:
-    """The phone's เมื่อวาน strip as title + body — same numbers, same rule for
-    'below normal' (status down or vs_avg_pct ≤ −8, js/07-home.js). None when the
+    """The phone's เมื่อวาน strip as title + body — same numbers, same rule for 'below normal' (the scorecard's
+    below_normal: ≤ −8 % under the median of the same weekday over 8 weeks, rules.daily_baseline). None when the
     brief has no day."""
     if not brief or not brief.get("yesterday"):
         return None
-    rev, wow = float(brief.get("revenue_yesterday") or 0), brief.get("revenue_wow")
-    chip = ""
-    if wow:
-        pct = (rev - float(wow)) / float(wow) * 100
-        chip = f" {'▲' if pct >= 0 else '▼'}{abs(pct):.1f}%"
+    rev, pct = float(brief.get("revenue_yesterday") or 0), brief.get("revenue_vs_normal_pct")
+    chip = f" {'▲' if pct >= 0 else '▼'}{abs(pct):.1f}% เทียบปกติ" if pct is not None else ""
     title = f"เมื่อวาน ({_th_day(brief['yesterday'])}) {_fmt_money(rev)}{chip}"
     rows = (scorecard or {}).get("branches") or []
-    down = [b for b in rows if b.get("status") == "down" or (b.get("vs_avg_pct") is not None and b["vs_avg_pct"] <= -8)]
-    down.sort(key=lambda b: (b.get("vs_avg_pct") if b.get("vs_avg_pct") is not None else 0))
+    down = [b for b in rows if b.get("below_normal")]
+    down.sort(key=lambda b: (b.get("vs_normal_pct") if b.get("vs_normal_pct") is not None else 0))
     bits = [f"ลูกค้า {int(brief.get('customer_yesterday') or 0):,}"]
     if down:
-        worst = ", ".join(f"{b['branch']} {b['vs_avg_pct']:.0f}%" for b in down[:2] if b.get("vs_avg_pct") is not None)
+        worst = ", ".join(f"{b['branch']} {b['vs_normal_pct']:.0f}%" for b in down[:2] if b.get("vs_normal_pct") is not None)
         bits.append(f"{len(down)} สาขาต่ำกว่าปกติ" + (f": {worst}" if worst else ""))
-    else:
+    elif not rows or any(b.get("status") not in ("nobase", "missing") for b in rows):
         bits.append("ทุกสาขาอยู่ในเกณฑ์ปกติ")
     if brief.get("skipped_day"):
         bits.append(f"ข้อมูล {_th_day(brief['skipped_day'])} ยังมาไม่ครบ")
@@ -593,7 +590,8 @@ def cloud_watchdog_payloads(status: Optional[dict], now) -> list:
 
 def alert_payloads(sc: dict, now, cloud: Optional[dict] = None) -> list:
     """[(key, payload)] for the conditions in the scorecard right now. Pure: no I/O, so the
-    rules are testable. A drop is a branch ≥40% under its 7-day average AND its same weekday last week on the last settled
+    rules are testable. A drop is a branch ≥40% under its normal (the median of the same weekday over 8 weeks,
+    rules.daily_baseline - one holiday neither flags nor hides it) on the last settled
     day (and big enough to matter); data is stale when that settled day is older than
     yesterday once the early-afternoon sync is done. `cloud` is the stored status of the cloud pull
     (None when that is not in use): the stale message then names what it last did."""
@@ -601,16 +599,15 @@ def alert_payloads(sc: dict, now, cloud: Optional[dict] = None) -> list:
     day = (sc or {}).get("date")
     if not day:
         return out
-    # both baselines: the 7-day average alone flags every Tuesday (it holds the weekend);
-    # same-weekday-last-week alone flags a one-off strong week. A branch with no last-week
-    # figure is not judged.
+    # the one daily baseline: the same weekday's median over 8 weeks (a weekday against itself, so no Tuesday is judged
+    # against a weekend; a median, so one strong week does not flag the next). A branch with under 2 such weeks
+    # (vs_normal_pct None) is not judged.
     rows = [b for b in (sc.get("branches") or [])
-            if b.get("vs_avg_pct") is not None and b["vs_avg_pct"] <= DROP_PCT
-            and b.get("vs_wow_pct") is not None and b["vs_wow_pct"] <= DROP_PCT
-            and (b.get("avg7") or 0) >= DROP_MIN_AVG]
-    rows.sort(key=lambda b: b["vs_avg_pct"])
+            if b.get("vs_normal_pct") is not None and b["vs_normal_pct"] <= DROP_PCT
+            and (b.get("normal") or 0) >= DROP_MIN_AVG]
+    rows.sort(key=lambda b: b["vs_normal_pct"])
     if rows:
-        bits = [f"{b['branch']} {b['vs_avg_pct']:.0f}% (฿{_fmt_money(b.get('revenue'))} จากปกติ ฿{_fmt_money(b.get('avg7'))})"
+        bits = [f"{b['branch']} {b['vs_normal_pct']:.0f}% (฿{_fmt_money(b.get('revenue'))} จากปกติ ฿{_fmt_money(b.get('normal'))})"
                 for b in rows[:3]]
         more = f" และอีก {len(rows) - 3} สาขา" if len(rows) > 3 else ""
         title = (f"{rows[0]['branch']} ยอดตกหนัก ({_th_day(day)})" if len(rows) == 1

@@ -5,7 +5,8 @@
     (impact_baht = (price - prev_price) x qty, the month's purchases or else the month before's); the other callers of month_table are
     unchanged (no new keys unless asked);
   * บิลยกเลิก รายสาขา: branches by value, not by count;
-  * สรุปประจำวัน: every branch carries vs_avg_baht (the day minus its 7-day normal) and the list ranks by it, most below first; the top
+  * สรุปประจำวัน: every branch carries vs_normal_baht (the day minus its normal: the median of the same weekday over 8 weeks)
+    and the list ranks by it, most below first; the top
     bar's branch narrows it.
 """
 import sqlite3
@@ -68,10 +69,10 @@ def test_scorecard_ranks_by_baht_below_normal_and_follows_branch(client):
     rows = d["branches"]
     assert rows
     for r in rows:
-        assert "vs_avg_baht" in r
-        if r["vs_avg_baht"] is not None:
-            assert r["vs_avg_baht"] == pytest.approx(r["revenue"] - r["avg7"], abs=1.0)
-    vals = [r["vs_avg_baht"] for r in rows if r["vs_avg_baht"] is not None]
+        assert "vs_normal_baht" in r
+        if r["vs_normal_baht"] is not None:
+            assert r["vs_normal_baht"] == pytest.approx(r["revenue"] - r["normal"], abs=1.0)
+    vals = [r["vs_normal_baht"] for r in rows if r["vs_normal_baht"] is not None]
     assert vals == sorted(vals)                              # most below its normal first
     one = rows[0]["branch"]
     d1 = client.get("/api/home/branch-scorecard", params={"branch": one}).json()

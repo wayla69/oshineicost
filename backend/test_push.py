@@ -103,14 +103,16 @@ def test_test_endpoint_targets_only_the_caller(client, monkeypatch):
 
 
 def test_morning_payload_reads_like_the_strip():
-    brief = {"yesterday": "2026-10-06", "revenue_yesterday": 2047485.64, "revenue_wow": 2071106.01,
+    # 2026-10-31: the day against its normal (the median of the same weekday over 8 weeks, rules.daily_baseline) and the
+    # scorecard's one verdict below_normal - the push counts exactly the branches the phone hero counts
+    brief = {"yesterday": "2026-10-06", "revenue_yesterday": 2047485.64, "revenue_vs_normal_pct": -1.1,
              "customer_yesterday": 2989, "skipped_day": "2026-10-07", "skipped_bills": 7}
-    sc = {"branches": [{"branch": "อยุธยา", "vs_avg_pct": -58.3, "status": "down"},
-                       {"branch": "นครสวรรค์", "vs_avg_pct": -57.3, "status": "down"},
-                       {"branch": "ชลบุรี", "vs_avg_pct": 3.0, "status": "ok"},
-                       {"branch": "ระยอง", "vs_avg_pct": -9.0, "status": "ok"}]}
+    sc = {"branches": [{"branch": "อยุธยา", "vs_normal_pct": -58.3, "status": "down", "below_normal": True},
+                       {"branch": "นครสวรรค์", "vs_normal_pct": -57.3, "status": "down", "below_normal": True},
+                       {"branch": "ชลบุรี", "vs_normal_pct": 3.0, "status": "ok", "below_normal": False},
+                       {"branch": "ระยอง", "vs_normal_pct": -9.0, "status": "down", "below_normal": True}]}
     p = P.morning_payload(brief, sc)
-    assert p["title"] == "เมื่อวาน (อ. 6 ต.ค.) 2.05M ▼1.1%"
+    assert p["title"] == "เมื่อวาน (อ. 6 ต.ค.) 2.05M ▼1.1% เทียบปกติ"
     assert p["body"] == "ลูกค้า 2,989 · 3 สาขาต่ำกว่าปกติ: อยุธยา -58%, นครสวรรค์ -57% · ข้อมูล พ. 7 ต.ค. ยังมาไม่ครบ"
     assert p["url"] == "/?go=summary" and p["tag"] == "oshinei-morning"
     assert P.morning_payload({"yesterday": None}, sc) is None
@@ -172,8 +174,7 @@ from datetime import datetime
 
 def _sc(day="2026-10-06", **rows):
     return {"date": day, "branches": [
-        {"branch": n, "revenue": r, "avg7": a, "vs_avg_pct": round((r - a) / a * 100, 1) if a else None,
-         "vs_wow_pct": round((r - a) / a * 100, 1) if a else None}
+        {"branch": n, "revenue": r, "normal": a, "vs_normal_pct": round((r - a) / a * 100, 1) if a else None}
         for n, (r, a) in rows.items()]}
 
 
@@ -191,10 +192,11 @@ def test_drop_alert_names_the_deep_link_and_ignores_small_branches():
 
 
 def test_a_normal_tuesday_is_not_a_drop():
-    # low against the 7-day average (it holds the weekend) but in line with last Tuesday
+    # the normal is the same weekday (a Tuesday against Tuesdays, never a week that holds the weekend): 21 % under it is
+    # no drop; a branch with under 2 such weeks has no normal (vs_normal_pct None) and is not judged
     sc = {"date": "2026-10-06", "branches": [
-        {"branch": "รังสิต", "revenue": 58000, "avg7": 100000, "vs_avg_pct": -42.0, "vs_wow_pct": -21.0},
-        {"branch": "ใหม่", "revenue": 20000, "avg7": 60000, "vs_avg_pct": -66.0, "vs_wow_pct": None}]}
+        {"branch": "รังสิต", "revenue": 79000, "normal": 100000, "vs_normal_pct": -21.0},
+        {"branch": "ใหม่", "revenue": 20000, "normal": None, "vs_normal_pct": None}]}
     assert P.alert_payloads(sc, datetime(2026, 10, 7, 9, 0)) == []
 
 
