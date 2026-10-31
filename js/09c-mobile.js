@@ -1508,7 +1508,7 @@ function phCardList(spec) {
     const figs = (r.figs || []).filter(f => f.v || !r.grp), has = f => f && f.v && f.v !== '—';
     // unsorted: the first figure the row has (an empty "—" gives way to the next); sorted: the sort's figure, even when empty
     const key = !figs.length ? null : ordered && typeof s.k === 'number' ? figs[Math.min(kk, figs.length - 1)] : (figs.find(has) || figs[0]);
-    const rest = figs.filter(f => f !== key && f.v && f.v !== '—').map(f => `${f.l} ${f.v}`);
+    const rest = figs.filter(f => f !== key && f.v && f.v !== '—').map(f => `${f.l} ${f.v}${f.sub && f.sub.b ? ` (${f.sub.b})` : ''}`);   // figSub: the base stays beside its figure
     const kv = (r.kv || []).map(l => (l.v ? `${l.k} ${l.v}` : l.k));
     // figSub (owner 2026-10-25): the key figure's change and base ("▲0.9% · เดิม 193,477") lead the grey line
     const ks = key && key.sub ? [key.sub.a, key.sub.b].filter(Boolean).join(' ') : '';
