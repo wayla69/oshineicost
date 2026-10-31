@@ -1753,7 +1753,7 @@ def franchise_overview(request: Request, month: Optional[str] = Query(None, patt
 @router.get("/api/franchise/voids")
 def franchise_voids(request: Request, month: Optional[str] = Query(None, pattern=MONTH_RE), branch_id: Optional[int] = Query(None)):
     """ร้านของฉัน · การควบคุม › บิลยกเลิก: every cancelled and reprinted bill of the owner's branch in the month."""
-    from routers import voids as V
+    from . import voids as V
     with get_db() as con:
         _, name = _resolve_branch(con, request, branch_id)
     return V.report_voids(window="month", month=month, date=None, branch=name, group=None, lang="th")
@@ -1762,7 +1762,7 @@ def franchise_voids(request: Request, month: Optional[str] = Query(None, pattern
 @router.get("/api/franchise/voids/bill")
 def franchise_voids_bill(request: Request, receipt: str = Query(...), branch_id: Optional[int] = Query(None)):
     """One reprinted bill of the owner's branch: its lines and payments (routers/voids.report_voids_bill, same pin)."""
-    from routers import voids as V
+    from . import voids as V
     with get_db() as con:
         _, name = _resolve_branch(con, request, branch_id)
     return V.report_voids_bill(request, branch=name, receipt=receipt)
