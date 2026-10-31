@@ -61,7 +61,7 @@ def test_the_bottom_navigation_replaces_the_branch_strip_and_the_top_bar_control
     for needle in ('id="phMeDark"', 'id="phMeLock"', 'id="phMePw"', 'onclick="doLogout()"', 'id="msPush"', 'id="msInstall"', "msPushEnable()"):
         assert needle in HTML.split('id="phv-me"')[1].split("</section>")[0], needle
     assert 'id="msPush"' not in HTML.split('id="mobileSummary"')[1].split('id="phHome"')[0]           # not in the summary any more
-    assert "bottom: calc(56px + env(safe-area-inset-bottom, 0px))" in HTML and "min-height: 56px" in HTML      # 56 px + the safe area, 56 px targets
+    assert "height: calc(56px + env(safe-area-inset-bottom, 0px))" in HTML and "min-height: 56px" in HTML      # 56 px + the safe area, 56 px targets
 
 
 def test_the_phone_shell_adds_no_route_and_no_endpoint_of_its_own():
@@ -103,7 +103,7 @@ def _nav_prelude(role, allowed="() => true"):
 
 # PR-MA (owner 2026-10-24): one bar per role, built for its daily work; ค้นหา is the magnifier of the header now
 BARS = {
-    "management": ["หน้าแรก", "ยอดขาย", "กำไร", "สาขา", "ฉัน"],
+    "management": ["หน้าแรก", "ยอดขาย", "สาขา", "เมนู", "ฉัน"],          # phone B (owner 2026-10-30): กำไร and ส่วนลด are cards of หน้าแรก
     "salessupport": ["หน้าแรก", "คิวใบสั่งซื้อ", "ใบตัดเบิกสาขา", "เคลม", "ฉัน"],
     "warehouse": ["หน้าแรก", "คิวใบสั่งซื้อ", "ฉัน"],
     "analyst": ["หน้าแรก", "ต้นทุนต่อจาน", "ราคารายเดือน", "ไฟล์ราคา", "ฉัน"],
@@ -195,11 +195,13 @@ def test_a_phone_login_opens_the_launcher_then_a_department_then_a_page(live_ser
         tiles = page.evaluate("[...document.querySelectorAll('#phv-dept .ph-ptile')].map(e => e.innerText.trim())")
         assert tiles[0] == "สรุปผู้บริหาร" and "ยอดขายรายวัน" in tiles
         assert page.evaluate("getComputedStyle(document.querySelector('#phv-dept .ph-ptiles')).gridTemplateColumns.split(' ').length") == 2
-        # the summary, still intact behind it, opens from that tile and the bottom navigation goes home
+        # phone B (owner 2026-10-30): the summary IS หน้าแรก - the tile goes to the overview cards; a card opens its detail screen
+        # (the summary's own section) and the back arrow returns to the cards
         page.locator("#phv-dept .ph-ptile", has_text="สรุปผู้บริหาร").click()
-        page.wait_for_function("_phView === 'summary'")
-        page.wait_for_function("document.getElementById('msKpis').children.length > 0", timeout=30000)
-        page.locator("#phNav .ph-nav-i", has_text="หน้าแรก").click()
+        page.wait_for_function("_phView === 'home' && document.querySelectorAll('#phOvGrid .ph-ov-card').length > 0", timeout=30000)
+        page.locator("#phOvGrid .ph-ov-card[data-d='month']").click()
+        page.wait_for_function("_phView === 'summary' && document.getElementById('msKpis').children.length > 0", timeout=30000)
+        page.locator("#phTopBack").click()
         page.wait_for_function("_phView === 'home'")
         # a page: the shell boots on this first tap, the page replaces the launcher
         page.locator(".ph-dept", has_text="ผู้บริหาร").first.click()

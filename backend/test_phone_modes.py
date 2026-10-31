@@ -218,7 +218,10 @@ def test_every_entry_of_a_role_bar_is_a_page_that_role_may_open():
 
 def test_search_is_the_magnifier_of_the_header():
     hero = _fn(MOB, "_phHero")
-    assert 'id="phHeroSearch" onclick="phOpenSearch()"' in hero and "ph-hav" in hero and "phOpenMe()" in hero
+    assert 'id="phHeroSearch" onclick="phOpenSearch()"' in hero
+    # phone B (owner 2026-10-30): the avatar (ฉัน) is in the one header above the hero
+    top = HTML[HTML.index('<header id="phTop"'):]
+    assert 'id="phTopAv" onclick="phOpenMe()"' in top[:top.index("</header>")]
     bars = re.search(r"const _PH_BARS = \{.*?\n\};", MOB, re.S).group(0)
     assert "ค้นหา" not in bars and "phOpenSearch" not in _fn(MOB, "_phNavItems")
     assert "phHomeTap()" in _fn(MOB, "_phNavItems") and "nb: 't'" in _fn(MOB, "_phNavItems")

@@ -100,7 +100,7 @@ function _phSetView(v) {
   const cl = document.body.classList;
   cl.toggle('ph-home', _PH_HOME_VIEWS.includes(v));
   if (v === 'summary') cl.remove('force-desktop'); else if (v === 'page') cl.add('force-desktop');
-  cl.toggle('ph-summary', v === 'summary');      // PR-PD no. 15: the summary keeps ONE bottom bar (its own, with หน้าแรก first)
+  cl.toggle('ph-detail', v === 'summary');       // phone B (owner 2026-10-30): a detail screen of the summary - one header (#phTop), the shell's one bottom bar
   if (v !== 'summary') { try { msCloseSheet(); } catch (e) { /* the sheet is not open */ } }
   phPeriodClose(); phBranchClose();
   if (_PH_HOME_VIEWS.includes(v)) document.body.dataset.group = 'home';
@@ -112,7 +112,7 @@ function _phSetView(v) {
 }
 // a screen reader follows the view change: the new view's heading takes the focus (it is not a tab stop)
 function _phFocusHead(v) {
-  const h = document.querySelector('#phv-' + v + ' h1');
+  const h = (document.body.classList.contains('ph-centre') && document.getElementById('phTopT')) || document.querySelector('#phv-' + v + ' h1');
   if (h) { h.setAttribute('tabindex', '-1'); try { h.focus({ preventScroll: true }); } catch (e) { /* a hidden view takes no focus */ } }
 }
 function _phBusy(on) {
@@ -135,6 +135,12 @@ async function phOpenPage(fn) {
   try { fn(); } catch (e) { console.warn('phone page:', e); }
 }
 async function phShowSummary() {
+  // phone B (owner 2026-10-30): a centre login's summary IS หน้าแรก - the overview cards under the hero; a card opens its detail screen
+  if (_phKind() === 'centre') {
+    phShowHome();
+    if (!_msPendingLink) setTimeout(() => { const ov = document.getElementById('phOv'); if (ov) ov.scrollIntoView({ block: 'start' }); }, 0);
+    return;
+  }
   _phSetView('summary');
   msShowView(_msView);   // the view on screen is the one the report will draw into
   if (!window.__dataLastDate) { try { await initDataCoverageNote(); } catch (e) { /* the note is non-critical */ } }
@@ -147,9 +153,10 @@ async function phShowSummary() {
 // count the old งานของฉัน entry had). ค้นหา moved to the magnifier of the header. A page the role may not open is left out of its bar.
 // `home` = the page หน้าแรก opens for the role (else the launcher); a second tap on หน้าแรก while that page is open goes to the launcher.
 const _PH_BARS = {
-  // PR-PD (owner 2026-10-29, no. 15): a management login's ยอดขาย / กำไร / สาขา open the summary's own phone tabs (`ms`), not the
-  // desktop pages shrunk to fit; a login without the summary keeps the pages
-  management: [{ label: 'ยอดขาย', tab: 'dailysales', ms: 'sales', icon: 'cal' }, { label: 'กำไร', tab: 'gpbranch', ms: 'profit', icon: 'coin' }, { label: 'สาขา', tab: 'overall', ms: 'branches', icon: 'store' }],
+  // PR-PD (owner 2026-10-29, no. 15): a management login's entries open the summary's own detail screens (`ms`), not the desktop pages
+  // shrunk to fit; a login without the summary keeps the pages. Phone B (owner 2026-10-30): หน้าแรก · ยอดขาย · สาขา · เมนู · ฉัน - กำไร and
+  // ส่วนลด are cards of หน้าแรก (phOvRender)
+  management: [{ label: 'ยอดขาย', tab: 'dailysales', ms: 'sales', icon: 'cal' }, { label: 'สาขา', tab: 'overall', ms: 'branches', icon: 'store' }, { label: 'เมนู', tab: 'menu', ms: 'menu', icon: 'book' }],
   salessupport: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }, { label: 'ใบตัดเบิกสาขา', tab: 'orderhub', pane: 'issues', icon: 'doc', nb: true },
     { label: 'เคลม', tab: 'orderhub', pane: 'claims', icon: 'ret', nb: true }],
   warehouse: [{ label: 'คิวใบสั่งซื้อ', tab: 'orderhub', pane: 'queue', icon: 'inbox', nb: true }],
@@ -190,6 +197,7 @@ function _phNavItems() {
 }
 // หน้าแรก: the role's home page (หน้างาน, สรุปประจำวัน) or the launcher; tapped again on that page, the launcher
 function phHomeTap() {
+  if (_phView === 'summary' && _phDetailPushed) { history.back(); return; }   // phone B: a detail screen - its history entry goes too (popstate shows the cards)
   const ht = _phHomeTab();
   if (ht && !(_phView === 'page' && activeTab === ht)) { _deptCur = null; _deptFocus = null; phOpenPage(() => ht === 'supplyhome' ? supplyGo({ tab: 'supplyhome' }) : switchTab(ht)); return; }
   phShowHome();
@@ -198,9 +206,11 @@ function phBarGo(fn) { _deptCur = null; _deptFocus = null; phOpenPage(fn); }
 // PR-PD no. 15 · a bottom-bar entry that is one of the summary's tabs: open the summary on that tab
 // 2026-10-29: the asked view is shown at once - before, a first open (no report yet) left the สรุป view on screen while the
 // report drew into the hidden ยอดขาย / กำไร / สาขา view, so the owner saw an empty summary
-async function phSummaryGo(v) { _deptCur = null; _deptFocus = null; _msView = v; msShowView(v); await phShowSummary(); if (_msRpt) msSwitchView(v); }
+// phone B (owner 2026-10-30): the entry opens that detail screen (with a back to the cards of หน้าแรก)
+async function phSummaryGo(v) { _deptCur = null; _deptFocus = null; phOpenDetail(v); }
 function _phNavOn(it) {
   if (_phView === 'search' || _phView === 'me') return it.id === _phView;
+  if (_phView === 'summary') { const id = 'ms-' + _msView; return _phNavItems().some(x => x.id === id) ? it.id === id : it.id === 'home'; }   // a card's detail lights หน้าแรก
   if (_phView !== 'page') return it.id === 'home';
   const acc = typeof _SUPPLY_PANE === 'object' ? _SUPPLY_PANE[activeTab] : null, pane = acc ? acc.get() : null;
   const hit = x => x.tab && x.tab === activeTab && (!x.pane || x.pane === pane);
@@ -210,6 +220,7 @@ function _phNavOn(it) {
   return hit(it);
 }
 function phNavRender() {
+  phTopRender();                                  // phone B: the one header follows every view and page switch
   const nav = document.getElementById('phNav'); if (!nav) return;
   if (!phOn()) { nav.innerHTML = ''; return; }
   const items = _phNavItems();
@@ -236,15 +247,16 @@ function phRenderHome() {
   try { navBadgesApply(); navBadgesRefresh(false); } catch (e) { /* PR-D4: no launcher slice, no counts */ }
   phLoadTasks();
   if (kind === 'centre' && hasModule('sales.overview')) phLoadYesterday();
+  if (kind === 'centre' && hasModule('report.management')) phOvLoad();     // phone B: the overview cards
 }
 // U2: the header shows the name a person recognises (display name, else the Thai role label), never the login ID
 function _phUserId() { const a = window.AUTH || {}; return a.enabled ? (typeof lnchWho === 'function' ? lnchWho() : (a.display_name || '')) : ''; }
 // PR-MA: ค้นหา is the magnifier of the header (top right, beside the avatar); the avatar opens ฉัน
 function _phInitial() { return (_phUserId() || 'ฉ').trim().charAt(0).toUpperCase() || 'ฉ'; }
+// phone B (owner 2026-10-30): the hero sits under the one header (#phTop: the title, the chips, ฉัน) - the date and the magnifier, then the figure
 function _phHero(inner) {
-  return `<header class="ph-hero"><div class="ph-hero-top"><span class="ph-logo">お</span><span class="ph-brand">OSHINEI</span><span class="ph-uid">${esc(_phUserId())}</span>`
-    + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button>`
-    + `<button type="button" class="ph-hav" onclick="phOpenMe()" aria-label="ฉัน">${esc(_phInitial())}</button></div>${inner}</header>`;
+  return `<section class="ph-hero" aria-label="เมื่อวาน"><div class="ph-hero-top"><span class="ph-hero-date">${esc(lnchDateLabel())}</span>`
+    + `<button type="button" class="ph-hsearch" id="phHeroSearch" onclick="phOpenSearch()" aria-label="ค้นหาหน้า">${_phPath(_PH_ICON.search, 22)}</button></div>${inner}</section>`;
 }
 // the phone home grid: the person's own department(s) (js/18-launcher.js deptHome; management sees all)
 function _phDeptTiles(rows) {
@@ -254,12 +266,15 @@ function _phDeptTiles(rows) {
 }
 function _phCentreHome() {
   const vis = deptHome();
+  // phone B: for the owner the hero IS the full-width เมื่อวาน card of the overview - a tap opens its detail (the day + every branch)
   const yest = hasModule('sales.overview')
-    ? `<button type="button" class="ph-yest" id="phYest" onclick="${hasModule('report.management') ? 'phShowSummary()' : "phOpenPage(() => switchTab('home'))"}" aria-label="ยอดขายเมื่อวาน ${hasModule('report.management') ? 'เปิดสรุปผู้บริหาร' : 'เปิดสรุปประจำวัน'}"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span>`
+    ? `<button type="button" class="ph-yest" id="phYest" onclick="${hasModule('report.management') ? "phOpenDetail('yesterday')" : "phOpenPage(() => switchTab('home'))"}" aria-label="ยอดขายเมื่อวาน ${hasModule('report.management') ? 'เปิดรายละเอียดเมื่อวาน' : 'เปิดสรุปประจำวัน'}"><span class="ph-yest-l" id="phYestL">ยอดขายเมื่อวาน</span><span class="ph-yest-v" id="phYestV">…</span><span class="ph-yest-s" id="phYestS"></span>`
       + `<span class="ph-yest-c" id="phYestCause" hidden></span><span class="ph-yest-t" id="phYestTrust" hidden></span><span class="ph-yest-p" id="phYestPend" hidden></span></button>` : '';
-  return _phHero(`<div class="ph-hero-date">${esc(lnchDateLabel())}</div>${yest}`)
+  return _phHero(yest)
     + `<a href="#" class="ph-taskcard" id="phTaskCard" onclick="phOpenTasks();return false"><span class="ph-dot" id="phTaskDot" hidden></span>`
     + `<span class="ph-taskcard-t" id="phTaskText">งานของฉันวันนี้</span><span class="ph-taskcard-go">ดู ›</span></a>`
+    + (hasModule('report.management') ? '<section class="ph-body ph-ov" id="phOv" aria-labelledby="phOvH"><div class="ph-ov-h"><h2 class="ph-sec" id="phOvH">ภาพรวม</h2><span class="ph-ov-st" id="phOvSt"></span></div>'
+      + '<div class="ph-ov-grid" id="phOvGrid"><p class="ph-note">กำลังโหลด…</p></div></section>' : '')
     + (vis.length === 1 && _deptRole() !== 'management'
       // one department of its own: its pages straight on the home screen (no lone department tile to tap first)
       ? `<section class="ph-body" aria-labelledby="phDeptH" style="--dk:var(--dept-${vis[0].dept.hue}-ink)"><h2 class="ph-sec" id="phDeptH">${esc(vis[0].dept.label)}</h2>`
@@ -337,8 +352,9 @@ async function phLoadYesterdayLines() {
     const sc = await _msScorecard;
     if (!document.getElementById('phYestCause')) return;
     const rows = (sc && sc.branches) || [], down = _phDownRows(sc);
-    const top = down.slice(0, 2).map(b => { const why = _phCauseTxt(b); return `${esc(b.branch)} ${b.vs_avg_pct != null ? '−' + Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${why ? ` <small>${why}</small>` : ''}`; });
-    c.innerHTML = down.length ? `<b class="ph-ink-bad">${fmtN(down.length)} สาขาต่ำกว่าปกติ</b> · ${top.join(' · ')}` : '<b class="ph-ink-good">ทุกสาขาอยู่ในเกณฑ์ปกติ</b>';
+    // phone B (owner 2026-10-30): the cause line as chips - the count first (red), then the two branches with what moved
+    const top = down.slice(0, 2).map(b => { const why = _phCauseTxt(b).replace(/^\(|\)$/g, ''); return `<span class="ph-cz">${esc(b.branch)}${b.vs_avg_pct != null ? ' −' + Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${why ? ' · ' + esc(why) : ''}</span>`; });
+    c.innerHTML = down.length ? `<span class="ph-cz ph-cz-bad">${fmtN(down.length)} สาขาต่ำกว่าปกติ</span>${top.join('')}` : '<span class="ph-cz ph-cz-good">ทุกสาขาอยู่ในเกณฑ์ปกติ</span>';
     c.hidden = !rows.length;
     const miss = sc.missing || rows.filter(b => b.reported === false).map(b => b.branch);
     const rep = sc.reported != null ? sc.reported : rows.length - miss.length;
@@ -436,7 +452,7 @@ function phRenderDept(key) {
   host.innerHTML = `<header class="ph-head ph-head-tint" style="--dk:var(--dept-${d.hue}-ink);--dt:var(--dept-${d.hue}-tint);--df:var(--dept-${d.hue}-f);--df2:var(--dept-${d.hue}-f2)">`
     + `<button type="button" class="ph-back" onclick="phShowHome()" aria-label="กลับหน้าแรก">${_phPath(_PH_ICON.back, 24)}</button>`
     + `<span class="ph-badge ph-badge-sm">${_deptSvg(d.icon, 24)}</span><div class="ph-head-t"><h1>${esc(d.label)}</h1><p>${esc(deptDuty(d))}</p></div></header>`
-    + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><div class="ph-ptiles">${summary}${row.pages.map(x =>
+    + `<section class="ph-body" style="--dk:var(--dept-${d.hue}-ink)"><p class="ph-note ph-dept-duty">${esc(deptDuty(d))}</p><div class="ph-ptiles">${summary}${row.pages.map(x =>
       `<a href="#" class="ph-ptile" data-nb="${_navPageSpec(x.p)}" onclick="phOpenDeptPage('${d.key}',${x.i});return false">${_deptSvg(x.p.icon, 28)}<span>${esc(x.p.label)}</span></a>`).join('')}</div></section>`;
   navBadgesApply();
   _phFocusHead('dept');
@@ -499,6 +515,7 @@ function phMeRender() {
     lock.classList.toggle('is-on', !!st.unlocked);
   }
   ['phMePw', 'phMeOut'].forEach(id => { const el = document.getElementById(id); if (el) el.hidden = !signed; });
+  const full = document.getElementById('phMeFull'); if (full) full.hidden = !(phOn() && _phKind() === 'centre');   // phone B: the old "เต็ม →"
   // PR-MA: หน้าที่เปิดล่าสุด, the last three pages of this device, first
   const rw = document.getElementById('phMeRecentWrap'), rl = document.getElementById('phMeRecent');
   if (rw && rl) { const r = _phRecentHtml(); rl.innerHTML = r.html; rw.hidden = !r.n; try { navBadgesApply(); } catch (e) { /* no launcher slice */ } }
@@ -514,6 +531,187 @@ function phDarkSync() {
   const v = document.getElementById('phMeDarkV'); if (v) v.textContent = on ? 'เปิด' : 'ปิด';
 }
 function phUnlockWrites() { unlockWrites().then(phMeRender).catch(() => {}); }
+
+// ════════════════════════════════════════════════════════════════
+// PHONE B (owner 2026-10-30, mockup "แบบ B")
+// ════════════════════════════════════════════════════════════════
+// ONE header (#phTop) for every view of a centre login: the title (a back arrow on a detail screen or a department), the period and the
+// branch chips - the summary's own #msMonthSel / #msBranch are moved inside them, laid over the chip, so a tap opens the same picker and its
+// change runs msPickChanged as before - and ฉัน. A page of the full app keeps its own top bar, drawn in the same colours (index.html).
+// หน้าแรก of a login with report.management = the hero (เมื่อวาน, full width) + the overview cards (phOvRender) from the ONE management
+// payload (_msRpt); a card opens its DETAIL SCREEN: #mobileSummary under the same header, showing the existing view (sales / branches /
+// menu / profit / discounts) or the one section of msv-summary it is about. Opening pushes a history entry (pushState) so the back arrow
+// and the phone's back button both return to the cards at the scroll position they were left at (popstate). No route, no new call.
+const _PH_TOP_T = { home: 'หน้าแรก', search: 'ค้นหา', me: 'ฉัน', dept: 'แผนก' };
+const _PH_DETAIL = {
+  yesterday: { v: 'summary', only: 'yest', t: 'เมื่อวาน' },
+  month: { v: 'summary', only: 'kpis', t: 'เดือนนี้' },
+  target: { v: 'summary', only: 'target', t: 'เป้าเดือนนี้' },
+  todo: { v: 'summary', only: 'actions', t: 'ต้องทำ' },
+  watch: { v: 'summary', only: 'watch', t: 'ตรวจวันนี้' },
+  voice: { v: 'summary', only: 'voice', t: 'เสียงลูกค้า' },
+  sales: { v: 'sales', t: 'ยอดขาย' },
+  branches: { v: 'branches', t: 'สาขา' },
+  menu: { v: 'menu', t: 'เมนู' },
+  profit: { v: 'profit', t: 'ต้นทุนอาหารและกำไร' },
+  discounts: { v: 'discounts', t: 'ส่วนลด' },
+};
+let _phDetail = '', _phDetailPushed = false, _phHomeY = 0, _msVoiceN = 0;
+// the two pickers live in the header's chips while the shell is on (and go back to the summary when it goes)
+function _phTopPickers(on) {
+  [['msMonthSel', 'phTopMonth'], ['msBranch', 'phTopBranch']].forEach(([s, c]) => {
+    const sel = /** @type {any} */ (document.getElementById(s)), chip = document.getElementById(c);
+    if (!sel) return;
+    if (on && chip && sel.parentNode !== chip) {
+      if (!sel._phAnchor) { sel._phAnchor = document.createComment(s); sel.parentNode.insertBefore(sel._phAnchor, sel); }
+      chip.appendChild(sel);
+    } else if (!on && sel._phAnchor && sel._phAnchor.parentNode) {
+      sel._phAnchor.parentNode.insertBefore(sel, sel._phAnchor); sel._phAnchor.remove(); sel._phAnchor = null;
+    }
+  });
+}
+// the chip labels: the option on show; filled (is-on) when it is not the default (an older month, one branch); no picker = no chip (a pinned login)
+function phTopSync() {
+  [['msMonthSel', 'phTopMonthL'], ['msBranch', 'phTopBranchL']].forEach(([s, l]) => {
+    const sel = /** @type {HTMLSelectElement|null} */ (document.getElementById(s)), lab = document.getElementById(l), chip = lab && lab.parentElement;
+    if (!lab || !chip) return;
+    chip.hidden = !sel || sel.tagName !== 'SELECT';
+    if (chip.hidden) return;
+    const o = sel.options[sel.selectedIndex];
+    lab.textContent = o ? (o.textContent.replace(/\s*\(.*\)\s*$/, '') || o.textContent) : '';   // "ต.ค. 2026 (ถึงวันที่ 22)" → "ต.ค. 2026" on the chip
+    chip.classList.toggle('is-on', sel.selectedIndex > 0);
+  });
+}
+function phTopRender() {
+  const top = document.getElementById('phTop'); if (!top) return;
+  const on = phOn() && _phKind() === 'centre', ms = on && typeof hasModule === 'function' && hasModule('report.management');
+  document.body.classList.toggle('ph-centre', on);
+  _phTopPickers(ms);
+  if (!on) return;
+  const det = _phView === 'summary', dept = _phView === 'dept', back = det || dept;
+  const D = det ? _PH_DETAIL[_phDetail] : null;
+  const row = dept && typeof DEPARTMENTS !== 'undefined' ? DEPARTMENTS.find(x => x.key === _phDept) : null;
+  const bk = document.getElementById('phTopBack'), mk = document.getElementById('phTopMark');
+  if (bk) { bk.hidden = !back; bk.setAttribute('aria-label', dept ? 'กลับหน้าแรก' : 'กลับภาพรวม'); }
+  if (mk) mk.hidden = back;
+  const t = document.getElementById('phTopT');
+  if (t) t.textContent = det ? (D ? D.t : 'สรุปผู้บริหาร') : row ? row.label : (_PH_TOP_T[_phView] || 'หน้าแรก');
+  const chips = document.getElementById('phTopChips'); if (chips) chips.hidden = !(ms && (det || _phView === 'home'));
+  const av = document.getElementById('phTopAv'); if (av) { av.textContent = _phInitial(); av.classList.toggle('is-on', _phView === 'me'); }
+  phTopSync();
+}
+// ── a detail screen ──
+function phOpenDetail(d) {
+  if (!_PH_DETAIL[d]) d = d === 'summary' ? 'yesterday' : 'month';
+  if (d === 'profit' && !(_msMod('cost.analysis') || _msMod('profit.pnl'))) d = 'month';
+  if (d === 'discounts' && !_msMod('ops.discounts')) d = 'branches';
+  if (_phView === 'home') _phHomeY = window.scrollY;
+  const st = { phd: d };
+  try {
+    if (_phDetailPushed && history.state && history.state.phd) history.replaceState(st, '');
+    else { history.pushState(st, ''); _phDetailPushed = true; }
+  } catch (e) { /* no history (a sandboxed frame): the back arrow still closes */ }
+  _phShowDetail(d);
+}
+function _phShowDetail(d) {
+  const D = _PH_DETAIL[d] || _PH_DETAIL.month;
+  _phDetail = d; _msView = D.v;
+  const sv = document.getElementById('msv-summary');
+  if (sv) { if (D.only) sv.dataset.only = D.only; else delete sv.dataset.only; }
+  document.querySelectorAll('#msv-summary > .ms-section').forEach(s => s.classList.toggle('ph-off', !!D.only && /** @type {HTMLElement} */ (s).dataset.d !== D.only));
+  _phSetView('summary');
+  msShowView(D.v);
+  if (!window.__dataLastDate) { try { initDataCoverageNote(); } catch (e) { /* the note is non-critical */ } }
+  if (_msRpt) msRenderActive(); else loadMobileSummary(true);
+  _phFocusHead('summary');
+}
+// the back arrow: a department → หน้าแรก; a detail screen → its history entry goes (popstate shows the cards), or the cards straight away
+function phDetailClose() {
+  if (_phView === 'dept') { phShowHome(); return; }
+  if (_phView !== 'summary') return;
+  if (_phDetailPushed && history.state && history.state.phd) { history.back(); return; }
+  _phBackToCards();
+}
+function _phBackToCards() {
+  _phDetailPushed = false; _phDetail = '';
+  const y = _phHomeY, host = document.getElementById('phv-home');
+  _phSetView('home');
+  if (!host || !host.querySelector('#phOvGrid')) phRenderHome(); else phOvRender();
+  requestAnimationFrame(() => window.scrollTo(0, y));
+}
+window.addEventListener('popstate', e => {
+  if (!phOn() || _phKind() !== 'centre') return;
+  const d = e.state && e.state.phd;
+  if (d) { if (_phView === 'home' || _phView === 'summary') { if (_phView === 'home') _phHomeY = window.scrollY; _phDetailPushed = true; _phShowDetail(d); } return; }   // forward again
+  if (_phView === 'summary') _phBackToCards(); else _phDetailPushed = false;
+});
+// ── the overview cards of หน้าแรก ──
+function phOvLoad() {
+  if (!document.getElementById('phOvGrid')) return;
+  phOvRender();
+  loadMobileSummary(true);                         // the payload is cached per (month, branch): a second visit draws from memory
+}
+function phOvKey(e, d) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); phOpenDetail(d); } }
+function phOvRender() {
+  const box = document.getElementById('phOvGrid'); if (!box) return;
+  const j = _msRpt, st = document.getElementById('phOvSt');
+  if (!j) { box.innerHTML = `<p class="ph-note">${esc((document.getElementById('msStatus') || {}).textContent || 'กำลังโหลด…')}</p>`; return; }
+  if (st) st.textContent = [msBranch() || 'ทุกสาขา', j.label || ''].filter(Boolean).join(' · ');
+  const H = j.headline || {}, P = j.pace || {}, cards = [];
+  const card = (d, tone, label, val, sub, o) => cards.push(`<div class="ph-ov-card${tone ? ' is-' + tone : ''}${o && o.wide ? ' ph-ov-wide' : ''}" role="button" tabindex="0" data-d="${d}" onclick="phOpenDetail('${d}')" onkeydown="phOvKey(event,'${d}')">`
+    + `<span class="ph-ov-l">${label}</span><span class="ph-ov-v${o && o.ink ? ' is-' + o.ink : ''}">${val}</span>${sub ? `<span class="ph-ov-s">${sub}</span>` : ''}${o && o.rows ? `<div class="ph-ov-rows">${o.rows}</div>` : ''}</div>`);
+  const safe = (k, fn) => { try { fn(); } catch (e) { console.error('overview card ' + k, e); } };   // one card that fails never blanks the others
+  safe('month', () => card('month', '', j.partial ? 'เดือนนี้ (สะสม)' : esc(j.label || 'ยอดขายเดือน'), '฿' + fmt(H.revenue || 0),
+    H.rev_wow_pct != null ? `${msPchip(H.rev_wow_pct)}<span>เทียบเดือนก่อน</span>` : ''));
+  safe('target', () => {
+    if (!P.target) return;                         // no target set = no card (owner rule: nothing to show, not shown)
+    const pvt = P.proj_vs_target_pct, RR = P.run_rate, miss = pvt != null && pvt < 100, tone = pvt == null ? '' : miss ? 'bad' : 'good';
+    const sub = RR && RR.days_left > 0 && RR.need_per_day != null
+      ? (RR.need_per_day <= 0 ? '<b class="is-good">ถึงเป้าแล้ว</b>' : `<span>ต้องขายวันละ</span><b class="${RR.need_per_day > (RR.normal_per_day || 0) * 1.02 ? 'is-bad' : 'is-good'}">฿${fmt(RR.need_per_day)}</b>`)
+      : `<span>${P.month_complete ? 'ของเป้าทั้งเดือน' : 'ประมาณการสิ้นเดือน'}</span>`;
+    card('target', tone, 'เป้า', pvt != null ? pvt.toFixed(0) + '%' : '—', sub, { ink: tone });
+  });
+  safe('todo', () => {
+    const A = j.actions || []; if (!A.length) return;
+    const neg = A.reduce((s, a) => s + (a.baht != null && a.baht < 0 ? a.baht : 0), 0);
+    card('todo', 'bad', 'ต้องทำ', `${fmtN(A.length)} เรื่อง`, neg ? `<b class="is-bad">${dvBaht(neg)}</b>` : '');
+  });
+  safe('watch', () => {
+    const W = j.watch, n = W ? (W.fix || 0) + (W.watch || 0) : 0; if (!n) return;
+    const live = (W.items || []).filter(it => it.available && (it.level === 'fix' || it.level === 'watch'));
+    card('watch', 'watch', 'ตรวจวันนี้', `${fmtN(n)} เรื่อง`, `<span>${esc(live.slice(0, 2).map(it => it.title).join(' · '))}</span>`);
+  });
+  safe('profit', () => {
+    const fc = P.food_cost_pct; if (fc == null || !canSeeCost() || !(_msMod('cost.analysis') || _msMod('profit.pnl'))) return;
+    const fct = fcTargetSet(j.food_cost_target), over = fc > fct;
+    card('profit', over ? 'bad' : 'good', 'ต้นทุนอาหาร', fc.toFixed(1) + '%', `<b class="${over ? 'is-bad' : 'is-good'}">${over ? 'เกินเป้า' : 'ในเป้า'}</b><span>เป้า ≤${fcTargetTxt(fct)}%</span>`, { ink: over ? 'bad' : 'good' });
+  });
+  safe('discounts', () => {
+    if (!_msMod('ops.discounts') || H.discount_pct == null) return;
+    const pol = H.discount_policy_pct, over = pol != null && H.discount_pct > pol;
+    card('discounts', over ? 'bad' : pol != null ? 'good' : '', 'ส่วนลด', H.discount_pct.toFixed(1) + '%',
+      `<span>${pol != null ? `เพดาน ${pol}%` : 'ของยอดขาย'}</span>${over ? '<b class="is-bad">เกินเพดาน</b>' : ''}`, { ink: over ? 'bad' : '' });
+  });
+  safe('branches', () => {
+    const brs = (j.branches || []).filter(b => b.rev_delta != null); if (brs.length < 2) return;
+    const dn = brs.filter(b => b.rev_delta < 0).length, up = brs.filter(b => b.rev_delta > 0).length;
+    const rows = brs.slice().sort((a, b) => a.rev_delta - b.rev_delta).slice(0, 2).map(b => msRow2({ tone: b.rev_delta < 0 ? 'bad' : 'good', title: esc(b.branch),
+      val: dvBaht(b.rev_delta), valTone: b.rev_delta < 0 ? 'bad' : 'good', fact: `${b.wow_pct != null ? msPchip(b.wow_pct) + ' ' : ''}ยอด ฿${fmt(b.revenue || 0)}`, branch: b.branch })).join('');
+    card('branches', dn ? 'bad' : 'good', 'สาขา', `ลด ${fmtN(dn)} · เพิ่ม ${fmtN(up)}`, '<span>เทียบเดือนก่อน เป็นบาท</span>', { wide: true, rows });
+  });
+  safe('menu', () => {
+    const M = j.menu || {}, cov = M.covers || 0, rs = (M.risers || []).filter(m => (m.delta || 0) > 0);
+    if (canSeeCost() && !M.hidden && rs.length && cov) {
+      card('menu', 'bad', 'เมนู', '+฿' + fmt(rs.reduce((s, m) => s + m.delta * cov, 0)), `<span>${fmtN(rs.length)} เมนูดันต้นทุนต่อหัว</span>`, { ink: 'bad' });
+    } else card('menu', '', 'เมนู', 'ขายดี', '<span>จำนวนจานรายเมนู</span>');
+  });
+  safe('sales', () => {
+    const pk = (j.peak || {}).peak_hour;
+    card('sales', '', 'ยอดขาย', `${fmtN(H.customers || 0)} คน`, [H.rev_per_head != null ? `฿${fmt(H.rev_per_head)}/หัว` : '', pk ? `พีค ${_hh(pk.hour)}` : ''].filter(Boolean).map(x => `<span>${x}</span>`).join(''));
+  });
+  if (_msVoiceN) card('voice', 'watch', 'เสียงลูกค้า', `${fmtN(_msVoiceN)}${_msVoiceN >= 5 ? '+' : ''} รอตอบ`, '');
+  box.innerHTML = cards.join('') || '<p class="ph-note">ยังไม่มีข้อมูลของเดือนนี้</p>';
+}
 
 // ── Pull to refresh on the summary: a downward drag from the top grows #msPull
 // ("ดึงลงเพื่อรีเฟรช" → "ปล่อยเพื่อรีเฟรช"), letting go past the threshold runs msRefresh().
@@ -1585,6 +1783,7 @@ function msDeepLink(link) {
   else if (go === 'branches') msSwitchView('branches');
   else if (go === 'discounts') { if (document.getElementById('msnav-discounts')?.style.display !== 'none') msSwitchView('discounts'); else msSwitchView('branches'); }
   else if (go === 'summary') {
+    if (phOn() && _phKind() === 'centre') { phOpenDetail('yesterday'); return; }     // phone B: the morning brief opens the day's detail
     msSwitchView('summary');
     setTimeout(() => document.getElementById('msYesterdayWrap')?.scrollIntoView({ block: 'start', behavior: 'smooth' }), 400);
   }
@@ -2001,6 +2200,8 @@ function msShowView(v) {
   });
 }
 function msSwitchView(v) {
+  // phone B: on the phone shell a view is a detail screen with its own back (history); สรุป is the cards of หน้าแรก
+  if (phOn() && _phKind() === 'centre') { if (v === 'summary') phDetailClose(); else phOpenDetail(v); return; }
   _msView = v;
   msShowView(v);
   window.scrollTo(0, 0);
@@ -2097,8 +2298,8 @@ async function loadMobileSummary(force) {
   const br = msBranch(), mon = msMonth();
   let j;
   try { j = await msFetchRpt(br, mon); }
-  catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; return; }
-  if (!j || !j.available) { if (status) status.textContent = 'ยังไม่มีข้อมูลการขาย'; return; }
+  catch (e) { if (status) status.textContent = 'โหลดไม่สำเร็จ — ลองรีเฟรช'; phOvRender(); return; }
+  if (!j || !j.available) { if (status) status.textContent = 'ยังไม่มีข้อมูลการขาย'; phOvRender(); return; }
   if (br !== msBranch() || mon !== msMonth()) return;   // the reader moved on while this loaded
   _msRpt = j;
   if (!_msBranchesFilled && !br && (j.branches || []).length) {
@@ -2117,7 +2318,11 @@ async function loadMobileSummary(force) {
   }
   document.getElementById('msSubtitle').textContent = (br || 'ทุกสาขา') + ' · ' + (j.label || '');
   if (status) status.textContent = `เทียบ${j.comp_label || 'เดือนก่อน'} · ข้อมูลถึง ${j.latest_day ? fmtDateTh(j.latest_day) : ''}` + (_msFetchedAt ? ` · โหลดล่าสุด ${msClock(_msFetchedAt)}` : '');
-  msRenderActive();
+  // phone B: on หน้าแรก the cards are drawn, and the summary's sections behind them (a card's detail opens at once); a detail screen draws its view
+  const shell = phOn() && _phKind() === 'centre';
+  if (!shell || _phView === 'summary') msRenderActive();
+  else if (_msView === 'summary') { try { msRenderSummary(); } catch (e) { console.error('summary', e); } }
+  if (shell) { phOvRender(); phTopSync(); }
   msLoadVoice();
   if (_msPendingLink) { const l = _msPendingLink; _msPendingLink = ''; msDeepLink(l); }
 }
@@ -2127,7 +2332,7 @@ async function loadMobileSummary(force) {
 async function msLoadVoice() {
   const wrap = document.getElementById('msVoiceWrap'), box = document.getElementById('msVoice');
   if (!wrap || !box) return;
-  if (window.AUTH && window.AUTH.enabled && !(window.AUTH.modules || []).includes('customer.feedback')) { wrap.style.display = 'none'; return; }
+  if (window.AUTH && window.AUTH.enabled && !(window.AUTH.modules || []).includes('customer.feedback')) { wrap.style.display = 'none'; _msVoiceN = 0; return; }
   const p = new URLSearchParams({ needs_reply: '1', sort: 'priority', limit: '5' });
   const br = (window.AUTH && window.AUTH.branch) || msBranch(); if (br) p.set('branch', br);
   let d;
@@ -2135,6 +2340,7 @@ async function msLoadVoice() {
   catch (e) { wrap.style.display = 'none'; return; }
   const items = d.items || [];
   wrap.style.display = items.length ? '' : 'none';   // nothing waiting = no section (owner 2026-10-29)
+  if (_msVoiceN !== items.length) { _msVoiceN = items.length; phOvRender(); }   // phone B: the เสียงลูกค้า card of หน้าแรก
   document.getElementById('msVoiceCount').textContent = items.length ? `(${items.length}${items.length >= 5 ? '+' : ''})` : '';
   const esc = s => String(s == null ? '' : s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   box.innerHTML = items.length ? items.map(r => `<div style="padding:8px 0;border-bottom:1px solid var(--border,#e2e8f0)">
@@ -2156,7 +2362,6 @@ async function msVoiceHandled(id) {
 // ── shared pieces (the summary view and the branch sheet print the same cards) ──
 const _msYoyOk = j => !!(j && j.has_yoy && j.range && j.range[1] >= '2026-05-15');   // same guard as the report
 const _msTgtCol = p => p == null ? '#94a3b8' : p >= 100 ? '#10b981' : p >= 90 ? '#f59e0b' : '#ef4444';
-const _msSevCol = s => s === 'high' ? '#ef4444' : s === 'med' ? '#f59e0b' : '#94a3b8';
 const _msCpCol = cp => fcTargetCol(cp);   // ONE food-cost target (owner 2026-10-25): ≤ target green, above it red
 const _msMuted = 'color:var(--text-muted,#64748b)';
 const _msNone = t => `<div class="ms-row" style="font-size:13px;${_msMuted}">${t}</div>`;
@@ -2254,35 +2459,72 @@ function msTargetHtml(j) {
     ${P.mom_pct != null ? `<div class="ms-row"><span style="flex:1;font-size:13px">เทียบเดือนก่อน <span style="font-size:13px;${_msMuted}">${P.mom_basis === 'dow' ? '(ถ่วงวันในสัปดาห์)' : '(วันเท่ากัน)'}</span></span>${msPchip(P.mom_pct)}</div>` : ''}
     <p style="font-size:13px;${_msMuted};margin:6px 0 4px">เป้า = ตัวเลขที่ตั้งไว้ หรือยอดจริงของเดือนเดียวกันปีก่อน</p>`;
 }
+// phone B (owner 2026-10-30, item 3) · ONE row pattern for ต้องทำ, ตรวจวันนี้ and the branch lists: line 1 = the bold title and the baht
+// on the right; line 2 = the branch chips (a tap opens the branch sheet) and one short fact; the long explanation sits behind a tap on
+// the row (it expands) - never a three-line paragraph per item. A row about one branch opens that branch's sheet instead.
+// The bar on the left: red = money lost or a target missed, amber = ต้องดู, green = ok (index.html .ms-r2).
+function msRow2(o) {
+  const act = o.more ? ` role="button" tabindex="0" aria-expanded="false" onclick="msRow2Toggle(this,event)" onkeydown="msRow2Key(this,event)"`
+    : o.branch ? ` data-br="${esc(o.branch)}" role="button" tabindex="0" onclick="event.stopPropagation();msOpenBranch(this.dataset.br)" onkeydown="if(event.key==='Enter'){event.stopPropagation();msOpenBranch(this.dataset.br)}"` : '';
+  return `<div class="ms-r2${o.tone ? ' is-' + o.tone : ''}${o.cls ? ' ' + o.cls : ''}"${act}><div class="ms-r2-a"><span class="ms-r2-t">${o.title}</span>`
+    + (o.val ? `<span class="ms-r2-v${o.valTone ? ' is-' + o.valTone : ''}">${o.val}</span>` : '') + '</div>'
+    + `<div class="ms-r2-b">${o.chips || ''}${o.fact ? `<span class="ms-r2-f">${o.fact}</span>` : ''}${o.more ? '<span class="ms-r2-m" aria-hidden="true">▾</span>' : o.branch ? '<span class="ms-r2-m" aria-hidden="true">›</span>' : ''}</div>`
+    + (o.more ? `<div class="ms-r2-x">${o.more}</div>` : '') + '</div>';
+}
+function msRow2Toggle(el, e) {
+  if (e && e.target && e.target.closest && e.target.closest('.ms-watch-br, a, button')) return;   // a branch chip opens its sheet, not the row
+  if (e) e.stopPropagation();
+  const on = el.classList.toggle('is-open'); el.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+function msRow2Key(el, e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); msRow2Toggle(el); } }
+// the branch chips of a row: three, then "+N"
+function _msBrChips(brs) {
+  return (brs || []).slice(0, 3).map(b => `<span class="ms-watch-br" data-br="${esc(b)}" onclick="event.stopPropagation();msOpenBranch(this.dataset.br)">${esc(b)}</span>`).join('')
+    + ((brs || []).length > 3 ? `<span>+${brs.length - 3}</span>` : '');
+}
+// a to-do sentence of the report ("ปลวกแดง ยอดขายลดลง 40% เทียบเดือนก่อน (฿1.2M)", "3 สาขาต่ำกว่า 90% ของเป้าเดือนนี้: A 70%, B 80%",
+// "… — ตรวจสอบสาเหตุ") → the branches it names (chips), a short title without them, the list or the advice; the whole sentence stays behind the tap
+function _msSplitLine(text, names) {
+  const t = String(text || '').trim(), brs = [];
+  const lead = s => names.find(n => s === n || s.startsWith(n + ' ') || s.startsWith(n + ','));   // names run longest first
+  let head = t.split(' — ')[0];
+  const ci = head.indexOf(': ');
+  if (ci > 0) { head.slice(ci + 2).split(/,\s*/).forEach(p => { const n = lead(p.trim()); if (n && !brs.includes(n)) brs.push(n); }); head = head.slice(0, ci); }
+  const n0 = lead(head);
+  if (n0) { if (!brs.includes(n0)) brs.unshift(n0); head = head.slice(n0.length).trim(); }
+  // the title keeps the finding: no "(…)" aside, no baht figure (the baht is on the right), nothing after " · "
+  head = head.split(' · ')[0].replace(/\s*\([^)]*\)/g, '').replace(/\s*฿[\d,.]+[KM]?/g, '').replace(/\s+/g, ' ').trim() || t;
+  return { title: head, branches: brs, more: head !== t };
+}
 // DV6 (phone table review 2026-10-25, top-10 #9): every to-do line shows the baht it is about on the right (actions[].baht, signed:
-// red = sales lost / money given away / cost added, green = the opposite; dvBaht, js/01-core.js) with what the figure is (baht_label) under it
+// red = sales lost / money given away / cost added, green = the opposite; dvBaht, js/01-core.js) with what the figure is (a.baht_label) under it
 function msActionsHtml(j) {
+  const names = (j.branches || []).map(x => x.branch).filter(Boolean).sort((x, y) => y.length - x.length);
   return (j.actions || []).map(a => {
-    const b = a.baht, has = b != null && b !== 0;
-    const right = has ? `<span style="flex-shrink:0;max-width:42%;text-align:right;line-height:1.3"><b style="font-size:14px;font-variant-numeric:tabular-nums;white-space:nowrap;color:${b < 0 ? 'var(--bad-ink)' : 'var(--good-ink)'}">${dvBaht(b)}</b>`
-      + (a.baht_label ? `<br><span style="font-size:13px;${_msMuted}">${esc(a.baht_label)}</span>` : '') + `</span>` : '';
-    return `<div class="ms-row ms-act" style="align-items:flex-start;gap:8px"><span style="width:8px;height:8px;border-radius:50%;background:${_msSevCol(a.sev)};flex-shrink:0;margin-top:6px"></span><span style="flex:1;min-width:0;font-size:13px;color:var(--text-primary,#1e293b)">${esc(a.text)}</span>${right}</div>`;
+    const b = a.baht, has = b != null && b !== 0, L = _msSplitLine(a.text, names);
+    return msRow2({ cls: 'ms-act', tone: (has && b < 0) || a.sev === 'high' ? 'bad' : 'watch', title: esc(L.title), val: has ? dvBaht(b) : '', valTone: has ? (b < 0 ? 'bad' : 'good') : '',
+      chips: _msBrChips(L.branches), fact: esc(a.baht_label || ''), more: L.more ? esc(a.text) : '' });
   }).join('') || _msNone('ไม่พบประเด็นเร่งด่วน');
 }
 // PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: payload.watch.items, each a finding with its level (fix / watch / ok / none), the
 // sentence that names the branches and the action, and the rows behind it. Sorted by level on the server. Unavailable items fold
-// into one grey line (their reasons behind ดูเหตุผล), so a month with no issue slips still reads as a short card.
-let _msWatchWhy = false;
-function msWatchToggleWhy() { _msWatchWhy = !_msWatchWhy; if (_msRpt) msRenderWatch(_msRpt); }
+// into one grey row (their reasons behind a tap), so a month with no issue slips still reads as a short card. Phone B: the two-line rows.
 function msRenderWatch(j) {
   const wrap = document.getElementById('msWatchWrap'), el = document.getElementById('msWatch'), cnt = document.getElementById('msWatchCount');
   if (!wrap || !el) return;
   const W = j.watch;
   if (!W || !(W.items || []).length) { wrap.style.display = 'none'; return; }
   const live = W.items.filter(it => it.available), dead = W.items.filter(it => !it.available);
-  const brChips = it => (it.rows || []).map(r => r.branch).filter(Boolean).slice(0, 3)
-    .map(b => `<span class="ms-watch-br" data-br="${esc(b)}" onclick="msOpenBranch(this.dataset.br)">${esc(b)}</span>`).join('');
-  const row = it => `<div class="ms-watch ms-watch-${it.level || 'none'}"><span class="ms-watch-dot" aria-hidden="true"></span>`
-    + `<span style="flex:1;min-width:0"><span class="ms-watch-t">${esc(it.title)}</span><div class="ms-watch-l">${esc(it.line || '')}</div>${it.level === 'fix' || it.level === 'watch' ? `<div>${brChips(it)}</div>` : ''}</span></div>`;
-  const deadHtml = !dead.length ? '' : `<div class="ms-watch ms-watch-none"><span class="ms-watch-dot" aria-hidden="true"></span><span style="flex:1;min-width:0">`
-    + `<span class="ms-watch-t">ยังไม่มีข้อมูล ${fmtN(dead.length)} รายการ</span><div class="ms-watch-l">${dead.map(it => esc(it.title)).join(' · ')}`
-    + ` <button type="button" class="ms-watch-more" onclick="msWatchToggleWhy()">${_msWatchWhy ? 'ซ่อนเหตุผล' : 'ดูเหตุผล'}</button></div>`
-    + (_msWatchWhy ? dead.map(it => `<div class="ms-watch-l" style="color:var(--text-muted)">${esc(it.title)}: ${esc(it.line || '')}</div>`).join('') : '') + '</span></div>';
+  const tone = l => l === 'fix' ? 'bad' : l === 'watch' ? 'watch' : l === 'ok' ? 'good' : '';
+  const row = it => {
+    const line = String(it.line || ''), act = it.level === 'fix' || it.level === 'watch';
+    const fact = line.split(' — ')[0].split(': ')[0];                       // the finding without the branch list and the advice
+    const baht = act ? (it.rows || []).reduce((s, r) => s + (+r.baht > 0 ? +r.baht : 0), 0) : 0;
+    return msRow2({ cls: 'ms-watch-r', tone: tone(it.level), title: esc(it.title), val: baht ? '฿' + fmt(baht) : '', valTone: baht ? 'bad' : '',
+      chips: act ? _msBrChips((it.rows || []).map(r => r.branch).filter(Boolean)) : '', fact: esc(fact), more: fact !== line ? esc(line) : '' });
+  };
+  const deadHtml = !dead.length ? '' : msRow2({ cls: 'ms-watch-r ms-watch-none', title: `ยังไม่มีข้อมูล ${fmtN(dead.length)} รายการ`, fact: esc(dead.map(it => it.title).join(' · ')),
+    more: dead.map(it => `<b>${esc(it.title)}</b>: ${esc(it.line || '')}`).join('<br>') });
   el.innerHTML = live.map(row).join('') + deadHtml;
   if (cnt) cnt.textContent = (W.fix || W.watch) ? `· ต้องดู ${fmtN((W.fix || 0) + (W.watch || 0))}` : '';
   wrap.style.display = '';
@@ -2391,11 +2633,27 @@ async function msLoadYesterday() {
     if (br !== msBranch() || _msView !== 'summary') return;   // the reader moved on while this loaded
     if (!brief || !brief.yesterday) { wrap.style.display = 'none'; return; }
     el.innerHTML = msYesterdayHtml(brief, sc, br);
+    const ls = document.getElementById('msYestList');
+    if (ls) { const h = br ? '' : msYestListHtml(sc); ls.innerHTML = h; ls.hidden = !h; }
     wrap.style.display = '';
   } catch (e) {
     delete _msBriefCache[br]; _msScorecard = null;   // a failed call is not kept for next time
     wrap.style.display = 'none';
   }
+}
+// phone B · the detail "เมื่อวาน": every branch of the scorecard as a two-line row, the lowest against its own normal first; a branch whose
+// bills have not arrived sits last, grey (PR-PD no. 4: it is not a branch to call)
+function msYestListHtml(sc) {
+  const rows = ((sc || {}).branches || []).slice();
+  if (rows.length < 2) return '';
+  const k = b => b.reported === false ? 1e9 : (b.vs_avg_pct ?? 0);
+  rows.sort((a, b) => k(a) - k(b));
+  return rows.map(b => {
+    const miss = b.reported === false, v = b.vs_avg_pct, down = !miss && (b.status === 'down' || (v != null && v <= -8));
+    const why = _phCauseTxt(b).replace(/^\(|\)$/g, '');
+    return msRow2({ tone: miss ? '' : down ? 'bad' : 'good', title: esc(b.branch), val: miss ? '' : '฿' + fmt(b.revenue || 0),
+      fact: miss ? 'ข้อมูลยังไม่มา' : `${v != null ? msPchip(Math.round(v)) + ' ' : ''}เทียบปกติ 7 วัน${why ? ' · ' + esc(why) : ''}`, branch: b.branch });
+  }).join('');
 }
 function msYesterdayHtml(brief, sc, br) {
   const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow;

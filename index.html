@@ -2363,21 +2363,109 @@ body.mgt-reading .content-area { padding-top: 10px; }
   border: 0; background: none; font: inherit; font-size: 12px; line-height: 1.2; color: var(--text-secondary); cursor: pointer; }
 .ph-nav-i.active { color: var(--accent); font-weight: 700; }
 :is(.ph-dept, .ph-ptile, .ph-bigtile, .ph-row, .ph-nav-i, .ph-todo, .ph-taskcard, .ph-yest, .ph-back, .ph-signout, .ph-search):focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+/* ── PHONE B (owner 2026-10-30, mockup "แบบ B") · ONE header (#phTop), the overview cards of หน้าแรก (phOvRender) and the two-line rows of
+   ต้องทำ / ตรวจวันนี้ / สาขา (msRow2). Colour = meaning only: a red bar or ink = money lost or a target missed, amber = ต้องดู, green = ok;
+   the bars use the fills (--fix-f / --watch-f / --good-f), the text the inks. #phTop is display:none until body.ph-on.ph-centre (the media
+   block below). ── */
+#phTop { display: none; }
+.ph-top { position: sticky; top: 0; z-index: 30; box-sizing: border-box; min-height: 56px; padding: calc(6px + env(safe-area-inset-top, 0px)) 8px 6px 12px;
+  align-items: center; gap: 8px; background: var(--hero1); color: var(--hero-ink); }
+.ph-top-mark { width: 28px; height: 28px; flex: 0 0 auto; border-radius: var(--r-sm, 8px); background: rgba(255,255,255,.2); display: flex; align-items: center; justify-content: center; font-weight: 700; }
+.ph-top-back { width: 44px; height: 44px; margin: 0 -6px 0 -8px; flex: 0 0 auto; border: 0; background: none; color: inherit; display: flex; align-items: center; justify-content: center; cursor: pointer; }
+.ph-top-back[hidden], .ph-top-mark[hidden], .ph-top-chips[hidden], .ph-tchip[hidden] { display: none; }
+.ph-top-t { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 16px; font-weight: 700; line-height: 1.3; color: inherit; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ph-top-t:focus { outline: none; }
+.ph-top-chips { display: flex; align-items: center; gap: 6px; flex: 0 1 auto; min-width: 0; }
+.ph-tchip { position: relative; display: inline-flex; align-items: center; gap: 4px; box-sizing: border-box; height: 32px; min-width: 0; max-width: 118px; padding: 0 10px; border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.12); color: inherit; font-size: 12px; font-weight: 600; white-space: nowrap; }
+.ph-tchip-l { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.ph-tchip-v { flex: 0 0 auto; }
+.ph-tchip.is-on { background: var(--hero-ink); color: var(--hero1); }            /* a branch or an older month is picked: the chip is filled */
+.ph-tchip:focus-within { outline: 2px solid var(--hero-ink); outline-offset: 2px; }
+.ph-top-av { width: 40px; height: 40px; flex: 0 0 auto; border: 0; border-radius: 999px; background: var(--hero-ink); color: var(--hero1); font: inherit; font-size: 16px; font-weight: 700;
+  display: inline-flex; align-items: center; justify-content: center; cursor: pointer; }
+.ph-top-av.is-on { box-shadow: 0 0 0 3px rgba(255,255,255,.45); }
+.ph-top :is(.ph-top-back, .ph-top-av):focus-visible { outline: 2px solid var(--hero-ink); outline-offset: 2px; }
+.ph-hero-top .ph-hsearch { margin-left: auto; }
+.ph-yest-c { display: flex; flex-wrap: wrap; gap: 6px; }
+.ph-cz { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.5; background: rgba(255,255,255,.16); color: var(--hero-ink); }
+.ph-cz-bad { background: var(--fix-f); color: var(--fix-on); }
+.ph-cz-good { background: var(--good-f); color: var(--good-on); }
+.ph-ov { padding-top: 14px; }
+.ph-ov-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.ph-ov-st { font-size: 12px; color: var(--text-secondary); text-align: right; }
+.ph-ov-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-flow: dense; gap: 10px; }
+.ph-ov-card { position: relative; box-sizing: border-box; min-width: 0; min-height: 96px; padding: 12px 12px 12px 14px; display: flex; flex-direction: column; gap: 3px; text-align: left;
+  background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border-soft, var(--border)); border-left: 4px solid var(--border-soft, var(--border));
+  border-radius: var(--r-md, 12px); box-shadow: var(--shadow-card, none); cursor: pointer; }
+.ph-ov-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ph-ov-wide { grid-column: 1 / -1; }
+.ph-ov-card.is-bad { border-left-color: var(--fix-f); }
+.ph-ov-card.is-watch { border-left-color: var(--watch-f); }
+.ph-ov-card.is-good { border-left-color: var(--good-f); }
+.ph-ov-l { display: flex; justify-content: space-between; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-secondary); }
+.ph-ov-l::after { content: '›'; font-size: 16px; line-height: 1; }
+.ph-ov-v { font-size: 22px; font-weight: 800; line-height: 1.15; letter-spacing: -.01em; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.ph-ov-v.is-bad, .ph-ov-s .is-bad { color: var(--bad-ink); }
+.ph-ov-v.is-good, .ph-ov-s .is-good { color: var(--good-ink); }
+.ph-ov-s { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 6px; font-size: 13px; line-height: 1.35; color: var(--text-secondary); }
+.ph-ov-rows { margin-top: 4px; }
+.ms-r2 { position: relative; padding: 9px 0 9px 12px; border-top: 1px solid var(--border-soft, var(--border)); }
+.ms-r2:first-child { border-top: 0; }
+.ms-r2::before { content: ''; position: absolute; left: 0; top: 9px; bottom: 9px; width: 3px; border-radius: 2px; background: var(--border); }
+.ms-r2.is-bad::before { background: var(--fix-f); }
+.ms-r2.is-watch::before { background: var(--watch-f); }
+.ms-r2.is-good::before { background: var(--good-f); }
+.ms-r2[role="button"] { cursor: pointer; }
+.ms-r2[role="button"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.ms-r2-a { display: flex; align-items: baseline; gap: 8px; }
+.ms-r2-t { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-r2-v { flex: 0 0 auto; font-size: 14px; font-weight: 700; font-variant-numeric: tabular-nums; white-space: nowrap; color: var(--text-primary); }
+.ms-r2-v.is-bad { color: var(--bad-ink); }
+.ms-r2-v.is-good { color: var(--good-ink); }
+.ms-r2-b { display: flex; flex-wrap: nowrap; align-items: center; gap: 4px; min-width: 0; margin-top: 3px; font-size: 13px; color: var(--text-secondary); overflow: hidden; }
+.ms-r2-b .ms-watch-br { margin: 0; flex: 0 0 auto; background: var(--neu-t); color: var(--neu-i); }
+.ms-r2-f { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.ms-r2-m { flex: 0 0 auto; margin-left: auto; padding-left: 4px; font-size: 12px; color: var(--text-secondary); }
+.ms-r2.is-open .ms-r2-m { transform: rotate(180deg); }
+.ms-r2-x { display: none; margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
+.ms-r2.is-open .ms-r2-x { display: block; }
+.ms-r2-list { padding-top: 2px; padding-bottom: 2px; }
+.ms-r2-list[hidden] { display: none; }
 @media (max-width: 700px) {
   body.ph-on #phNav { display: grid; }
-  body.ph-on.ph-summary #phNav { display: none; }                     /* PR-PD no. 15: one bottom bar while the summary is open (#msNav, หน้าแรก first) */
   body.ph-on.ph-home #phHome { display: block; }
   /* a launcher view hides everything else; the summary and the pages are behind it until a tile opens them */
-  body.ph-on.ph-home .app-layout, body.ph-on.ph-home #mobileSummary, body.ph-on.ph-home #msNav, body.ph-on.ph-home #msSheet { display: none !important; }
+  body.ph-on.ph-home .app-layout, body.ph-on.ph-home #mobileSummary, body.ph-on.ph-home #msNav, body.ph-on.ph-home #msSheet:not(.open) { display: none !important; }
   /* the shell replaces the old phone chrome: the tab strip, the floating back button, the supply link of the summary, the user chip and the theme button */
   body.ph-on .sidebar, body.ph-on #backToMobile, body.ph-on #msSupply { display: none !important; }
   body.ph-on #userChip, body.ph-on #darkBtn { display: none !important; }
-  /* the owner's summary keeps its own six tabs; they sit just above the bottom navigation */
-  body.ph-on #msNav { bottom: calc(56px + env(safe-area-inset-bottom, 0px)); padding-bottom: 5px; }
-  body.ph-on #mobileSummary { padding-bottom: calc(140px + env(safe-area-inset-bottom, 0px)); }
-  /* 2026-10-29: #phNav is hidden on the summary (PR-PD no. 15), so its bar sits at the very bottom - lifted 56 px it floated with content showing under it */
-  body.ph-on.ph-summary #msNav { bottom: 0; padding-bottom: calc(5px + env(safe-area-inset-bottom, 0px)); }
-  body.ph-on.ph-summary #mobileSummary { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  /* phone B (owner 2026-10-30): ONE bottom bar - the shell's #phNav is on every screen; the summary's own seven tabs (#msNav) are gone from
+     the phone shell (ยอดขาย / สาขา / เมนู are entries of #phNav, กำไร and ส่วนลด cards of หน้าแรก) */
+  body.ph-on #msNav { display: none !important; }
+  body.ph-on #mobileSummary { padding-bottom: calc(84px + env(safe-area-inset-bottom, 0px)); }
+  /* phone B · ONE header on the launcher views and the detail screens of a centre login (the branch and franchise screens keep theirs) */
+  body.ph-on.ph-centre:is(.ph-home, .ph-detail) #phTop { display: flex; }
+  body.ph-on.ph-centre #msSheet.open { display: block; }                      /* a branch row of หน้าแรก opens the branch sheet over the cards */
+  body.ph-on.ph-centre .ph-ov { padding-bottom: 0; scroll-margin-top: 64px; }
+  body.ph-on.ph-centre #mobileSummary > .ms-header, body.ph-on.ph-centre #msPickRow, body.ph-on.ph-centre #msFullRow { display: none !important; }
+  body.ph-on.ph-centre #phv-dept > .ph-head, body.ph-on.ph-centre #phv-search > .ph-head { display: none; }
+  body.ph-on.ph-centre #phv-me > .ph-head { margin: 12px 16px 0; border: 1px solid var(--border); border-radius: var(--r-md, 12px); background: var(--bg-card); color: var(--text-primary); }
+  body.ph-on.ph-centre #phv-me > .ph-head .ph-head-t p { color: var(--text-secondary); }
+  body.ph-on.ph-centre #phv-me > .ph-head .ph-av { background: var(--accent); color: var(--on-accent); }
+  body.ph-on.ph-centre .ph-tchip select { position: absolute !important; inset: -6px 0 !important; width: 100% !important; height: auto !important; min-height: 0 !important; max-width: none !important; margin: 0 !important; padding: 0 !important; border: 0 !important; opacity: 0; font-size: 16px !important; cursor: pointer; }
+  /* a detail screen: the one section of the summary the card opened (phOpenDetail sets .ph-off on the others); the header names it */
+  body.ph-on.ph-centre #msv-summary > .ms-section.ph-off { display: none !important; }
+  body.ph-on.ph-centre #msv-summary[data-only] > .ms-section > .ms-section-title { display: none; }
+  body.ph-on.ph-centre #mobileSummary .ms-section-title::before { content: none; display: none; }
+  /* a page of the full app: its top bar (title, mode, search, ฉัน, then the two chips) in the header's colours while folded */
+  body.ph-on.ph-centre.tb-folded .top-bar { background: var(--hero1); color: var(--hero-ink); border-bottom-color: transparent; box-shadow: none; }
+  body.ph-on.ph-centre.tb-folded .top-bar .page-title { color: var(--hero-ink); }
+  body.ph-on.ph-centre.tb-folded .top-bar .page-title::before { display: none; }
+  body.ph-on.ph-centre.tb-folded .top-bar :is(.ph-tb-btn, .tb-fold, #tbFoldChev) { background: transparent; border-color: rgba(255,255,255,.55); color: var(--hero-ink); }
+  body.ph-on.ph-centre.tb-folded .top-bar .ph-tb-av { background: var(--hero-ink); color: var(--hero1); }
+  body.ph-on.ph-centre.tb-folded .top-bar :is(.gp-range-chip, .gp-branch-chip) { background: rgba(255,255,255,.12); border-color: rgba(255,255,255,.55); color: var(--hero-ink); }
+  body.ph-on.ph-centre.tb-folded .top-bar .gp-branch-chip.gb-on { background: var(--hero-ink); color: var(--hero1); }
   body.ph-on #msSheet { z-index: 50; padding-bottom: 40px; }
   /* a page: room under the content for the navigation (the sticky action rows of the branch and warehouse pages sit just above it) */
   body.ph-on .content-area, body.ph-on.franchise-phone .content-area, body.ph-on.supply-phone .content-area { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
@@ -2590,7 +2678,7 @@ body.mgt-reading .content-area { padding-top: 10px; }
 @media print {
   /* the phone-only overlay must never reach paper, and the desktop shell has to
      be visible even when the phone was not in force-desktop mode */
-  #mobileSummary, #msNav, #backToMobile, #msSheet, #phHome, #phNav { display: none !important; }
+  #mobileSummary, #msNav, #backToMobile, #msSheet, #phHome, #phNav, #phTop { display: none !important; }
   /* PR-MB: a "?" opens a dialog on screen; on paper it is nothing (the card lists are screen-only: their block is @media screen) */
   .ui-q, .ph-cl { display: none !important; }
   /* paper is white even when the screen is dark: up/down figures take the light inks */
@@ -3022,6 +3110,20 @@ body.php-open { overflow: hidden; }
      MOBILE OWNER SUMMARY (phone-first) — see CSS block "MOBILE OWNER SUMMARY".
      Shown instead of the full app on screens ≤700px (unless body.force-desktop).
 ══════════════════════════════════════════════════════════════════════════ -->
+<!-- ══ PHONE B (owner 2026-10-30): ONE header for every view of the management phone - the page title (a back arrow on a detail screen),
+     the period and the branch chips (the summary's own #msMonthSel / #msBranch sit inside them, so a tap opens the same picker) and ฉัน.
+     Drawn by phTopRender (js/09c-mobile.js); display:none unless body.ph-on.ph-centre. A page of the full app keeps its own top bar, in the
+     same colours (body.ph-centre .top-bar). ══ -->
+<header id="phTop" class="ph-top">
+  <button type="button" class="ph-top-back" id="phTopBack" onclick="phDetailClose()" aria-label="กลับ" hidden><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg></button>
+  <span class="ph-top-mark" id="phTopMark" aria-hidden="true">お</span>
+  <h1 class="ph-top-t" id="phTopT">หน้าแรก</h1>
+  <span class="ph-top-chips" id="phTopChips" hidden>
+    <span class="ph-tchip" id="phTopMonth"><span class="ph-tchip-l" id="phTopMonthL">เดือนล่าสุด</span><span class="ph-tchip-v" aria-hidden="true">▾</span></span>
+    <span class="ph-tchip" id="phTopBranch"><span class="ph-tchip-l" id="phTopBranchL">ทุกสาขา</span><span class="ph-tchip-v" aria-hidden="true">▾</span></span>
+  </span>
+  <button type="button" class="ph-top-av" id="phTopAv" onclick="phOpenMe()" aria-label="ฉัน">ฉ</button>
+</header>
 <div id="mobileSummary">
   <div class="ms-header">
     <div class="ms-logo">お</div>
@@ -3046,7 +3148,7 @@ body.php-open { overflow: hidden; }
 
   <!-- offline: the worker served the last stored copy (sw.js → message offline-fallback) -->
   <div id="msOffline" class="ms-section" role="status" style="display:none;margin-top:10px;padding:8px 12px;border-radius:var(--r-md);background:#fef3c7;color:#92400e;font-size:12px;font-weight:600"></div>
-  <div class="ms-section" style="margin-top:12px;display:flex;gap:8px">
+  <div class="ms-section" id="msPickRow" style="margin-top:12px;display:flex;gap:8px">
     <select id="msBranch" onchange="msPickChanged()" aria-label="เลือกสาขา" style="flex:1;min-width:0;min-height:44px;padding:10px 12px;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b);font-size:13px">
       <option value="">ทุกสาขา</option>
     </select>
@@ -3060,30 +3162,32 @@ body.php-open { overflow: hidden; }
   <!-- VIEW: สรุป — headline, target, action items, voice queue, best/worst -->
   <div id="msv-summary" class="ms-view">
     <!-- เมื่อวาน: the Daily Brief's first card at phone size (msLoadYesterday, 09c-mobile.js) -->
-    <div class="ms-section" id="msYesterdayWrap" style="margin-top:12px;display:none">
+    <div class="ms-section" id="msYesterdayWrap" data-d="yest" style="margin-top:12px;display:none">
       <div id="msYesterday" class="ms-card" style="padding:12px 16px"></div>
+      <!-- phone B (2026-10-30): the detail "เมื่อวาน" lists the branches of the scorecard under the figure (msYestListHtml) -->
+      <div id="msYestList" class="ms-card ms-r2-list" style="margin-top:10px" hidden></div>
     </div>
-    <div class="ms-section" style="display:none">
+    <div class="ms-section" data-d="kpis" style="display:none">
       <div id="msKpis" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
     </div>
-    <div class="ms-section" style="display:none">
+    <div class="ms-section" data-d="target" style="display:none">
       <div class="ms-section-title">เป้าเดือนนี้</div>
       <div id="msTarget" class="ms-card"></div>
     </div>
-    <div class="ms-section" style="display:none">
+    <div class="ms-section" data-d="actions" style="display:none">
       <div class="ms-section-title">สิ่งที่ต้องทำ</div>
       <div id="msActions" class="ms-card"></div>
     </div>
     <!-- PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: the findings with the branches to act on (payload.watch, msWatchHtml) -->
-    <div class="ms-section" id="msWatchWrap" style="display:none">
+    <div class="ms-section" id="msWatchWrap" data-d="watch" style="display:none">
       <div class="ms-section-title">ตรวจวันนี้ <span id="msWatchCount" style="font-weight:400;color:var(--text-muted,#64748b)"></span></div>
       <div id="msWatch" class="ms-card"></div>
     </div>
-    <div class="ms-section" id="msVoiceWrap" style="display:none">
+    <div class="ms-section" id="msVoiceWrap" data-d="voice" style="display:none">
       <div class="ms-section-title">เสียงลูกค้า — รอตอบ <span id="msVoiceCount" style="font-weight:400;color:var(--text-muted,#64748b)"></span></div>
       <div id="msVoice" class="ms-card"></div>
     </div>
-    <div class="ms-section" style="display:none">
+    <div class="ms-section" data-d="bw" style="display:none">
       <div class="ms-section-title">ดีสุด / ⚠ ต้องดู (เทียบเดือนก่อน)</div>
       <div id="msBestWorst" style="display:grid;grid-template-columns:1fr 1fr;gap:10px"></div>
     </div>
@@ -3167,7 +3271,7 @@ body.php-open { overflow: hidden; }
     </div>
   </div>
 
-  <div class="ms-section" style="margin-top:18px;text-align:center">
+  <div class="ms-section" id="msFullRow" style="margin-top:18px;text-align:center">
     <button onclick="showFullDashboard()" style="min-height:44px;padding:10px 18px;font-size:13px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border,#e2e8f0);background:var(--bg-card,#fff);color:var(--text-primary,#1e293b)">เปิดแดชบอร์ดเต็ม (เดสก์ท็อป) →</button>
   </div>
 </div>
@@ -3216,6 +3320,8 @@ body.php-open { overflow: hidden; }
         <button type="button" class="ph-row" id="phMeLock" onclick="phUnlockWrites()" hidden><span>การบันทึกข้อมูล</span><span class="ph-val" id="phMeLockV">อ่านอย่างเดียว</span></button>
         <button type="button" class="ph-row" id="phMePw" onclick="openPasswordChange(false)"><span>เปลี่ยนรหัสผ่าน</span><span class="ph-chev" aria-hidden="true">›</span></button>
         <button type="button" class="ph-row" onclick="phOpenPage(() => switchTab('manual'))"><span>คู่มือการใช้งาน</span><span class="ph-chev" aria-hidden="true">›</span></button>
+        <!-- phone B (2026-10-30): the full app, before the "เต็ม →" of the summary header and the button under each summary tab -->
+        <button type="button" class="ph-row" id="phMeFull" onclick="showFullDashboard()" hidden><span>เปิดแดชบอร์ดเต็ม (เดสก์ท็อป)</span><span class="ph-chev" aria-hidden="true">›</span></button>
       </div>
   <!-- install offer: beforeinstallprompt, or the iOS hint (msShowInstall, 09c-mobile.js) -->
   <div id="msInstall" class="ms-section" style="display:none;margin-top:10px">
