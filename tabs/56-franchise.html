@@ -1,13 +1,18 @@
 <div id="tab-franchise" style="display:none">
 
   <!-- ร้านของฉัน (PR-L, 2026-10-10): the franchise owner's page - one branch, one month, read only.
-       GET /api/franchise/summary and /api/franchise/summary.xlsx (backend/routers/franchise.py), drawn by js/17-franchise.js.
-       The branch is shown as text; there is no branch picker on this page (the account is tied to one branch). -->
+       GET /api/franchise/overview (summary + insight + เรื่องที่ควรดู + the ควรดู findings) and /api/franchise/daily (backend/routers/franchise.py),
+       drawn by js/17-franchise.js. The branch is shown as text; there is no branch picker on this page (the account is tied to one branch).
+       Phone B (owner 2026-10-31): the overview cards (#frcCards) first; a card opens its detail screen in place (#frcDetail.d-<name> shows
+       the .frc-sec sections whose data-d names it, index.html); the head's ‹ and the phone's back button return to the cards. -->
   <div class="frc-wrap">
     <div id="frcHead" class="card p-3 mb-3 flex flex-wrap items-center gap-3">
+      <!-- the one head of the page: ร้านของฉัน + the branch on the cards; ‹ + the detail's name on a detail screen (_frcHead) -->
+      <button type="button" id="frcBack" class="frc-back" hidden onclick="frcBack()" aria-label="กลับภาพรวม">‹</button>
       <div class="min-w-0">
-        <div class="text-[11px]" style="color:var(--text-muted)">ร้านของฉัน</div>
+        <div id="frcKicker" class="text-[11px]" style="color:var(--text-muted)">ร้านของฉัน</div>
         <div id="frcBranchName" class="text-base font-semibold" style="color:var(--text-primary)"></div>
+        <h2 id="frcDtTitle" class="text-base font-semibold" style="color:var(--text-primary);margin:0" hidden></h2>
       </div>
       <!-- DV6: no month picker of its own - the page follows the top bar's period (สัปดาห์ · เดือน; the chip by the title on a phone);
            this line names the month the month cards show -->
@@ -15,28 +20,47 @@
       <!-- DV6: on a phone the franchise login has no top bar - this chip is its period control (it opens the period sheet, phPeriodOpen) -->
       <button type="button" id="frcPeriodChip" class="frc-pchip" hidden onclick="if (typeof phPeriodOpen === 'function') phPeriodOpen()"
         aria-haspopup="dialog"><span class="frc-pchip-l"></span> <span aria-hidden="true">▾</span></button>
-      <!-- PR-F1: the month as an Excel file (GET /api/franchise/summary.xlsx); a paper copy prints from this page (A4, index.html) -->
-      <button type="button" id="frcDownload" class="frc-dl" onclick="frcDownload()" hidden>ดาวน์โหลดรายงานเดือนนี้</button>
     </div>
-    <!-- PR-F4: ติดต่อสำนักงานใหญ่ - the owner's questions to head office and the replies (GET/POST /api/franchise/messages*,
-         routers/franchise_msgs.py), drawn by js/17-franchise.js frcMsg*. Shown for the franchise login only. -->
-    <!-- สรุปประจำวัน (owner 2026-10-27): the branch's last finished day, GET /api/franchise/daily, drawn by js/17-franchise.js frcShowDay -->
-    <div id="frcDay"></div>
-    <div class="ms-section" id="frcMsg" hidden></div>
-    <div id="frcBody"></div>
-    <!-- PR-F2: รับแจ้งเตือนทุกเช้า - this owner's own morning summary on this phone (kind "franchise", routers/push_api.py
-         maybe_send_franchise). The card logic is the phone summary's (09c-mobile.js msPush*, id prefix frcPush); hidden where
-         push is not available (an iPhone tab that is not installed, a server without the key) and for every other login. -->
-    <div class="ms-section" id="frcPush" hidden>
-      <div class="ms-section-title">รับแจ้งเตือนทุกเช้า</div>
-      <div class="ms-card" style="padding:12px">
-        <p id="frcPushState" style="font-size:13px;color:var(--text-secondary);margin:0">กำลังตรวจสอบ…</p>
-        <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
-          <button type="button" id="frcPushOn" onclick="msPushEnable('frcPush')" style="min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);cursor:pointer">เปิดการแจ้งเตือน</button>
-          <button type="button" id="frcPushOff" onclick="msPushDisable('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ปิด</button>
-          <button type="button" id="frcPushTest" onclick="msPushTest('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ส่งทดสอบ</button>
+    <!-- the overview: เมื่อวาน (full width) · เดือนนี้ · เป้า · ต้นทุนอาหาร · ควรดู · การควบคุม · เมนู · เสียงลูกค้า · ติดต่อสำนักงานใหญ่ (_frcCardsHtml);
+         2 columns on a phone, 3 on a desktop. #frcMeHome holds ฉัน's block on a desktop (on a phone it moves into the ฉัน view). -->
+    <div id="frcOv">
+      <div id="frcCards" class="ph-ov-grid frc-ov-grid" aria-label="ภาพรวมร้านของฉัน"></div>
+      <div id="frcMeHome"></div>
+    </div>
+    <!-- the detail screens: every section of the page, shown under the detail it belongs to (data-d) -->
+    <div id="frcDetail" class="frc-dt">
+      <!-- สรุปประจำวัน (owner 2026-10-27): the branch's last finished day, GET /api/franchise/daily, drawn by js/17-franchise.js frcShowDay -->
+      <div id="frcDay" class="frc-sec" data-d="yesterday"></div>
+      <!-- PR-F4: ติดต่อสำนักงานใหญ่ - the owner's questions to head office and the replies (GET/POST /api/franchise/messages*,
+           routers/franchise_msgs.py), drawn by js/17-franchise.js frcMsg*. Shown for the franchise login only. -->
+      <div class="ms-section frc-sec" id="frcMsg" data-d="msg" hidden></div>
+      <div id="frcBody"></div>
+    </div>
+    <!-- ฉัน (phone B): แจ้งเตือนทุกเช้า and ดาวน์โหลดและพิมพ์ - moved into the phone's ฉัน view (before ออกจากระบบ), under the cards on a
+         desktop (_frcMeMount) -->
+    <div id="frcMe" class="frc-me">
+      <!-- PR-F2: รับแจ้งเตือนทุกเช้า - this owner's own morning summary on this phone (kind "franchise", routers/push_api.py
+           maybe_send_franchise). The card logic is the phone summary's (09c-mobile.js msPush*, id prefix frcPush); hidden where
+           push is not available (an iPhone tab that is not installed, a server without the key) and for every other login. -->
+      <div class="ms-section" id="frcPush" hidden>
+        <div class="ms-section-title">รับแจ้งเตือนทุกเช้า</div>
+        <div class="ms-card" style="padding:12px">
+          <p id="frcPushState" style="font-size:13px;color:var(--text-secondary);margin:0">กำลังตรวจสอบ…</p>
+          <div style="display:flex;gap:8px;margin-top:8px;flex-wrap:wrap">
+            <button type="button" id="frcPushOn" onclick="msPushEnable('frcPush')" style="min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:0;background:var(--accent);color:var(--on-accent);cursor:pointer">เปิดการแจ้งเตือน</button>
+            <button type="button" id="frcPushOff" onclick="msPushDisable('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ปิด</button>
+            <button type="button" id="frcPushTest" onclick="msPushTest('frcPush')" style="display:none;min-height:44px;padding:10px 16px;font-size:14px;font-weight:600;border-radius:var(--r-md);border:1px solid var(--border);background:var(--bg-card);color:var(--text-primary);cursor:pointer">ส่งทดสอบ</button>
+          </div>
+          <div id="frcPushKinds" style="display:none"></div>
         </div>
-        <div id="frcPushKinds" style="display:none"></div>
+      </div>
+      <!-- PR-F1: the month as an Excel file (GET /api/franchise/summary.xlsx); พิมพ์ = the whole month on A4 (print stylesheet in index.html) -->
+      <div class="ms-section" id="frcDl">
+        <div class="ms-section-title">ดาวน์โหลดและพิมพ์</div>
+        <div class="ms-card frc-dl-row">
+          <button type="button" id="frcDownload" class="frc-dl" onclick="frcDownload()">ดาวน์โหลดรายงานเดือนนี้</button>
+          <button type="button" id="frcPrint" class="frc-dl frc-dl-2" onclick="frcPrint()">พิมพ์</button>
+        </div>
       </div>
     </div>
   </div>

@@ -265,3 +265,31 @@ Pinned by `backend/test_mobile_review_set2.py`.
    chart of more than 10 categories → the 5 largest as bars (by baht where the points carry it) + "ดูทั้งหมด (N)". `config.phKeep` keeps a
    chart; `config.phRank` / `config.phGoodUp` name the ranking or the direction. One chart per question: สรุปประจำวัน keeps the month's pace
    and folds ชั่วโมงพีค + เทรนด์ 7 วัน (`uiPhoneFold`). Chart colours stay hex; the glance plugin and `B1_PAL` are unchanged.
+
+## 11. ร้านของฉัน แบบ B - the franchise owner's cards (owner 2026-10-31, "เริ่มเลย")
+
+The management phone's card-first shell (#524 / #529 / #531), scaled to ONE branch, for role `franchise` only. One code path for the
+phone and the desktop (2 card columns on a phone, 3 at > 700 px); nothing of another role's screens changes. Pinned by
+`backend/test_franchise_b.py`.
+
+1. **One call, one findings list.** `GET /api/franchise/overview?month&kind&pick` returns the page's three payloads (summary + insight +
+   เรื่องที่ควรดู, run side by side) and `findings` (`routers/franchise.py franchise_findings`, pure, no query): discount over the ceiling,
+   voids over 0.5 / 1 %, discounted reprints (the report's `leak.reprinted`), cash short, food cost over the ONE target, a high-value group
+   ≥ 10 % per customer over เฉลี่ยทุกสาขา, days ≤ `BELOW_NORMAL_PCT` against their normal, reviews unanswered / negative. Each carries
+   `go: {d, el}`. The read is covered by the existing `GET /api/franchise` rule (`franchise.view`); no write rule was added. สรุปประจำวัน
+   keeps `/api/franchise/daily`; วัตถุดิบจากส่วนกลาง still loads when it is first on screen.
+2. **Cards → detail in place.** `_frcCardsHtml` (pure) draws `.ph-ov-card`s - เมื่อวาน (wide: revenue, the เทียบปกติ pill, customers /
+   bills, one cause line) · เดือนนี้ · เป้า (% + ต้องขายวันละ) · ต้นทุนอาหาร (vs 58 %) · ควรดู (red bar when any ต้องแก้) · การควบคุม
+   (discount · voids · reprints) · เมนู (top dish) · เสียงลูกค้า (รอตอบ) · ติดต่อสำนักงานใหญ่ (unread); a card with nothing to show is left
+   out. Every section of the old long page is a `.frc-sec` whose `data-d` names the detail(s) it sits on; `#frcDetail.d-<name>` shows them
+   (CSS in index.html). `frcOpen` pushes `{frd}`, the head's ‹ / the phone's back (popstate) return to the cards where they were left;
+   หน้าแรก on the bottom bar does the same (`frcHome`, called from `phOpenFranchise`).
+3. **Rows that go.** ควรดู rows are `uiRow2` + `onGo` → `frcGo(d, el)` opens the detail and `uiFlash`es the line (ids `frcCtlDisc /
+   frcCtlVoids / frcCtlReprint / frcCtlCash`, `frcGp`, `frcCostly-<slug>`, `frcD-<date>`, `frcVoice`); ▾ reads the sentence. Top menus,
+   ของแพง, เมนูที่ลูกค้าสั่งเพิ่มขึ้น and the money lists of การควบคุม are `uiRow2`; empty sub-sections are hidden, an empty month is one
+   `uiEmpty`, loading is `uiSkel`. Second-question charts fold (แนวโน้ม 12 เดือน + 6 สัปดาห์; สัดส่วนการขาย + ช่วงเวลาขายดี).
+4. **ฉัน.** `#frcMe` (รับแจ้งเตือนทุกเช้า + ดาวน์โหลดและพิมพ์) moves into the phone's ฉัน view before ออกจากระบบ (under the cards on a
+   desktop); the generic morning-brief card is hidden there for this role. พิมพ์ prints every section on A4 (no cards).
+5. **Guard rails kept.** 17-franchise.js calls only eager helpers (01-core / 09c-mobile) or 18-launcher (`test_role_code_split.py`), never
+   the management phone's detail machinery or `_msRpt`. The owner's write paths (messages to head office, the push device endpoints) are
+   unchanged. The day card keeps no day-YoY; VAT is never revenue.

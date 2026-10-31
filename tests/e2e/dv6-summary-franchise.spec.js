@@ -18,7 +18,7 @@ async function open(browser, { franchise = false } = {}) {
     await ctx.route('**/api/auth/me', r => r.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ enabled: true, authenticated: true,
       username: 'own-e2e', role: 'franchise', branch: 'สาขาทดสอบ', display_name: 'เจ้าของสาขา', names: {}, write_gated: false, modules: ['franchise.view'] }) }));
     // auth is off on the fixture: the centre's rule (name the branch) stands in for the signed session's pin
-    await ctx.route(/\/api\/franchise\/(summary|decide|insight|supply|daily)(\?|$)/, r => {
+    await ctx.route(/\/api\/franchise\/(overview|summary|decide|insight|supply|daily)(\?|$)/, r => {
       const u = new URL(r.request().url()); u.searchParams.set('branch_id', '1');
       return r.continue({ url: u.toString() });
     });
@@ -61,27 +61,32 @@ test('executive phone summary · baht on the to-do lines, baht-first branch and 
   await ctx.close();
 });
 
+// phone B (2026-10-31): เรื่องที่ควรดู of the period comes with the overview (GET /api/franchise/overview?kind=…) and its cards sit on the
+// ต้นทุนอาหาร detail (ต้นทุนอาหาร เทียบเฉลี่ยทุกสาขา, ของแพง) and the เมนู detail; the period chip still reloads them with kind=week
 test('ร้านของฉัน on a phone · เรื่องที่ควรดู, and the period chip switches it to the week', async ({ browser }) => {
   test.setTimeout(150_000);
   const { ctx, page, urls, errors } = await open(browser, { franchise: true });
   await page.evaluate(async () => { await phOpenPage(() => switchTab('franchise')); });
-  await page.waitForFunction(() => { const b = document.getElementById('frcDecide'); return b && !/กำลังโหลด/.test(b.innerText); }, null, { timeout: 90_000 });
-  await expect(page.locator('#frcDecide')).toContainText('เรื่องที่ควรดู');
-  await expect(page.locator('#frcDecide')).toContainText('ต้นทุนอาหาร');
-  expect(urls.some(u => u.includes('/api/franchise/decide?kind=month'))).toBe(true);
+  await page.waitForFunction(() => document.querySelector('#frcCards [data-d="cost"]'), null, { timeout: 90_000 });
+  expect(urls.some(u => u.includes('/api/franchise/overview?kind=month'))).toBe(true);
+  await page.locator('#frcCards [data-d="cost"]').click();
+  await expect(page.locator('#frcDetail')).toContainText('ต้นทุนอาหาร เทียบเฉลี่ยทุกสาขา');
+  await page.locator('#frcBack').click();
+  await expect(page.locator('#frcCards')).toBeVisible();
   const chip = page.locator('#frcPeriodChip');
   await expect(chip).toBeVisible();
   await expect(chip).toContainText('เดือน');
   await chip.click();
   await expect(page.locator('#phPeriodSheet')).toBeVisible();
-  const weekReq = page.waitForRequest(r => r.url().includes('/api/franchise/decide?kind=week'), { timeout: 60_000 });
+  const weekReq = page.waitForRequest(r => r.url().includes('/api/franchise/overview?kind=week'), { timeout: 60_000 });
   await page.locator('#phPeriodSheet [data-k="week"]').click();
   await page.locator('#phPeriodSheet .php-done').click();
   await weekReq;                                    // the week reloads เรื่องที่ควรดู with kind=week
   await page.waitForFunction(() => /สัปดาห์/.test(document.getElementById('frcPeriodChip')?.innerText || ''), null, { timeout: 60_000 });
-  await page.waitForFunction(() => { const b = document.getElementById('frcDecide'); return b && !/กำลังโหลด/.test(b.innerText); }, null, { timeout: 90_000 });
-  // the page's text floor: nothing under 12 px in the decide cards
-  const small = await page.evaluate(() => [...document.querySelectorAll('#frcDecide *')].filter(e => e.childNodes.length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())
+  await page.waitForFunction(() => document.querySelector('#frcCards [data-d="cost"]'), null, { timeout: 90_000 });
+  await page.locator('#frcCards [data-d="cost"]').click();
+  // the page's text floor: nothing under 12 px on the detail and the cards
+  const small = await page.evaluate(() => [...document.querySelectorAll('#frcDetail *, #frcCards *')].filter(e => e.offsetParent && e.childNodes.length && [...e.childNodes].some(n => n.nodeType === 3 && n.textContent.trim())
     && parseFloat(getComputedStyle(e).fontSize) < 12).map(e => e.textContent.trim().slice(0, 30)));
   expect(small).toEqual([]);
   expect(errors).toEqual([]);
