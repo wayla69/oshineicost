@@ -1617,6 +1617,30 @@ body #mobileSummary .ms-kpi .val { font-size: 30px; font-weight: 800; letter-spa
   color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
 .ms-vw-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
 .ms-vw-chips + .ms-r2 { border-top: 0; }
+/* 2026-10-31 (owner) · บิลยกเลิก / พิมพ์ซ้ำ drill-down (#msv-voids, js/09c-mobile.js msLoadVoids): head, reasons, day headers; grey = no void */
+#msVoids > .ms-vw-chips { border-top: 0; padding-top: 4px; }
+.ms-vd-head { display: flex; align-items: center; gap: 8px; margin: 10px 0 2px; }
+.ms-vd-h1 { flex: 1 1 auto; min-width: 0; font-size: 14px; font-weight: 700; color: var(--text-primary); }
+.ms-vd-sum { margin: 0 0 4px; font-size: 14px; line-height: 1.5; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.ms-vd-rate { font-size: 18px; color: var(--text-primary); }
+.ms-vd-rate.is-bad { color: var(--bad-ink); } .ms-vd-rate.is-watch { color: var(--amber-ink); }
+.ms-vd-note { margin: 2px 0 6px; font-size: 13px; color: var(--text-muted); }
+.ms-vd-grp { display: flex; align-items: baseline; gap: 8px; margin-top: 14px; }
+.ms-vd-grp > span { font-weight: 400; font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ms-vd-reasons { display: flex; gap: 6px; overflow-x: auto; scrollbar-width: none; padding: 2px 0 8px; }
+.ms-vd-reasons::-webkit-scrollbar { display: none; }
+.ms-vd-reason { flex: 0 0 auto; padding: 4px 10px; border-radius: 999px; background: var(--bg-input); font-size: 13px; color: var(--text-primary); white-space: nowrap; }
+.ms-vd-day { padding: 10px 0 4px; font-size: 13px; font-weight: 700; color: var(--text-primary); border-top: 1px solid var(--border); }
+.ms-vd-day:first-child { border-top: 0; }
+.ms-vd-day[hidden] { display: none; }
+.ms-vd-day > span { font-weight: 400; color: var(--text-muted); font-variant-numeric: tabular-nums; }
+.ms-vd-day + .ms-r2 { border-top: 0; }
+.ms-vd-zero .ms-r2-t, .ms-vd-zero .ms-r2-v { color: var(--text-muted); font-weight: 600; }
+.ms-r2-v.is-watch { color: var(--amber-ink); }
+.ms-vd-all { color: var(--text-muted); }
+.ms-vd-cls { flex: 0 0 auto; padding: 0 7px; border-radius: 999px; background: var(--bg-input); font-size: 12px; font-weight: 600; line-height: 20px; color: var(--text-secondary); white-space: nowrap; }
+.ms-vd-cls.is-open { color: var(--bad-ink); }
+.ms-vd-cls-chips { border-top: 0; padding-top: 0; }
 .ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
 .ms-row:first-child { border-top: 0; }
 .ms-row[onclick] { min-height: 44px; }   /* a tappable row is a thumb-sized row */
@@ -3427,6 +3451,11 @@ body.php-open { overflow: hidden; }
       <div class="ms-section-title">ส่วนลดรายสาขา (แฟรนไชส์)</div>
       <div id="msDiscFranchise" class="ms-card"></div>
     </div>
+  </div>
+
+  <!-- VIEW: บิลยกเลิก / พิมพ์ซ้ำ - the ตรวจวันนี้ card's drill-down: every branch → one branch's bills → one bill (msLoadVoids) -->
+  <div id="msv-voids" class="ms-view" style="display:none">
+    <div class="ms-section"><div id="msVoids"></div></div>
   </div>
 
   <div class="ms-section" id="msFullRow" style="margin-top:18px;text-align:center">

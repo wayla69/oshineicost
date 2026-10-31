@@ -844,3 +844,92 @@ def upsell_pair(day) -> tuple:
     ('629','789') from 1 Sep 2026. Stated once so the simulator cannot keep
     modelling a shift between two prices that no longer exist."""
     return ("629", "789") if is_grand_menu(day) else ("590", "799")
+
+
+# ─── Voided bills: re-issued (a correction) or not (owner 2026-10-31) ─────────
+# "ถ้าออกแทนบิลเก่า ดูเหมือนจะไม่ค่อยปกติ ... เตือนเอาเฉพาะยอดที่ voided แล้วไม่มีการทำใหม่": a void followed by a replacement
+# bill is a correction, not a leak. THE rule, used by the ตรวจวันนี้ card (routers/mgt_watch), the drill-down (routers/voids),
+# the management report's §7.1 and the franchise owner's finding: a voided bill at time t at branch b is RE-ISSUED when a live
+# bill (sales_transaction, source Easy) exists at b with sold_at in [t, t + VOID_REISSUE_MIN min] that matches it:
+#   - the same table, when both sides carry a table number (pos_cancel_bill_detail.table_no is optional - the POS export gives
+#     none today, and sales_transaction.table_no is blank from the Easy sync);
+#   - else the same number of customers, when both sides carry one (pos_cancel_bill_detail.customers = Sale.NumOfCust, added by
+#     the sync 2026-10-31; optional, a DB synced before has no column);
+#   - else an amount within ± VOID_REISSUE_AMOUNT_TOL of the voided amount (a ฿0 void therefore matches only a ฿0 bill).
+# Each live bill re-issues at most one void of the same branch and day (voids taken in time order, the earliest matching bill),
+# so a void's class never depends on the window it is read in (a window is whole days). The matched receipt is `reissued_as`.
+VOID_REISSUE_MIN = 30
+VOID_REISSUE_AMOUNT_TOL = 0.20
+
+
+def _ts(x):
+    import datetime as _d
+    try:
+        return _d.datetime.fromisoformat(str(x or "").replace("T", " ")[:19])
+    except ValueError:
+        return None
+
+
+def receipt_label(receipt) -> str:
+    """The bill number a cashier reads: the Easy sync keys a sold bill "<YYYY-MM-DD>-<SaleNum>-<SaleId>" (receipt_no is not
+    unique on its own); this gives the SaleNum. Any other form is returned as it is."""
+    import re
+    m = re.match(r"^\d{4}-\d{2}-\d{2}-(.+)-\d+$", str(receipt or ""))
+    return m.group(1) if m else str(receipt or "")
+
+
+def void_reissue_match(void: dict, bill: dict) -> bool:
+    """Does the live `bill` re-issue the voided `void`? Both {amount, table?, customers?}; the time window is the caller's."""
+    vt, bt = str(void.get("table") or "").strip(), str(bill.get("table") or "").strip()
+    if vt and bt:
+        return vt == bt
+    vc, bc = int(void.get("customers") or 0), int(bill.get("customers") or 0)
+    if vc > 0 and bc > 0:
+        return vc == bc
+    va, ba = float(void.get("amount") or 0), float(bill.get("amount") or 0)
+    return abs(ba - va) <= abs(va) * VOID_REISSUE_AMOUNT_TOL
+
+
+def classify_voids(con, branch_ids, s, e) -> dict:
+    """{pos_cancel_bill_detail rowid: receipt_no of the bill that re-issued it, or None} for every voided bill of the branches
+    in branch_ids with date(sale_date) in s..e (dates). Empty when the detail table is missing."""
+    import bisect
+    import datetime as _d
+    ids = [b for b in branch_ids if b is not None]
+    cols = _columns(con, "pos_cancel_bill_detail")
+    if not ids or not cols:
+        return {}
+    tcol = "table_no" if "table_no" in cols else "NULL"
+    ccol = "customers" if "customers" in cols else "NULL"
+    ph = ",".join("?" * len(ids))
+    vrows = con.execute(f"SELECT rowid, branch_id, sale_date, amount, {tcol}, {ccol} FROM pos_cancel_bill_detail "
+                        f"WHERE branch_id IN ({ph}) AND date(sale_date) BETWEEN ? AND ? ORDER BY sale_date",
+                        ids + [s.isoformat(), e.isoformat()]).fetchall()
+    out = {r[0]: None for r in vrows}
+    if not vrows:
+        return out
+    vb = sorted({r[1] for r in vrows})
+    ph2 = ",".join("?" * len(vb))
+    bills: dict = {}
+    for r in con.execute(f"SELECT branch_id, sold_at, receipt_no, total_inc_vat, table_no, customer_count FROM sales_transaction "
+                         f"WHERE source='Easy' AND branch_id IN ({ph2}) AND sold_at >= ? AND sold_at < ? ORDER BY sold_at",
+                         vb + [s.isoformat(), (e + _d.timedelta(days=2)).isoformat()]):
+        t = _ts(r[1])
+        if t:
+            bills.setdefault(r[0], []).append({"at": t, "receipt": r[2], "amount": r[3] or 0, "table": r[4], "customers": r[5]})
+    keys = {b: [x["at"] for x in lst] for b, lst in bills.items()}
+    win, used = _d.timedelta(minutes=VOID_REISSUE_MIN), set()
+    for rid, bid, at, amt, tab, cust in vrows:
+        day = str(at)[:10]
+        t, lst = _ts(at), bills.get(bid)
+        if not t or not lst:
+            continue
+        v = {"amount": amt or 0, "table": tab, "customers": cust}
+        i = bisect.bisect_left(keys[bid], t)
+        while i < len(lst) and lst[i]["at"] <= t + win:
+            if (bid, day, i) not in used and void_reissue_match(v, lst[i]):
+                used.add((bid, day, i))
+                out[rid] = lst[i]["receipt"]
+                break
+            i += 1
+    return out

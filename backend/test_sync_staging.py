@@ -218,7 +218,7 @@ PATTERNS = [
     (r"FROM DiscountSaleReason", [{"rid": 3, "rd": TH_MANGLED, "pct": 10.0}]),
     (r"TOP 20000",
      [{"bid": BID_POS, "dt": "2026-06-01T13:00:00", "num": 42, "rid": 2, "amt": 600.0,
-       "disc": 0.0, "duser": "cashier1"}]),
+       "disc": 0.0, "cust": 4, "duser": "cashier1"}]),
     (r"ISNULL\(Active,1\)=0|ISNULL\(s?\.?Active,1\)=0",
      [{"bid": BID_POS, "ym": "2026-06", "rid": 2, "n": 5, "amt": 6000.0}]),
     (r"Discount>0", [{"bid": BID_POS, "ym": "2026-06", "rid": 3, "n": 2, "amt": 150.0}]),
@@ -340,7 +340,7 @@ def test_stage_extra_cancel_and_discount_bills(staged):
     assert tuple(cb) == (1, "2026-06", 2, 5, 6000.0)
     cbd = staged.execute("SELECT * FROM pos_cancel_bill_detail").fetchone()
     assert cbd["period_month"] == "2026-06"              # derived from sale_date[:7]
-    assert cbd["cancel_user"] == "cashier1"
+    assert cbd["cancel_user"] == "cashier1" and cbd["customers"] == 4   # Sale.NumOfCust (rules.classify_voids)
     dm = staged.execute("SELECT * FROM pos_discount_month").fetchone()
     assert tuple(dm) == (1, "2026-06", 3, 2, 150.0)
 

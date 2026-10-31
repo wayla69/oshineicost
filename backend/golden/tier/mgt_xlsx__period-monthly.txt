@@ -96,6 +96,24 @@ C4	0	#,##0
 A5	'Zero-gross bills'			
 B5	0	#,##0		
 C5	0	#,##0		
+## Voided bills 1x9 widths={'A': 8.0, 'B': 13.0, 'C': 9.0, 'D': 8.0, 'E': 8.0, 'F': 14.0, 'G': 10.0, 'H': 11.0, 'I': 10.0}
+A1	'Branch'		bc	0F766E
+B1	'Date / time'		bc	0F766E
+C1	'Receipt'		bc	0F766E
+D1	'Amount'		bc	0F766E
+E1	'Reason'		bc	0F766E
+F1	'Cancelled by'		bc	0F766E
+G1	'Discount'		bc	0F766E
+H1	'Re-issued'		bc	0F766E
+I1	'New bill'		bc	0F766E
+## Reprinted bills 1x7 widths={'A': 8.0, 'B': 13.0, 'C': 9.0, 'D': 12.0, 'E': 8.0, 'F': 10.0, 'G': 9.0}
+A1	'Branch'		bc	0F766E
+B1	'Date / time'		bc	0F766E
+C1	'Receipt'		bc	0F766E
+D1	'Bill total'		bc	0F766E
+E1	'Prints'		bc	0F766E
+F1	'Discount'		bc	0F766E
+G1	'Cashier'		bc	0F766E
 ## Menu Cost per Head 9x4 widths={'A': 50.0, 'B': 11.0, 'C': 13.0, 'D': 3.0}
 A1	'Total food cost / head: 112.5  (over 248 covers)'		b	
 A3	'Highest cost / head'		bc	0F766E

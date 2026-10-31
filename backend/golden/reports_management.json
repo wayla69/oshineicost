@@ -449,6 +449,39 @@
    "start": "2026-05-31"
   }
  ],
+ "voids_detail": {
+  "available": true,
+  "bands": {
+   "fix": 1.0,
+   "watch": 0.5
+  },
+  "branches": [],
+  "cap": 20,
+  "range": [
+   "2026-06-03",
+   "2026-06-03"
+  ],
+  "reissue_min": 30,
+  "rest": {
+   "bills_total": 2,
+   "branches": 2
+  },
+  "source": "none",
+  "total": {
+   "amount": 0,
+   "amount_open": 0,
+   "bills_total": 2,
+   "branches": 2,
+   "flagged": 0,
+   "rate_open_pct": 0.0,
+   "rate_pct": 0.0,
+   "reprint_baht": 0,
+   "reprints": 0,
+   "voids": 0,
+   "voids_open": 0,
+   "voids_reissued": 0
+  }
+ },
  "watch": null,
  "weeks": [],
  "years": [],
