@@ -712,8 +712,8 @@ async function loadDailySales(force) {
   document.getElementById('dsCmpNote').innerHTML = periodQ(r);
   const t = d.total || {}, tp = t.prev || null, tl = t.ly || null;
   document.getElementById('dsKpis').innerHTML = [
-    { l: 'ยอดขายรวม (ex-VAT)', v: fmt(t.revenue || 0), c: '#4a70b0', cur: t.revenue, prev: tp && tp.revenue, ly: tl && tl.revenue },
-    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), c: '#0891b2', cur: t.customers, prev: tp && tp.customers, ly: tl && tl.customers },
+    { l: 'ยอดขายรวม (ไม่รวม VAT)', v: fmt(t.revenue || 0), c: '#4a70b0', cur: t.revenue, prev: tp && tp.revenue, ly: tl && tl.revenue },
+    { l: 'ลูกค้า (คน)', v: fmtN(t.customers || 0), c: '#0891b2', cur: t.customers, prev: tp && tp.customers, ly: tl && tl.customers },
     { l: 'ยอด/หัว', v: fmt(t.rev_per_head || 0), c: '#7a66b8', cur: t.rev_per_head, prev: tp && tp.rev_per_head, ly: tl && tl.rev_per_head },
     { l: 'บิล', v: fmtN(t.bills || 0), c: '#0d9488', cur: t.bills, prev: tp && tp.bills, ly: tl && tl.bills },
   ].map((k, i) => periodKpi(Object.assign(k, { range: r, q: i === 0 }))).join('');
@@ -1309,7 +1309,7 @@ async function loadCostHead(force) {
     { l: 'ต้นทุน% (food cost)', v: t.cost_pct != null ? t.cost_pct.toFixed(1) + '%' : '—', c: cpColor(t.cost_pct), k: 'cost_pct', unit: 'pp' },
     { l: 'รายได้/หัว', v: t.rev_per_head != null ? fmt(t.rev_per_head) : '—', c: '#0891b2' },
     { l: 'GP/หัว', v: t.gp_per_head != null ? fmt(t.gp_per_head) : '—', c: '#10b981' },
-    { l: 'ลูกค้า (Pax)', v: fmtN(t.customers || 0), c: '#7a66b8' },
+    { l: 'ลูกค้า (คน)', v: fmtN(t.customers || 0), c: '#7a66b8' },
   ].map((k, i) => k.k
     ? periodKpi({ l: k.l, v: k.v, c: k.c, cur: t[k.k], prev: prevOf(k.k), ly: lyOf(k.k), unit: k.unit, upGood: false, range: r, q: i === 0 })
     : `<div class="card p-4 pkpi" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p></div>`).join('');
@@ -1609,14 +1609,12 @@ async function loadOpsReport(force) {
   document.getElementById('opRange').textContent = d.daily
     ? (d.date_from === d.date_to ? `วันที่ ${d.date_from}` : `${d.date_from} → ${d.date_to}`)
     : (d.month ? `เดือน ${d.month}` : '');
-  const tbl = d.table || {};
-  const payTot = (d.payment || []).reduce((a, b) => a + (b.amount || 0), 0);
-  document.getElementById('opKpis').innerHTML = [
-    { l: 'รับชำระรวม', v: fmt(payTot), sub: (d.payment || []).length + ' ช่องทาง', c: '#0891b2' },
-    { l: 'โต๊ะหมุนเวียน เฉลี่ย', v: (tbl.avg_turn_min || 0) + ' นาที', sub: fmtN(tbl.tabs || 0) + ' โต๊ะ', c: '#7a66b8' },
-    { l: 'ของเสีย/Void (ต้นทุน BoM)', v: fmt((d.void_total || {}).bom_cost || 0), sub: fmtN((d.void_total || {}).qty || 0) + ' รายการ · ขาย ' + fmt((d.void_total || {}).value || 0), c: '#ef4444' },
-    { l: 'ส่วนลดโปรโมชัน', v: fmt((d.promo || []).reduce((a, b) => a + (b.discount || 0), 0)), sub: (d.promo || []).length + ' คูปอง', c: '#f59e0b' },
-  ].map(k => `<div class="card p-4" style="border-top:3px solid ${k.c}"><p class="text-[11px] uppercase tracking-wide" style="color:var(--text-muted)">${k.l}</p><p class="text-2xl font-bold" style="color:${textInk(k.c)}">${k.v}</p><p class="text-[11px]" style="color:var(--text-muted)">${k.sub}</p></div>`).join('');
+  // Phone UI review 2026-10-31 (item 2): รับชำระรวม, โต๊ะหมุนเวียน and มูลค่า Void are the headline row (phd-opsreport) - they were drawn a
+  // second time here (the turn time even with another value). The void's COST joins the headline as its 4th tile; the promotion total is the
+  // sum of the โปรโมชัน card below.
+  periodHeadlineExtra('phd-opsreport', _extKpi('ของเสีย/Void (ต้นทุน BoM)', fmt((d.void_total || {}).bom_cost || 0), fmtN((d.void_total || {}).qty || 0) + ' รายการ', '#ef4444')
+    .replace('<div class="card p-4"', '<div class="card p-4 ph-extra"'));
+  const opK = document.querySelector('#tab-opsreport #opKpis'); if (opK) { opK.innerHTML = ''; opK.hidden = true; }
   // payment bars
   const pmax = Math.max(1, ...(d.payment || []).map(x => x.amount || 0));
   document.getElementById('opPayment').innerHTML = (d.payment || []).map(x => `
@@ -1847,7 +1845,7 @@ async function loadMenuImpact(force) {
           ${cmpRow('ต้นทุนรวมทั้งบิล', C.cogs, true)}
           ${cmpRow('ต้นทุนเมนูอื่น (ไม่รวมตัวมันเอง)', C.other_cogs, true)}
           ${cmpRow('การกินเมนูแพง (≥฿30) ไม่รวมตัวมันเอง', C.hc_other, true)}
-          ${cmpRow('รายได้ (ex-VAT)', C.rev, false)}
+          ${cmpRow('รายได้ (ไม่รวม VAT)', C.rev, false)}
           ${cmpRow('กำไรขั้นต้น (GP)', C.gp, false)}
         </tbody></table>
         ${mixLine}
@@ -1966,7 +1964,7 @@ function _ptRender(d) {
   const dd = (a, b) => (a != null && b != null) ? a - b : null;
   const kpis =
     kpi('จำนวนคนทาน (ช่วง A)', n0(B.pax_a), B.d_pax_pct, `${sg(B.d_pax_pct, '%')} เทียบ B (${B.pax_b == null ? '-' : n0(B.pax_b)} คน)`, false) +
-    kpi('รายได้/หัว (ex-VAT)', b1(B.rev_head_a), dd(B.rev_head_a, B.rev_head_b), `B: ${b1(B.rev_head_b)} · Δ ${sg(dd(B.rev_head_a, B.rev_head_b))}`, false) +
+    kpi('รายได้/หัว (ไม่รวม VAT)', b1(B.rev_head_a), dd(B.rev_head_a, B.rev_head_b), `B: ${b1(B.rev_head_b)} · Δ ${sg(dd(B.rev_head_a, B.rev_head_b))}`, false) +
     kpi('ต้นทุนอาหาร/หัวบุฟเฟ่ต์', b1(B.cogs_head_a), dd(B.cogs_head_a, B.cogs_head_b), `B: ${b1(B.cogs_head_b)} · Δ ${sg(dd(B.cogs_head_a, B.cogs_head_b))}`, true) +
     kpi('ต้นทุนอาหาร %', (B.food_pct_a ?? '-') + '%', dd(B.food_pct_a, B.food_pct_b), `B: ${B.food_pct_b ?? '-'}% · Δ ${sg(dd(B.food_pct_a, B.food_pct_b), ' pp')}`, true);
 
@@ -2727,12 +2725,11 @@ async function loadCashCtl(force) {
   if (d.month) { const el = document.getElementById('ccMonth'); if (el && !el.value) el.value = d.month; }
   document.getElementById('ccRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const s = d.summary || {};
-  document.getElementById('ccKpis').innerHTML = [
-    _extKpi('ขาด/เกิน สุทธิ', fmt(s.net || 0), 'ทั้งเครือเดือนนี้', (s.net || 0) < 0 ? '#ef4444' : '#10b981'),
-    _extKpi('ยอดขาดรวม', fmt(s.short_total || 0), (s.short_days || 0) + ' วัน-สาขา ที่ขาด', '#ef4444'),
-    _extKpi('ยอดเกินรวม', fmt(s.over_total || 0), 'เงินเกินลิ้นชัก', '#10b981'),
-    _extKpi('ระเบียบเงินสด', ((s.day_branch ? (1 - (s.short_days || 0) / s.day_branch) * 100 : 100)).toFixed(0) + '%', 'วัน-สาขาที่ไม่ขาด', '#0891b2'),
-  ].join('');
+  // Phone UI review 2026-10-31 (item 2): ยอดขาดรวม, วัน-สาขาที่ขาด and ยอดเกินรวม are the headline row (phd-cashctl); the net is its 4th
+  // tile. ระเบียบเงินสด (the share of day-branches without a shortage) was วัน-สาขาที่ขาด said again as a % - dropped.
+  periodHeadlineExtra('phd-cashctl', _extKpi('ขาด/เกิน สุทธิ', fmt(s.net || 0), 'ทั้งเครือ', (s.net || 0) < 0 ? '#ef4444' : '#10b981')
+    .replace('<div class="card p-4"', '<div class="card p-4 ph-extra"'));
+  const ccK = document.getElementById('ccKpis'); if (ccK) { ccK.innerHTML = ''; ccK.hidden = true; }
   const ccMon = d.month || '';
   // DV2: by the size of the difference either way (a large over is a control or data signal too); branches under ฿1,000 either way are
   // folded behind "ดูทั้งหมด"; an over from ฿1,000 is amber, a short red
@@ -2769,14 +2766,14 @@ async function loadCustType(force) {
   document.getElementById('ctRange').textContent = d.month ? `เดือน ${d.month}` : '';
   const types = d.types || [];
   const dineIn = types.filter(t => /ลูกค้าทั่วไป|เครดิต/.test(t.type)).reduce((a, b) => a + (b.customers || 0), 0);
-  const deliv = types.filter(t => /Grab|Line|Food|Delivery/i.test(t.type)).reduce((a, b) => a + (b.customers || 0), 0);
   const tc = d.total_customers || 1;
-  document.getElementById('ctKpis').innerHTML = [
-    _extKpi('ยอดรวม (ex-VAT)', fmt(d.total_net || 0), 'ทุกประเภทเดือนนี้', '#4a70b0'),
+  // Phone UI review 2026-10-31 (item 2): ยอดรวม and สัดส่วนเดลิเวอรี are the headline row (phd-custtype); the dine-in share and the number
+  // of types are its 3rd and 4th tiles (one row, each figure once)
+  periodHeadlineExtra('phd-custtype', [
     _extKpi('ทานที่ร้าน/เครดิต', (dineIn / tc * 100).toFixed(1) + '%', fmtN(dineIn) + ' ราย', '#10b981'),
-    _extKpi('เดลิเวอรี (Grab/LINE)', (deliv / tc * 100).toFixed(1) + '%', fmtN(deliv) + ' ราย', '#f59e0b'),
     _extKpi('จำนวนประเภท', String(types.length), 'ช่องทางลูกค้า', '#0891b2'),
-  ].join('');
+  ].map(h => h.replace('<div class="card p-4"', '<div class="card p-4 ph-extra"')).join(''));
+  const ctK = document.getElementById('ctKpis'); if (ctK) { ctK.innerHTML = ''; ctK.hidden = true; }
   const maxC = Math.max(1, ...types.map(t => t.customers || 0));
   const palette = ['#4a70b0', '#10b981', '#f59e0b', '#ef4444', '#0891b2', '#a855f7', '#64748b'];
   document.getElementById('ctBars').innerHTML = types.map((t, i) => `
@@ -2890,18 +2887,14 @@ async function loadCancelBill(force) {
   const s = d.summary || {};
   // Whole-bill void rate bands (owner 2026-10-22): normal <= 0.5%, watch 0.5-1%, high > 1% (same as ร้านของฉัน, routers/franchise.py T_CANCEL_*).
   const cr = s.cancel_rate;
-  const crColor = cr == null ? '#7a66b8' : cr > 1 ? '#ef4444' : cr > 0.5 ? '#f59e0b' : '#10b981';
-  const crSub = cr == null ? 'ของบิลทั้งหมด'
-    : cr > 1 ? `สูง · เกณฑ์ปกติไม่เกิน 0.5% ●` : cr > 0.5 ? `ควรเฝ้าระวัง · ปกติไม่เกิน 0.5% ●` : `ปกติดี (ไม่เกิน 0.5%) ●`;
-  document.getElementById('cbKpis').innerHTML = [
-    _extKpi('บิลยกเลิก/ลบ', fmtN(s.bills || 0), 'ทั้งบิล (เดือนนี้)', '#ef4444'),
-    _extKpi('มูลค่ารวม', fmt(s.amount || 0), 'ยอดบิลที่ถูกยกเลิก', '#f59e0b'),
-    _extKpi('อัตรายกเลิก', cr != null ? cr + '%' : '—', crSub, crColor),
-    _extKpi('บิลปกติ', fmtN(s.valid_bills || 0), 'เทียบเป็นฐาน', '#0891b2'),
-  ].join('');
+  // Phone UI review 2026-10-31 (item 2): บิลยกเลิก/ลบ, มูลค่า and อัตรายกเลิก are the headline row (phd-cancelbill, the rate there in one
+  // format); its 4th tile is the base - the normal bills (the rate's band is the alert below).
+  periodHeadlineExtra('phd-cancelbill', _extKpi('บิลปกติ', fmtN(s.valid_bills || 0), 'เทียบเป็นฐาน', '#0891b2')
+    .replace('<div class="card p-4"', '<div class="card p-4 ph-extra"'));
+  const cbK = document.getElementById('cbKpis'); if (cbK) { cbK.innerHTML = ''; cbK.hidden = true; }
   const cbAlert = document.getElementById('cbAlert');
   if (cbAlert) cbAlert.innerHTML = (cr != null && cr > 0.5)
-    ? `<div class="card p-3 text-xs" style="background:${cr>1?'#fef2f2':'#fffbeb'};border:1px solid ${cr>1?'#ef4444':'#f59e0b'}">⚠ อัตรายกเลิกบิล <b>${cr}%</b> ${cr>1?'สูงกว่าเกณฑ์ปกติ (ไม่เกิน 0.5%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
+    ? `<div class="card p-3 text-xs" style="background:${cr>1?'#fef2f2':'#fffbeb'};border:1px solid ${cr>1?'#ef4444':'#f59e0b'}">⚠ อัตรายกเลิกบิล <b>${Number(cr).toFixed(1)}%</b> ${cr>1?'สูงกว่าเกณฑ์ปกติ (ไม่เกิน 0.5%) อย่างชัดเจน':'เกินเกณฑ์ปกติเล็กน้อย'} — คลิกสาขาด้านล่างเพื่อดูบิลรายใบและตรวจสอบเหตุผล (loss prevention)</div>`
     : '';
   const tb = (s.bills || 1);
   document.getElementById('cbReasons').innerHTML = (d.reasons || []).map(r => `<tr class="border-t border-slate-100 hover:bg-rose-50/40">

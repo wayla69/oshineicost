@@ -186,6 +186,38 @@ def test_over_http_the_counts_equal_the_todo_items_of_the_role(client, auth_on, 
     assert _login("d4_own", PW).get("/api/nav/badges").json()["pages"] == {}
 
 
+def test_the_home_total_is_the_users_own_list_and_never_another_departments(client, auth_on, pinned):
+    """Phone UI review 2026-10-31 (item 5): the red badge on หน้าแรก / the department card is the length of the viewer's OWN list (หน้างาน
+    "งานของฉัน"); another department's open work is never in it. The review's 62 was auth off (every module held = every task)."""
+    import main
+    _draft_db = None
+    with main.get_db() as db:
+        _draft(db, "review")                       # an open task of the analyst - another department for every other role
+        db.commit()
+        _draft_db = db.execute("SELECT max(release_id) FROM bc_release").fetchone()[0]
+    seen_others = 0
+    try:
+        for role in ("analyst", "salessupport", "management", "operation", "accounting", "innovation", "warehouse"):
+            mods = auth.modules_for_role(role)
+            if not auth.path_allowed("GET", "/api/bom-center/todo", mods):
+                continue
+            c = _login(f"{role}1")
+            core.invalidate_cache("bc_")
+            todo = c.get("/api/bom-center/todo").json()
+            badges = c.get("/api/nav/badges").json()
+            own = sum(_expected(todo, role, mods).values())
+            assert badges["total"] == own == todo["mine_open"]["count"], (role, badges["total"], own, todo["mine_open"]["count"])
+            others = [i for i in todo["items"] if i["state"] == "todo" and not i.get("upcoming") and not NB.is_mine(i, role, mods)]
+            counted = set(todo["mine_open"]["keys"])
+            assert not counted & {i["key"] for i in others}, role                 # another department's task is never counted
+            seen_others += len(others)                                             # ... though it is open (a grey line in หน้างาน)
+        assert seen_others > 0                                                     # the fixture has other departments' open work
+    finally:
+        with main.get_db() as db:
+            db.execute("DELETE FROM bc_release WHERE release_id=?", (_draft_db,))
+            db.commit()
+
+
 def test_over_http_a_pinned_branch_login_gets_its_own_branch(client, auth_on, pinned):
     c = _login("d4_branch", PW)
     todo = c.get("/api/bom-center/todo").json()

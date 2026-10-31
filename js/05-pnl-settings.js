@@ -590,13 +590,13 @@ function renderCostOverview() {
     : s.overall_margin_pct >= 40 ? '#f59e0b' : '#ef4444';
 
   document.getElementById('costKpis').innerHTML = [
-    { label:'รายได้รวม',  value:fmt(s.total_revenue),      sub: fmtN(s.total_skus)+' items sold',     color:'#4a70b0' },
+    { label:'รายได้รวม',  value:fmt(s.total_revenue),      sub: 'ขาย ' + fmtN(s.total_skus) + ' เมนู',     color:'#4a70b0' },
     { label:'ต้นทุนขายรวม',     value: hasCosts ? fmt(s.total_cogs) : '—',
-                               sub: hasCosts ? s.costed_skus+' SKUs costed' : 'no costs entered', color:'#ef4444' },
+                               sub: hasCosts ? 'มีต้นทุน ' + fmtN(s.costed_skus) + ' เมนู' : 'ยังไม่มีต้นทุน', color:'#ef4444' },
     { label:'กำไรขั้นต้น',   value: hasCosts ? fmt(s.total_gross_profit) : '—',
-                               sub: hasCosts ? 'Revenue (ex-VAT) minus COGS' : 'requires cost data', color:'#10b981' },
+                               sub: hasCosts ? 'รายได้ไม่รวม VAT หักต้นทุนขาย' : 'ต้องมีข้อมูลต้นทุน', color:'#10b981' },
     { label:'มาร์จินรวม', value: s.overall_margin_pct != null ? s.overall_margin_pct.toFixed(1)+'%' : '—',
-                               sub: hasCosts ? 'weighted gross margin' : 'requires cost data', color: marginColor },
+                               sub: hasCosts ? 'อัตรากำไรขั้นต้นถ่วงตามยอดขาย' : 'ต้องมีข้อมูลต้นทุน', color: marginColor },
   ].map(k => `
     <div class="card kpi-card p-4">
       <div class="kpi-card-top"><p class="kpi-label">${k.label}</p></div>
@@ -608,7 +608,7 @@ function renderCostOverview() {
   const banner = document.getElementById('costNoBanner');
   if (s.uncosted_skus > 0) {
     document.getElementById('costNoBannerText').textContent =
-      `${s.uncosted_skus} of ${s.total_skus} menu items have no cost data — margin analysis is incomplete.`;
+      `เมนู ${fmtN(s.uncosted_skus)} จาก ${fmtN(s.total_skus)} รายการยังไม่มีต้นทุน อัตรากำไรจึงยังไม่ครบ`;
     banner.classList.remove('hidden');
   } else {
     banner.classList.add('hidden');
@@ -622,11 +622,11 @@ function renderCostOverview() {
 
   if (hasCosts) {
     document.getElementById('scatterTitle').textContent    = 'ตารางวิเคราะห์เมนู';
-    document.getElementById('scatterMode').textContent     = 'margin vs popularity';
+    document.getElementById('scatterMode').textContent     = 'กำไรเทียบความนิยม';
     document.getElementById('scatterMode').className       = 'pill pill-up';
-    document.getElementById('scatterSubtitle').textContent = 'X = orders (popularity)  ·  Y = gross margin %  ·  Colour = quadrant';
+    document.getElementById('scatterSubtitle').textContent = 'แกนนอน = จำนวนที่ขาย · แกนตั้ง = อัตรากำไร % · สี = กลุ่มเมนู';
     const quadGroups = ['star','puzzle','plowhorse','dog','uncosted'];
-    const qlabels    = { star:'Stars', puzzle:'Puzzles', plowhorse:'Plowhorses', dog:'Dogs', uncosted:'Uncosted' };
+    const qlabels    = { star:'ดาวเด่น', puzzle:'เพชรในตม', plowhorse:'ม้างาน', dog:'ตัวถ่วง', uncosted:'ยังไม่มีต้นทุน' };
     scatterDatasets = quadGroups.map(q => ({
       label: qlabels[q],
       data: items.filter(r => r.quadrant === q && r.margin_pct != null)
@@ -636,10 +636,10 @@ function renderCostOverview() {
       borderWidth: 1, pointRadius: 5, pointHoverRadius: 8,
     }));
   } else {
-    document.getElementById('scatterTitle').textContent    = 'Revenue × Popularity';
-    document.getElementById('scatterMode').textContent     = 'no cost data';
+    document.getElementById('scatterTitle').textContent    = 'รายได้ × ความนิยม';
+    document.getElementById('scatterMode').textContent     = 'ยังไม่มีต้นทุน';
     document.getElementById('scatterMode').className       = 'pill pill-warn';
-    document.getElementById('scatterSubtitle').textContent = 'X = qty ordered  ·  Y = revenue  ·  Colour = category';
+    document.getElementById('scatterSubtitle').textContent = 'แกนนอน = จำนวนที่ขาย · แกนตั้ง = รายได้ · สี = หมวด';
     const cats = [...new Set(items.map(r => r.category))];
     scatterDatasets = cats.map((cat, i) => ({
       label: cat,
@@ -659,11 +659,11 @@ function renderCostOverview() {
       plugins: {
         legend: { position: 'bottom', labels: { color:'#64748b', font:{size:10}, boxWidth:10, padding:8 } },
         datalabels: { display: false },
-        tooltip: { callbacks: { label: ctx => `${ctx.raw.label}: ${hasCosts ? ctx.raw.y?.toFixed(1)+'%' : fmtN(ctx.raw.y)} (${fmtN(ctx.raw.x)} pcs)` } },
+        tooltip: { callbacks: { label: ctx => `${ctx.raw.label}: ${hasCosts ? ctx.raw.y?.toFixed(1)+'%' : fmtN(ctx.raw.y)} (${fmtN(ctx.raw.x)} จาน)` } },
       },
       scales: {
-        x: { title:{ display:true, text:'Qty Ordered', color:'#94a3b8', font:{size:11} }, grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
-        y: { title:{ display:true, text: hasCosts ? 'Margin %' : 'Revenue ', color:'#94a3b8', font:{size:11} },
+        x: { title:{ display:true, text:'จำนวนที่ขาย', color:'#94a3b8', font:{size:11} }, grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}} },
+        y: { title:{ display:true, text: hasCosts ? 'อัตรากำไร %' : 'รายได้', color:'#94a3b8', font:{size:11} },
              grid:{color:'#f1f5f9'}, ticks:{color:'#94a3b8',font:{size:10}, callback: v => hasCosts ? v+'%' : fmt(v)} },
       },
     },
@@ -675,7 +675,7 @@ function renderCostOverview() {
   const catEntries = Object.entries(catMap).sort((a,b) => b[1]-a[1]);
   const top8 = catEntries.slice(0, 8);
   const other = catEntries.slice(8).reduce((s,[,v]) => s+v, 0);
-  if (other > 0) top8.push(['Other', other]);
+  if (other > 0) top8.push(['อื่นๆ', other]);
   const top8Colors = top8.map(([k]) => colorForCategory(k));
   mkChart('chartCostCatMix', {
     type: 'doughnut',
@@ -746,42 +746,41 @@ function renderCostOverview() {
     <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
       <div class="bg-indigo-50 rounded-xl p-4 text-center">
         <p class="text-2xl font-bold text-indigo-700">${pct50}%</p>
-        <p class="text-xs text-slate-500 mt-1">of SKUs = 50% of revenue</p>
+        <p class="text-xs text-slate-500 mt-1">ของเมนู ทำรายได้ 50%</p>
       </div>
       <div class="bg-indigo-50 rounded-xl p-4 text-center">
         <p class="text-2xl font-bold text-indigo-700">${pct80}%</p>
-        <p class="text-xs text-slate-500 mt-1">of SKUs = 80% of revenue</p>
+        <p class="text-xs text-slate-500 mt-1">ของเมนู ทำรายได้ 80%</p>
       </div>
       <div class="bg-red-50 rounded-xl p-4 text-center">
         <p class="text-2xl font-bold text-red-700">${cPct80 !== '—' ? cPct80+'%' : '—'}</p>
-        <p class="text-xs text-slate-500 mt-1">of costed SKUs = 80% of total cost</p>
+        <p class="text-xs text-slate-500 mt-1">ของเมนูที่มีต้นทุน ใช้ต้นทุน 80%</p>
       </div>
       <div class="bg-slate-50 rounded-xl p-4 text-center">
         <p class="text-2xl font-bold text-slate-700">${items.length - p80idx - 1}</p>
-        <p class="text-xs text-slate-500 mt-1">items in the long tail (last 20% rev)</p>
+        <p class="text-xs text-slate-500 mt-1">เมนูที่ทำรายได้ 20% สุดท้าย</p>
       </div>
     </div>
     <!-- Revenue & Cost concentration line chart -->
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-5 mt-4">
       <div>
-        <p class="text-xs text-slate-500 font-medium mb-2">Revenue Concentration Curve</p>
+        <p class="text-xs text-slate-500 font-medium mb-2">การกระจุกตัวของรายได้</p>
         <div style="height:220px"><canvas id="chartParetoRev"></canvas></div>
       </div>
       <div>
-        <p class="text-xs text-slate-500 font-medium mb-2">Cost Concentration Curve ${costedItems.length === 0 ? '<span class="text-amber-600 ml-2">(upload SKU costs to view)</span>' : ''}</p>
+        <p class="text-xs text-slate-500 font-medium mb-2">การกระจุกตัวของต้นทุน ${costedItems.length === 0 ? '<span class="text-amber-600 ml-2">(ยังไม่มีต้นทุนเมนู)</span>' : ''}</p>
         <div style="height:220px"><canvas id="chartParetoCost"></canvas></div>
       </div>
     </div>
-    <p class="text-xs text-slate-400 mt-4">A steeper curve means a few SKUs drive most of the metric. Use this to identify which items deserve cost-control attention first.</p>
     <div class="flex items-center gap-3 flex-wrap mt-3">
-      <span class="text-xs font-medium text-slate-500">Top 80%-revenue SKUs:</span>
+      <span class="text-xs font-medium text-slate-500">เมนูที่ทำรายได้ 80% แรก:</span>
       ${items.slice(0, Math.min(p80idx+1, 8)).map((r,i) => `
         <div class="flex items-center gap-1.5 bg-indigo-50 rounded-lg px-2.5 py-1.5">
           <span class="text-xs font-semibold text-indigo-800">#${i+1}</span>
           <span class="text-xs text-slate-700 max-w-32 truncate">${esc(r.description)}</span>
           <span class="text-xs text-indigo-600 font-bold">${r.revenue_mix_pct?.toFixed(1)}%</span>
         </div>`).join('')}
-      ${p80idx >= 8 ? `<span class="text-xs text-slate-400">+${p80idx-7} more…</span>` : ''}
+      ${p80idx >= 8 ? `<span class="text-xs text-slate-400">อีก ${p80idx-7} เมนู</span>` : ''}
     </div>`;
 
   // Render Pareto charts (after innerHTML so canvas exists)
@@ -888,8 +887,8 @@ function renderAbcAnalysis() {
     return `
     <div class="card p-4" style="border-top:3px solid ${border}">
       <div class="flex items-center gap-2 mb-2">
-        <span class="text-lg font-black" style="color:${textInk(border)}">Class ${cls}</span>
-        <span class="pill text-xs ml-auto on-light" style="background:${color};color:${textInk(border)}">${items2.length} SKUs · ${((items2.length/classified.length)*100).toFixed(0)}%</span>
+        <span class="text-lg font-black" style="color:${textInk(border)}">กลุ่ม ${cls}</span>
+        <span class="pill text-xs ml-auto on-light" style="background:${color};color:${textInk(border)}">${items2.length} เมนู · ${((items2.length/classified.length)*100).toFixed(0)}%</span>
       </div>
       <p class="text-xl font-bold" style="color:${textInk(border)}">${valFmt(val)}</p>
       <p class="text-xs text-slate-400 mt-0.5">${pct.toFixed(1)}% ของ${metricLabel}</p>
@@ -907,7 +906,7 @@ function renderAbcAnalysis() {
   const pA = (valA/tot*100).toFixed(1), pB = (valB/tot*100).toFixed(1), pC = (valC/tot*100).toFixed(1);
 
   // Mode toggle + insight (PR-MB: the reading of the classes is behind the "?" of the ABC line)
-  const insight = uiQ('abc:insight-' + (byCost ? 'cost' : 'revenue'), 'ABC Analysis', byCost
+  const insight = uiQ('abc:insight-' + (byCost ? 'cost' : 'revenue'), 'วิเคราะห์ ABC', byCost
     ? `Class A คือกลุ่ม SKU ที่ใช้ <b>ต้นทุนวัตถุดิบ 70% แรก</b> — ต้องโฟกัสด้าน supply chain (เจรจาราคา · safety stock · cycle count บ่อย)
        <br>Class C เป็น long-tail ของต้นทุน — อาจจะคุ้มน้อย ทบทวนว่าเป็น strategic items หรือไม่`
     : `Class A คือกลุ่ม SKU ที่ทำ <b>รายได้ 70% แรก</b> — ต้องโฟกัสด้าน sales (positioning · staff training · stockout prevention)
@@ -920,7 +919,7 @@ function renderAbcAnalysis() {
         <button onclick="setAbcMode('cost')"    class="px-3 py-1.5 transition-colors ${byCost ? 'bg-rose-600 text-white' : 'bg-white text-slate-600 hover:bg-rose-50'}">ต้นทุน BoM</button>
         <button onclick="setAbcMode('revenue')" class="px-3 py-1.5 border-l border-slate-200 transition-colors ${byCost ? 'bg-white text-slate-600 hover:bg-rose-50' : 'bg-rose-600 text-white'}">รายได้</button>
       </div>
-      <span class="text-xs text-slate-400">${sorted.length} SKUs ที่มีข้อมูล${byCost ? ' BoM' : 'รายได้'}</span>
+      <span class="text-xs text-slate-400">${sorted.length} เมนูที่มีข้อมูล${byCost ? ' BoM' : 'รายได้'}</span>
     </div>
     <div class="grid grid-cols-3 gap-4 mb-5">
       ${card('A','#d1fae5','#10b981',groupA,valA,valA/tot*100)}
@@ -930,20 +929,20 @@ function renderAbcAnalysis() {
     <div class="mb-4">
       <div class="flex items-center gap-2 mb-1.5">
         <span class="text-xs font-semibold text-slate-500">สัดส่วน${metricLabel}</span>
-        <span class="text-xs text-slate-400">${classified.length} SKUs</span>
+        <span class="text-xs text-slate-400">${classified.length} เมนู</span>
       </div>
       <div class="flex rounded-full overflow-hidden h-5" style="width:100%">
-        <div style="width:${pA}%;background:#10b981;color:${inkOn('#10b981')}" class="flex items-center justify-center text-xs font-bold" title="Class A: ${pA}%">${parseFloat(pA)>8?pA+'%':''}</div>
+        <div style="width:${pA}%;background:#10b981;color:${inkOn('#10b981')}" class="flex items-center justify-center text-xs font-bold" title="กลุ่ม A: ${pA}%">${parseFloat(pA)>8?pA+'%':''}</div>
         <div style="width:${pB}%;background:#f59e0b;color:${inkOn('#f59e0b')}" class="flex items-center justify-center text-xs font-bold" title="Class B: ${pB}%">${parseFloat(pB)>8?pB+'%':''}</div>
         <div style="width:${pC}%;background:#ef4444;color:${inkOn('#ef4444')}" class="flex items-center justify-center text-xs font-bold" title="Class C: ${pC}%">${parseFloat(pC)>8?pC+'%':''}</div>
       </div>
       <div class="flex gap-4 mt-1.5">
-        <span class="text-xs text-slate-500">A: ${groupA.length} SKUs = ${pA}%</span>
-        <span class="text-xs text-slate-500">B: ${groupB.length} SKUs = ${pB}%</span>
-        <span class="text-xs text-slate-500">C: ${groupC.length} SKUs = ${pC}%</span>
+        <span class="text-xs text-slate-500">A: ${groupA.length} เมนู = ${pA}%</span>
+        <span class="text-xs text-slate-500">B: ${groupB.length} เมนู = ${pB}%</span>
+        <span class="text-xs text-slate-500">C: ${groupC.length} เมนู = ${pC}%</span>
       </div>
     </div>
-    <p class="text-xs text-slate-500 leading-relaxed"><b>ABC Analysis ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100% ${insight}</p>`;
+    <p class="text-xs text-slate-500 leading-relaxed"><b>วิเคราะห์ ABC ตาม${metricLabel}</b> — A = 70% แรก · B = 70-90% · C = 90-100% ${insight}</p>`;
 }
 
 
@@ -966,7 +965,7 @@ function renderCostAnalysisBar() {
 
   const topList = `
     <div>
-      <p class="text-xs text-slate-400 mb-1">Top Items</p>
+      <p class="text-xs text-slate-400 mb-1">เมนูขายดี</p>
       ${top5.map((r, i) => `
         <div class="flex items-baseline justify-between gap-1 mb-0.5">
           <span class="text-xs text-slate-600 truncate" style="max-width:90px" title="${esc(r.description)}">${i+1}. ${esc(r.description.slice(0,16))}</span>
@@ -975,9 +974,9 @@ function renderCostAnalysisBar() {
     </div>`;
 
   el.innerHTML = [
-    stat('Active SKUs',    fmtN(s.total_skus), '#4a70b0'),
-    hasCosts ? stat('Avg Margin',    (s.overall_margin_pct?.toFixed(1)||'—')+'%', s.overall_margin_pct>=60?'#10b981':s.overall_margin_pct>=40?'#f59e0b':'#ef4444') : stat('Costed SKUs', '0 / '+s.total_skus, '#f59e0b'),
-    p20 >= 0 ? stat('80% Rev in',    (p20+1)+' SKUs', 'var(--text-primary)') : '',
+    stat('เมนูที่ขาย',    fmtN(s.total_skus), '#4a70b0'),
+    hasCosts ? stat('อัตรากำไรเฉลี่ย',    (s.overall_margin_pct?.toFixed(1)||'—')+'%', s.overall_margin_pct>=60?'#10b981':s.overall_margin_pct>=40?'#f59e0b':'#ef4444') : stat('เมนูที่มีต้นทุน', '0 / '+s.total_skus, '#f59e0b'),
+    p20 >= 0 ? stat('รายได้ 80% มาจาก',    (p20+1)+' เมนู', 'var(--text-primary)') : '',
     '<hr class="border-slate-100">',
     topList,
   ].join('');
@@ -1078,7 +1077,7 @@ function renderSuggestions() {
         <span class="text-xl">${!hasCosts ? '' : s.overall_margin_pct >= 60 ? '✓' : s.overall_margin_pct >= 40 ? '⚠' : '⚠'}</span>
         <div>
           <h3 class="font-bold text-slate-800">สุขภาพเมนู: ${healthLabel}</h3>
-          <p class="text-xs text-slate-400">กำไรขั้นต้นรวม · ${s.total_skus} SKUs · ${s.costed_skus} ตัวที่มีต้นทุน</p>
+          <p class="text-xs text-slate-400">กำไรขั้นต้นรวม · ${s.total_skus} เมนู · ${s.costed_skus} เมนูที่มีต้นทุน</p>
         </div>
         ${hasCosts ? `<span class="ml-auto pill ${s.overall_margin_pct>=60?'pill-up':s.overall_margin_pct>=40?'pill-warn':'pill-down'} text-base">${s.overall_margin_pct?.toFixed(1)}%</span>` : ''}
       </div>
@@ -1248,11 +1247,10 @@ function renderSuggestions() {
       cards.push(`
         <div class="card p-5" style="border:1px solid #94a3b8">
           <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-slate-700">โอกาสลดจำนวนเมนู</h3></div>
-          <p class="text-sm text-slate-600 mb-2"><strong>${longTailCount} items</strong> (${(longTailCount/items.length*100).toFixed(0)}% of your menu) together contribute only 10% of revenue. A focused menu improves kitchen speed, reduces waste, and sharpens your brand.</p>
+          <p class="text-sm text-slate-600 mb-2"><strong>${longTailCount} เมนู</strong> (${(longTailCount/items.length*100).toFixed(0)}% ของเมนูทั้งหมด) ทำรายได้รวมเพียง 10%</p>
           <ul class="space-y-1 text-sm text-slate-600">
-            <li>• Industry research shows menus with 50–80 items outperform larger menus on execution quality</li>
-            <li>• You currently have <strong>${items.length} active SKUs</strong></li>
-            <li>• Enter costs to identify which of these are also low-margin before deciding on removal</li>
+            <li>• เมนูที่ขายอยู่ <strong>${items.length} เมนู</strong></li>
+            <li>• ใส่ต้นทุนก่อนตัดสินใจตัดเมนู เพื่อดูว่าเมนูใดกำไรต่ำด้วย</li>
           </ul>
         </div>`);
     }
@@ -1297,7 +1295,7 @@ function renderSuggestions() {
     cards.push(`
       <div class="card p-5" style="border:1px solid #06b6d4">
         <div class="flex items-center gap-2 mb-3"><span class="text-xl"></span><h3 class="font-bold text-cyan-800">เติมข้อมูลต้นทุนให้ครบ</h3></div>
-        <p class="text-sm text-slate-600 mb-3">ยังขาดต้นทุน <strong>${s.uncosted_skus} SKUs</strong> · ครอบคลุมรายได้ปัจจุบัน <strong>${coveragePct}%</strong> · เติมให้ครบเพื่อปลดล็อก menu engineering เต็มรูปแบบ</p>
+        <p class="text-sm text-slate-600 mb-3">ยังขาดต้นทุน <strong>${s.uncosted_skus} เมนู</strong> · ครอบคลุมรายได้ปัจจุบัน <strong>${coveragePct}%</strong> · เติมให้ครบเพื่อปลดล็อก menu engineering เต็มรูปแบบ</p>
         <button onclick="switchTab('settings');switchSettingsTab('costs')"
           class="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white text-sm font-medium rounded-lg transition-colors">
           เปิดหน้าจัดการต้นทุน →

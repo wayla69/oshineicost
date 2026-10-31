@@ -2729,7 +2729,7 @@ function msProfitKpisHtml(j) {
   const cph = G.cost_per_head != null ? G.cost_per_head : M.total_cph;
   const cphD = G.cost_per_head != null ? (G.cost_per_head_prev != null ? G.cost_per_head - G.cost_per_head_prev : null) : M.total_cph_delta;
   return [
-    { l: 'GP %', v: G.gp_pct != null ? G.gp_pct.toFixed(1) + '%' : '—', c: '#10b981', s: G.gp_pct_delta_pp != null ? `${G.gp_pct_delta_pp > 0 ? '+' : ''}${G.gp_pct_delta_pp}pp vs เดือนก่อน` : (G.cost_basis === 'unavailable' ? 'ไม่มีข้อมูลต้นทุน' : '') },
+    { l: 'GP %', v: G.gp_pct != null ? G.gp_pct.toFixed(1) + '%' : '—', c: '#10b981', s: G.gp_pct_delta_pp != null ? `${G.gp_pct_delta_pp > 0 ? '+' : ''}${G.gp_pct_delta_pp} จุด เทียบเดือนก่อน` : (G.cost_basis === 'unavailable' ? 'ไม่มีข้อมูลต้นทุน' : '') },
     { l: 'ต้นทุนอาหาร % (BoM)', v: P.food_cost_pct != null ? P.food_cost_pct.toFixed(1) + '%' : '—', c: _msCpCol(P.food_cost_pct), s: `<span class="ms-fc-badge">เป้า ${fcTargetTxt(fct)}%${P.food_cost_pct != null ? ' · ' + fcStatusText(P.food_cost_pct, fct) : ''}</span>${fcPrev != null ? ` · เดือนก่อน ${fcPrev.toFixed(1)}%` : ''}` },
     { l: 'ต้นทุนอาหาร/หัว', v: cph != null ? fmt(cph) : '—', c: '#ef4444', s: cphD != null ? `${cphD > 0 ? '+' : cphD < 0 ? '−' : ''}฿${Math.abs(cphD).toFixed(1)} vs เดือนก่อน` : '' },
     { l: 'GP/หัว', v: G.gp_per_head != null ? fmt(G.gp_per_head) : '—', c: '#0891b2', s: H.rev_per_head != null ? `รายได้/หัว ${fmt(H.rev_per_head)}` : '' },

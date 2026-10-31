@@ -60,7 +60,7 @@ async function loadCostCoverage() {
   if (PC) periodChip(PC.period, true);
   const covCmp = PC ? `<div class="pkpi-cmp">${periodCmpHtml(PC.cur.cost_coverage_pct, PC.prev && PC.prev.cost_coverage_pct, PC.ly && PC.ly.cost_coverage_pct, { unit: 'pp', range: PC.period })}</div>` : '';
   document.getElementById('cov-kpis').innerHTML = [
-    ['รายได้รวม (ex VAT)', fmt(ch.total_revenue), '#4a70b0', '', ''],
+    ['รายได้รวม (ไม่รวม VAT)', fmt(ch.total_revenue), '#4a70b0', '', ''],
     ['รายได้ที่ยังไม่มีต้นทุน', fmt(ch.uncosted_revenue), '#ef4444', `${pct(ch.pct_uncosted)} ของรายได้อาหารตามสั่ง/เดลิเวอรี/เครื่องดื่ม`, ''],
     ['จานที่ยังไม่มีต้นทุน', fmtN(ch.uncosted_plates || 0), '#f59e0b', `${pct(ch.pct_uncosted_plates)} ของจานที่เสิร์ฟ (รวมบุฟเฟ่ต์)`, ''],
     ['ต้นทุนครบ (จาน)', PC ? PC.cur.cost_coverage_pct.toFixed(1) + '%' : (ch.pct_uncosted_plates != null ? (100 - ch.pct_uncosted_plates).toFixed(1) + '%' : '—'), '#10b981', 'ตัวเลขเดียวกับหน้าแรกและ P&L', covCmp],
@@ -363,11 +363,11 @@ async function loadPrimeCost() {
   if (ptw) ptw.style.display = ch.branches_with_labor ? '' : 'none';
   const pcCol = pp => pp == null ? '#94a3b8' : pp > band.high ? '#ef4444' : pp > band.good ? '#f59e0b' : '#10b981';
   const cw = document.getElementById('primeChain');
-  if (cw) cw.textContent = `เดือน ${d.month || '—'} · เฉลี่ยเครือ Food ${ch.food_pct != null ? ch.food_pct + '%' : '—'}${ch.labor_pct != null ? ' + Labor ' + ch.labor_pct + '% = Prime ' + ch.prime_pct + '%' : ''}`;
+  if (cw) cw.textContent = `เดือน ${d.month || '—'} · เฉลี่ยเครือ ต้นทุนอาหาร ${ch.food_pct != null ? ch.food_pct + '%' : '—'}${ch.labor_pct != null ? ' + ค่าแรง ' + ch.labor_pct + '% = ต้นทุนหลัก ' + ch.prime_pct + '%' : ''}`;
   const bn = document.getElementById('primeBanner');
   if (bn) {
     if (!ch.branches_with_labor) {
-      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">ยังไม่ได้ใส่ <b>ค่าแรง</b> — Food% แสดงจริงแล้ว แต่ <b>Prime%/Labor%</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">ตั้งค่า → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
+      bn.innerHTML = `<div class="card p-3 text-xs" style="background:#fffbeb;border:1px solid #f59e0b">ยังไม่ได้ใส่ <b>ค่าแรง</b> — ต้นทุนอาหาร % แสดงจริงแล้ว แต่ <b>ต้นทุนหลัก % / ค่าแรง %</b> จะว่างจนกว่าจะกรอก · ไปที่ <button onclick="switchTab('settings');switchSettingsTab('fixedcosts')" class="underline font-semibold" style="color:#92400e">ตั้งค่า → ค่าแรง + ค่าใช้จ่ายคงที่</button> (กรอกครั้งเดียว ~27 ช่อง)</div>`;
     } else if (ch.branches_with_labor < ch.branch_count) {
       bn.innerHTML = `<div class="text-xs" style="color:var(--text-muted)">ใส่ค่าแรงแล้ว ${ch.branches_with_labor}/${ch.branch_count} สาขา — ที่เหลือแสดงเฉพาะ Food%</div>`;
     } else { bn.innerHTML = ''; }
@@ -418,18 +418,20 @@ async function loadPnlBranch() {
   const PC = pc && pc.cur ? pc : null, v = (o, k) => o ? o[k] : null;
   if (PC) periodChip(PC.period, true);
   const cmp = (k, unit, upGood, i) => PC ? `<div class="pkpi-cmp">${periodCmpHtml(PC.cur[k], v(PC.prev, k), v(PC.ly, k), { unit, upGood, range: PC.period, q: i === 0 })}</div>` : '';
+  // Phone UI review 2026-10-31 (item 2): with no fixed cost set, กำไรดำเนินงาน is กำไรขั้นต้น again (the same baht and %) - its tile goes;
+  // the note below says why
+  const noFixed = !c.fixed_costs_set || (c.fixed_cost_period||0) === 0;
   document.getElementById('pnl-kpis').innerHTML = [
-    ['รายได้ (ex VAT)',      fmt(c.revenue),          '#4a70b0', cmp('revenue', '%', true, 0)],
+    ['รายได้ (ไม่รวม VAT)',      fmt(c.revenue),          '#4a70b0', cmp('revenue', '%', true, 0)],
     ['ต้นทุน BoM',           fmt(c.cogs),             '#f59e0b', cmp('cogs', '%', false)],
     ['กำไรขั้นต้น',          fmt(c.gross_profit) + (c.gp_margin_pct!=null?` · ${c.gp_margin_pct}%`:''), '#10b981', cmp('gp', '%', true)],
-    ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444'), ''],
-  ].map(([l,val,col,ch]) => `<div class="card p-4" style="border-top:3px solid ${col}">
+    noFixed ? null : ['กำไรดำเนินงาน',        fmt(c.operating_profit) + (c.op_margin_pct!=null?` · ${c.op_margin_pct}%`:''), (c.operating_profit>=0?'#0891b2':'#ef4444'), ''],
+  ].filter(Boolean).map(([l,val,col,ch]) => `<div class="card p-4" style="border-top:3px solid ${col}">
       <div class="text-xs text-slate-500">${esc(l)}</div>
       <div class="text-xl font-bold" style="color:${textInk(col)}">${val}</div>${ch}</div>`).join('');
   const note = document.getElementById('pnl-note');
   // DV2: with no fixed cost set, กำไรดำเนินงาน = กำไรขั้นต้น on every row and the table repeats GP รายสาขา - one box (what to set, where)
   // replaces the 28-row table
-  const noFixed = !c.fixed_costs_set || (c.fixed_cost_period||0) === 0;
   const pcard = document.getElementById('pnlbCard');
   if (pcard) pcard.style.display = noFixed ? 'none' : '';
   if (noFixed) {
@@ -481,7 +483,7 @@ function _pnlWaterfallHtml(b, scopeLabel) {
   const beCovers = b.breakeven_covers ? `จุดคุ้มทุน ~${fmtN(b.breakeven_covers)} ที่นั่ง/ลูกค้า (จริง ${fmtN(b.covers||0)})` : '';
   return `<div class="card p-4 mb-4">
     <h4 class="text-sm font-bold text-slate-700 mb-2">งบกำไรขาดทุน <span class="font-normal text-xs text-slate-400">· ${esc(scopeLabel||'')}</span></h4>
-    ${row('รายได้ (ex-VAT)', rev, '#4a70b0', {bold:true})}
+    ${row('รายได้ (ไม่รวม VAT)', rev, '#4a70b0', {bold:true})}
     ${row('ต้นทุน BoM', b.cogs||0, '#f59e0b', {minus:true})}
     ${row('กำไรขั้นต้น', b.gross_profit||0, '#10b981', {eq:true, bold:true})}
     ${row('ค่าใช้จ่ายคงที่', fc, '#a855f7', {minus:true})}

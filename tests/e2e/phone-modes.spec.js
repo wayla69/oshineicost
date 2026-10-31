@@ -71,7 +71,10 @@ async function phoneShell(browser) {
 }
 
 async function openPage(page, p) {
-  await page.evaluate(async (x) => { try { localStorage.removeItem('oshinei_phmode'); } catch (e) { /* none */ }
+  // phone UI review 2026-10-31: every page opens in แตะง่าย; พอดีจอ is the person's choice, remembered per page on the device (the page's key,
+  // and its first view for a page with two: ต้นทุนต่อจาน#table)
+  await page.evaluate(async (x) => { const k = x.tab + (x.pane ? '|' + x.pane : ''), m = { [k]: 'fit', [k + '#table']: 'fit', [k + '#list']: 'fit' };
+    try { localStorage.setItem('oshinei_phmode', JSON.stringify(m)); } catch (e) { /* none */ }
     await phOpenPage(() => x.pane ? supplyGo({ tab: x.tab, pane: x.pane }) : switchTab(x.tab)); }, p);
   await page.waitForFunction(() => document.body.classList.contains('ph-fit') && !!document.querySelector('.ph-frame'), null, { timeout: 60_000 });
   // the page's rows (or its empty state) have drawn and the frame has followed them
@@ -149,6 +152,23 @@ for (const p of PAGES) {
     await ctx.close();
   });
 }
+
+test('every page opens in แตะง่าย by default - a report page too - with no text under 12 px (phone UI review 2026-10-31)', async ({ browser }) => {
+  test.setTimeout(120_000);
+  const { ctx, page, errors } = await phoneShell(browser);
+  for (const p of PAGES) {
+    await page.evaluate(async (x) => { try { localStorage.removeItem('oshinei_phmode'); } catch (e) { /* none */ }
+      await phOpenPage(() => x.pane ? supplyGo({ tab: x.tab, pane: x.pane }) : switchTab(x.tab)); }, p);
+    await page.waitForFunction((t) => typeof activeTab === 'string' && activeTab === t, p.tab, { timeout: 60_000 });
+    await settle(page);
+    await page.waitForTimeout(600);                                    // the text floor runs after the page draws (debounced)
+    expect(await page.evaluate(() => [document.body.classList.contains('ph-fit'), document.getElementById('phModeL').textContent]), p.tab).toEqual([false, 'แตะง่าย']);
+    const touch = await page.evaluate(DRAWN, '#tab-' + p.tab);
+    expect(touch.min, `smallest text of ${p.tab} in แตะง่าย`).toBeGreaterThanOrEqual(12);
+  }
+  expect(errors, errors.join('\n')).toHaveLength(0);
+  await ctx.close();
+});
 
 test('a touch page stays in แตะง่าย by default (หน้างาน, the launcher)', async ({ browser }) => {
   test.setTimeout(90_000);

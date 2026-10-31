@@ -194,7 +194,7 @@ def test_an_ingredient_takes_the_type_carrying_its_cost(monkeypatch):
     assert rows["เนื้อวากิวสไลด์"]["type"] == "protein"           # MAX(type) read 'seasoning'
     g = json.loads(cost_bom.bom_consumption_analysis(month_from="2031-01", month_to="2031-01", branch=None, limit=50,
                                                      group_family=True).body)
-    beef = next(r for r in (g.get("ingredients") or g.get("rows")) if r["name"].startswith("Beef"))
+    beef = next(r for r in (g.get("ingredients") or g.get("rows")) if r["name"] == "เนื้อวัว")   # the family label is Thai only (phone UI review 2026-10-31, item 10)
     assert beef["type"] == "protein" and beef["total_cost"] == 4000 + 20 + 100
 
 
