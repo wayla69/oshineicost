@@ -132,6 +132,7 @@
  "lang": "en",
  "latest_day": "2026-06-03",
  "leak": {
+  "by_franchise_branch": [],
   "by_master_branch": [
    {
     "bills": 1,

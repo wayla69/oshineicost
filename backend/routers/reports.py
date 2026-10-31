@@ -2234,20 +2234,24 @@ def _mgt_menu(con, *, _cal, _dt, branch, ce, cs, cur, group, has_prev, has_yoy, 
     # + bill count, for the period. Master (company-owned) stores are the owner's own
     # money leak — franchise discounts are the franchisee's cost — so this is the line
     # to action on. Honours the report's branch/period scope; always master-only.
-    mb_rows = con.execute(f"""
-        SELECT b.name branch,
-               ROUND({net_revenue_sum('st')}) sales,
-               ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
-               SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
-        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-        WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND COALESCE(b.branch_type,'master')='master'
-        GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
-        ORDER BY disc DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat()}).fetchall()
-    leak["by_master_branch"] = [
-        {"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
-         "bills": r["bills"] or 0,
-         "pct": round((r["disc"] or 0) / r["sales"] * 100, 1) if r["sales"] else None}
-        for r in mb_rows]
+    # 2026-10-31 (owner): the same list for the FRANCHISE branches (by_franchise_branch) - the phone's ส่วนลด page
+    # shows it under the company list; the desktop §6 keeps reading by_master_branch only.
+    def _disc_by_branch(btype):
+        rows = con.execute(f"""
+            SELECT b.name branch,
+                   ROUND({net_revenue_sum('st')}) sales,
+                   ROUND(COALESCE(SUM(CASE WHEN st.discount>0 THEN st.discount END),0)) disc,
+                   SUM(CASE WHEN st.discount>0 THEN 1 ELSE 0 END) bills
+            FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+            WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND COALESCE(b.branch_type,'master')=:_btype
+            GROUP BY b.name HAVING SUM(st.total_inc_vat) > 0
+            ORDER BY disc DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat(), "_btype": btype}).fetchall()
+        return [{"branch": r["branch"], "sales": r["sales"] or 0, "disc": r["disc"] or 0,
+                 "bills": r["bills"] or 0,
+                 "pct": round((r["disc"] or 0) / r["sales"] * 100, 1) if r["sales"] else None}
+                for r in rows]
+    leak["by_master_branch"] = _disc_by_branch("master")
+    leak["by_franchise_branch"] = _disc_by_branch("franchise")
 
     # ---- menu: food COST PER HEAD by dish + biggest per-head cost movers ----
     # Same idea as วิเคราะห์เมนู / the Daily-Brief menu-movers, but on the COST side:

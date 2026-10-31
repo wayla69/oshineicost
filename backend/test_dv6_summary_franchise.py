@@ -208,3 +208,18 @@ def test_the_franchise_page_follows_the_top_bars_period():
         assert w in block
     for w in ("กรุณา", "ระบบจะ", "ฉบับร่าง", "ประมาณการ", "ค่ากลาง"):
         assert w not in block, w
+
+
+# 2026-10-31 (owner): the phone's ส่วนลด page lists the franchise branches under the company list, same layout, own block
+def test_the_franchise_block_lists_only_franchise_branches(client):
+    L = _mgt(client, month="2026-06")["leak"]
+    assert [r["branch"] for r in L["by_master_branch"]] == ["BranchA"]           # the fixture: A = master, B = franchise
+    assert [r["branch"] for r in L["by_franchise_branch"]] == ["BranchB"]
+    fr = L["by_franchise_branch"][0]
+    assert set(fr) == {"branch", "sales", "disc", "bills", "pct"} and fr["pct"] == round(fr["disc"] / fr["sales"] * 100, 1)
+    assert _mgt(client, month="2026-06", branch="BranchA")["leak"]["by_franchise_branch"] == []   # hidden on a company branch
+    m, html = _js("js/09c-mobile.js"), _js("index.html")
+    assert "msDiscBranchRows(L.by_master_branch, pol, 'เฉพาะสาขาบริษัท')" in m and "msDiscBranchRows(L.by_franchise_branch, pol, 'เฉพาะสาขาแฟรนไชส์')" in m
+    assert "frWrap.style.display = fr ? '' : 'none'" in m
+    assert 'id="msDiscFrWrap" style="display:none"' in html and "ส่วนลดรายสาขา (แฟรนไชส์)</div>" in html
+    assert html.index('id="msDiscBranches"') < html.index('id="msDiscFranchise"')

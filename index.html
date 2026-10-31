@@ -1609,6 +1609,14 @@ body #mobileSummary .ms-kpi .val { font-size: 30px; font-weight: 800; letter-spa
 .ms-watch-none .ms-watch-t, .ms-watch-none .ms-watch-l { color: var(--text-muted); font-weight: 400; }
 .ms-watch-br { display: inline-block; padding: 0 7px; border-radius: 999px; background: var(--bg-input); font-size: 12px; font-weight: 700; line-height: 20px; color: var(--text-primary); margin: 2px 4px 0 0; cursor: pointer; }
 .ms-watch-more { font-size: 13px; color: var(--text-muted); background: none; border: 0; padding: 6px 0 0; font: inherit; cursor: pointer; }
+/* 2026-10-31 · บิลยกเลิก / พิมพ์ซ้ำ period chips (เมื่อวาน · 7 วัน · เดือนนี้) right above its row */
+.ms-vw-chips { display: flex; gap: 6px; padding: 10px 0 2px; border-top: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
+.ms-watch > .ms-vw-chips:first-child, #msWatch > .ms-vw-chips:first-child { border-top: 0; }
+.ms-vw-chips::-webkit-scrollbar { display: none; }
+.ms-vw-chip { flex: 0 0 auto; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card);
+  color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
+.ms-vw-chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+.ms-vw-chips + .ms-r2 { border-top: 0; }
 .ms-row { display: flex; align-items: center; gap: 8px; padding: 9px 0; border-top: 1px solid var(--border,#e2e8f0); }
 .ms-row:first-child { border-top: 0; }
 .ms-row[onclick] { min-height: 44px; }   /* a tappable row is a thumb-sized row */
@@ -3376,6 +3384,10 @@ body.php-open { overflow: hidden; }
     <div class="ms-section">
       <div class="ms-section-title">ส่วนลดรายสาขา (บริษัท)</div>
       <div id="msDiscBranches" class="ms-card"></div>
+    </div>
+    <div class="ms-section" id="msDiscFrWrap" style="display:none">
+      <div class="ms-section-title">ส่วนลดรายสาขา (แฟรนไชส์)</div>
+      <div id="msDiscFranchise" class="ms-card"></div>
     </div>
   </div>
 
