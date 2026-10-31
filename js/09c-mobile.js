@@ -3397,6 +3397,7 @@ async function msLoadMenu() {
   const j = _msRpt, wrap = document.getElementById('msMenuRisers'), title = document.getElementById('msMenuTitle');
   if (!j || !wrap) return;
   const M = j.menu || {};
+  msLoadMenuTop(j);
   if (canSeeCost() && !M.hidden) {
     if (title) title.textContent = 'เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)';
     wrap.innerHTML = msCostRisersHtml(j, 'msmenu', 15);
@@ -3447,6 +3448,59 @@ function msCostRisersHtml(j, key, top) {
   }).join('');
   return head + body + dvMoreBtn(key, rows.length, top)
     + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">บาท = ต้นทุนต่อหัวที่เพิ่ม × ลูกค้า ${fmtN(cov)} คน</p>`;
+}
+// 2026-10-31 (owner) · 60 เมนูที่สั่งเยอะ: /api/sales/top_ordered?windows=1 answers three windows at once (week = the 7 finished days to the
+// last finished day, half = the 15, month = the month to date; each vs the same-length window just before); chips สัปดาห์ · 15 วัน · เดือน
+// switch client-side and the pick is kept for the session (as the voids card). Row: dish + plates; ต่อหัว = plates per 100 customers (a buffet
+// dish on the buffet customers) with its change vs the window before - more plates per head = more food cost, so up is red.
+const _MS_TW = [['week', 'สัปดาห์'], ['half', '15 วัน'], ['month', 'เดือน']];
+let _msTopAns = null;
+function _msTopKey(W) {
+  let k = 'month';
+  try { k = sessionStorage.getItem('msTopWin') || 'month'; } catch (e) { /* private mode: the default */ }
+  return (W || {})[k] ? k : 'month';
+}
+function msSetTopWin(k) {
+  try { sessionStorage.setItem('msTopWin', k); } catch (e) { /* private mode: this render only */ }
+  if (_msTopAns) msRenderMenuTop(_msTopAns);
+}
+async function msLoadMenuTop(j) {
+  const el = document.getElementById('msMenuTop');
+  if (!el) return;
+  el.innerHTML = uiSkel(3);
+  const q = new URLSearchParams({ windows: '1' });
+  const br = msBranch(); if (br) q.set('branch', br);
+  const mon = j.selected_month || ''; if (mon) q.set('month', mon);
+  let d; try { d = await api(`${API}/api/sales/top_ordered?${q}`); } catch (e) { el.innerHTML = _msNone('โหลดไม่สำเร็จ'); return; }
+  if (_msRpt !== j) return;
+  _msTopAns = d;
+  msRenderMenuTop(d);
+}
+function msRenderMenuTop(d) {
+  const el = document.getElementById('msMenuTop');
+  if (!el) return;
+  const W = (d || {}).windows || {}, k = _msTopKey(W), w = W[k];
+  const chips = `<div class="ms-vw-chips" role="group" aria-label="ช่วงเวลาของ 60 เมนูที่สั่งเยอะ">` + _MS_TW.filter(([x]) => W[x]).map(([x, t]) =>
+    `<button type="button" class="ms-vw-chip" aria-pressed="${x === k}" onclick="msSetTopWin('${x}')">${t}</button>`).join('') + '</div>';
+  const items = (w || {}).items || [];
+  if (!items.length) { el.innerHTML = (w ? chips : '') + _msNone('ไม่มีข้อมูลเมนูช่วงนี้'); return; }
+  const p1 = v => v == null ? '—' : (+v).toLocaleString('th-TH', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+  const pill = v => v == null ? '' : msPchip(Math.round(v * 10) / 10, false);
+  const head = msGlanceLine(`สั่งรวม ${_glanceB(fmtN(w.total_qty) + ' จาน')} · ลูกค้า ${fmtN(w.customers)} คน · ต่อหัว ${_glanceB(p1(w.per100))} จาน/100 คน`
+    + (w.delta_pct != null ? ` (เทียบช่วงก่อน ${pill(w.delta_pct)})` : '') + `<br>${esc(w.label)} เทียบ ${esc(w.prev_label)}`);
+  const seen = {};
+  items.forEach(m => { const n = _msShortMenu(m.menu); seen[n] = (seen[n] || 0) + 1; });
+  const maxQ = Math.max(1, ...items.map(m => m.qty || 0));
+  const body = items.map((m, i) => {
+    const nm = _msShortMenu(m.menu), isNew = !(m.prev_qty > 0);
+    const kind = seen[nm] > 1 ? (m.kind === 'buffet' ? ' · บุฟเฟ่ต์' : ' · ไม่ใช่บุฟเฟ่ต์') : '';
+    return uiRow2({ title: `<span class="ms-menu-name" title="${esc(m.menu)}">${i + 1}. ${esc(nm)}</span>`, val: `${fmtN(m.qty)} จาน`,
+      chip: isNew ? { t: 'ใหม่', tone: 'watch' } : null, chips: isNew ? '' : pill(m.delta_pct),
+      fact: `${p1(m.per100)} จาน/100 คน${kind}`, bar: { pct: 100 * (m.qty || 0) / maxQ, col: '#0891b2' },
+      attrs: dvMoreAttr('mstop', i, items.length, 10) });
+  }).join('');
+  el.innerHTML = chips + `<div style="padding-top:6px">${head}</div>` + body + dvMoreBtn('mstop', items.length, 10)
+    + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">เมนูบุฟเฟ่ต์คิดต่อลูกค้าบุฟเฟ่ต์ · ▲ แดง = กินต่อหัวมากขึ้น</p>`;
 }
 function msTopMenuHtml(items) {
   const maxQ = Math.max(1, ...items.map(x => x.qty || 0));

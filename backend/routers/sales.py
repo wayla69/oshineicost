@@ -459,6 +459,25 @@ def _mtd_window(con, branch: Optional[str] = None, group: Optional[str] = None):
 
 
 @router.get("/api/sales/top_ordered")
+def top_ordered_route(
+    month:      Optional[str] = Query(None),
+    month_from: Optional[str] = Query(None),
+    month_to:   Optional[str] = Query(None),
+    branch:     Optional[str] = Query(None),
+    group:      Optional[str] = Query(None),
+    sort:       str           = Query("qty", description="'qty' or 'revenue'"),
+    limit:      int           = Query(15, ge=1, le=100),
+    windows:    int           = Query(0, ge=0, le=1),
+):
+    """/api/sales/top_ordered. windows=1 (owner 2026-10-31, phone เมนู detail "60 เมนูที่สั่งเยอะ") answers the plates and the plates per
+    100 customers of the 60 most-ordered dishes over three windows at once (_top_ordered_windows); every other call is the ranking
+    below (top_ordered, which the franchise screen also calls directly). Both answers are cached; this dispatcher is not, so the
+    two caches never nest under the one heavy slot."""
+    if windows == 1:
+        return _top_ordered_windows_cached(month=month, branch=branch, group=group)
+    return top_ordered(month=month, month_from=month_from, month_to=month_to, branch=branch, group=group, sort=sort, limit=limit)
+
+
 @ttl_cache   # 1.2 s cold - was recomputed on every request
 def top_ordered(
     month:      Optional[str] = Query(None),
@@ -740,6 +759,134 @@ def top_ordered(
             "cmp_ly_range": ([mtd["ly_s"], mtd["ly_e"]] if mom_basis == "mtd" else None),
             "spark_months": spark_months, "items": items}
 
+
+
+# ── 60 เมนูที่สั่งเยอะ · plates per head over three windows (owner 2026-10-31, phone เมนู detail) ─────────────────────────────────
+# One answer, three windows the card's chips switch client-side (as the voids card of ตรวจวันนี้, mgt_watch.voids):
+#   week   the 7 finished days ending on the anchor        vs the 7 days before them
+#   half   the 15 finished days ending on the anchor       vs the 15 days before them
+#   month  the selected month to date (cs..ce, periods.resolve) vs the previous month on days 1..n (whole vs whole once finished)
+# anchor = the scope's last finished day with its bills in (rules.latest_settled_day), never after the selected month's ce.
+# Plates = sales_sku_daily of the scope, non-food lines out (rules.non_food_sql: packages, fees, deposits, coupons, the service
+# charge) as the spike card; one row per dish (_spike_kind + _spike_norm: SKU spellings fold, (A)/(B) stripped by _spike_name, a
+# buffet and an à-la-carte dish stay two rows). per100 = plates / customers x 100 on the spike card's basis: a buffet dish on the
+# scope's buffet customers (menu_fact_total) when the fact tables cover both windows and hold customers in both, else - and for
+# every other dish - on all customers (sales_transaction, source Easy) (_SpikeCust). Top 60 by plates of the current window.
+_TOP60_N = 60
+
+
+def _top_ordered_windows(con, month, bfilt, params, anchor=None):
+    import datetime as _dt
+    from periods import pct as _pct, resolve as _resolve
+    from rules import latest_settled_day
+    from .mgt_watch import range_label
+    D = _dt.date.fromisoformat
+    bids = [r[0] for r in con.execute(
+        f"SELECT b.branch_id FROM branches b WHERE b.name != 'ALL' {bfilt}", params).fetchall()]
+    empty = {"anchor": None, "windows": {}}
+    if not bids:
+        return empty
+    if anchor is None:
+        where = "t.source='Easy' AND b.name!='ALL'" + bfilt
+        anchor = latest_settled_day(con, where=where, params=params).get("day")
+    if not anchor:
+        return empty
+    a = D(str(anchor)[:10])
+    try:
+        r = _resolve("month", a, date_from=(month + "-01") if month else None)
+    except ValueError:                       # a month after the last finished day: nothing to show
+        return {"anchor": a.isoformat(), "windows": {}}
+    (cs, ce), (ps, pe) = [tuple(D(x) for x in w) for w in (r["cur"], r["prev"])]
+    a = min(a, ce)
+    td = _dt.timedelta
+    wins = {"week": ((a - td(days=6), a), (a - td(days=13), a - td(days=7))),
+            "half": ((a - td(days=14), a), (a - td(days=29), a - td(days=15))),
+            "month": ((cs, ce), (ps, pe))}
+    keys = [(k, side) for k in wins for side in (0, 1)]
+    d0 = min(w[side][0] for w in wins.values() for side in (0, 1))
+    d1 = max(w[side][1] for w in wins.values() for side in (0, 1))
+    # one pass: plates per SKU in each of the six ranges
+    cols, q = [], {**params, "d0": d0.isoformat(), "d1": d1.isoformat()}
+    for i, (k, side) in enumerate(keys):
+        s_, e_ = wins[k][side]
+        q[f"s{i}"], q[f"e{i}"] = s_.isoformat(), e_.isoformat()
+        cols.append(f"SUM(CASE WHEN d.day BETWEEN :s{i} AND :e{i} THEN d.qty ELSE 0 END)")
+    one_branch = "b.name=" in bfilt
+    scan = "" if one_branch else "NOT INDEXED"
+    bjoin = "JOIN branches b ON b.branch_id=d.branch_id" if bfilt else ""
+    cur = con.cursor()
+    cur.row_factory = None
+    rows = cur.execute(f"""
+        SELECT s.description, s.sku_code, a.* FROM (
+          SELECT d.sku_id, {", ".join(cols)}
+          FROM sales_sku_daily d {scan} {bjoin}
+          WHERE d.day BETWEEN :d0 AND :d1 {bfilt} GROUP BY d.sku_id) a
+        JOIN skus s ON s.sku_id = a.sku_id
+        WHERE NOT {non_food_sql("s.sku_code", "s.description")}""", q).fetchall()
+    # customers per branch x day (all / buffet), summed over the scope's branches per range
+    cust = _SpikeCust(con, set(bids), d0, d1)
+
+    def csum(src, s_, e_):
+        return sum(v for bid in bids for dd, v in src.get(bid, {}).items() if s_ <= dd <= e_)
+
+    # dishes: (kind, norm) -> {names: {menu: plates}, q: [six sums]}
+    dishes: dict = {}
+    for desc, code, _sid, *qs in rows:
+        menu = _spike_name(desc, code).strip()
+        kind = _spike_kind(desc)
+        e = dishes.setdefault((kind, _spike_norm(menu)), {"kind": kind, "names": {}, "q": [0.0] * len(keys)})
+        for i, v in enumerate(qs):
+            e["q"][i] += v or 0.0
+        e["names"][menu] = e["names"].get(menu, 0.0) + sum(v or 0.0 for v in qs)
+    r1 = lambda x: round(x, 1) if x is not None else None
+    r2 = lambda x: round(x, 2)
+
+    def per(qq, n):
+        return (qq / n * _SPIKE_PER) if n else None
+
+    out = {}
+    for wi, (k, ((s_, e_), (p_s, p_e))) in enumerate(wins.items()):
+        ic, ip = 2 * wi, 2 * wi + 1
+        c_all, p_all = csum(cust.all, s_, e_), csum(cust.all, p_s, p_e)
+        buf_ok = cust.covers(p_s, e_)
+        c_buf = csum(cust.buf, s_, e_) if buf_ok else 0.0
+        p_buf = csum(cust.buf, p_s, p_e) if buf_ok else 0.0
+        use_buf = buf_ok and c_buf > 0 and p_buf > 0
+        tq = sum(e["q"][ic] for e in dishes.values())
+        tp = sum(e["q"][ip] for e in dishes.values())
+        items = []
+        for e in sorted((e for e in dishes.values() if e["q"][ic] > 0), key=lambda e: -e["q"][ic])[:_TOP60_N]:
+            b = e["kind"] == "buffet" and use_buf
+            nc, npv = (c_buf, p_buf) if b else (c_all, p_all)
+            cq, pq = e["q"][ic], e["q"][ip]
+            pr, pp_ = per(cq, nc), per(pq, npv)
+            items.append({"menu": max(e["names"].items(), key=lambda kv: kv[1])[0], "kind": e["kind"],
+                          "basis": "buffet" if b else "all", "qty": r2(cq), "prev_qty": r2(pq),
+                          "per100": r2(pr) if pr is not None else None,
+                          "prev_per100": r2(pp_) if pp_ is not None and pq > 0 else None,
+                          "delta_pct": _pct(pr, pp_) if pq > 0 else None})
+        tpc, tpp = per(tq, c_all), per(tp, p_all)
+        out[k] = {"range": [s_.isoformat(), e_.isoformat()], "prev_range": [p_s.isoformat(), p_e.isoformat()],
+                  "label": range_label(s_, e_), "prev_label": range_label(p_s, p_e), "days": (e_ - s_).days + 1,
+                  "customers": round(c_all), "prev_customers": round(p_all),
+                  "buffet_customers": round(c_buf) if use_buf else None,
+                  "prev_buffet_customers": round(p_buf) if use_buf else None,
+                  "total_qty": r2(tq), "prev_total_qty": r2(tp),
+                  "per100": r1(tpc), "prev_per100": r1(tpp), "delta_pct": _pct(tpc, tpp),
+                  "dishes": sum(1 for e in dishes.values() if e["q"][ic] > 0), "items": items}
+    return {"anchor": a.isoformat(), "month": cs.isoformat()[:7], "per": _SPIKE_PER, "windows": out}
+
+
+@ttl_cache(ttl=HEAVY_TTL, stale=HEAVY_TTL, daily=True)   # until the next data swap or Thai midnight (core.HEAVY_TTL), as the spike card
+def _top_ordered_windows_cached(month, branch, group):
+    """The web answer of /api/sales/top_ordered?windows=1, cached per month / branch / group (no role-dependent key)."""
+    with get_db() as con:
+        bfilt, params = "", {}
+        if branch:
+            bfilt += " AND b.name=:branch"; params["branch"] = branch
+        if group:
+            bfilt += " AND COALESCE(b.branch_type,'master')=:grp"; params["grp"] = group
+        return _top_ordered_windows(con, month, bfilt, params)
 
 # Shared aggregator for the A/B-compare endpoints: groups a sales window (month
 # range via sm, OR day range via sales_sku_daily) by an arbitrary GROUP BY column.

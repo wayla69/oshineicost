@@ -4553,6 +4553,9 @@ const PAGE_CARDS = {
   gpbranch: [{ sel: '#gpbTable', rows: 'tr.gpb-row', title: 'สาขา', sub: ['ต้นทุนอาหาร %'], subL: true, keyCols: ['เกินเป้า', 'GP (', 'GP %'], labels: ['เกินเป้า ฿', 'GP', 'GP %'], pill: 'สถานะ',
     tones: { 'ในเป้า': 'good', 'เกินเป้า': 'bad' } }],
   pnlbranch: [{ sel: '#pnlbTable', title: 'สาขา', sub: ['GP%', 'OP%'], subL: true, keyCols: ['รายได้', 'กำไรขั้นต้น', 'กำไรดำเนินงาน'] }],
+  // 2026-10-31 (owner: สรุปประจำวัน overflowed sideways on the phone): อันดับสาขาเมื่อวาน as one card per branch - ต่างจากปกติ first (its %
+  // and the normal under it), ยอดเมื่อวาน, ยอด/หัว; the 7-day sparkline cell is kept on the card
+  home: [{ sel: '#homeScoreTable', title: 'สาขา', keyCols: ['ต่างจากปกติ', 'ยอดเมื่อวาน', 'ยอด/หัว'], figSub: true, sparkCell: '7 วัน' }],
   dailysales: [{ sel: 'table:has(#dsBody)', title: 'สาขา', sub: ['เทียบช่วงก่อน', 'เทียบปีก่อน'], subL: true, keyCols: ['บาทที่เปลี่ยน', 'ยอดขาย', 'ยอด/หัว'] },
     // DV3 (phone table review 2026-10-25): one row per dish - ต้นทุนเพิ่มสุทธิ first (its % of the food cost under it), สะสม, +จาน; the
     // สาขาที่ดัน / tier lines are the grey lines under the name. A role without cost: +จาน, สูงกว่า, สะสม.
