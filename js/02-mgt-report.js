@@ -1467,7 +1467,8 @@ function renderMgtReport(j, jM, jF) {
 
   // §7.1 (owner 2026-10-31) — voided / reprinted bills grouped by branch: j.voids_detail = routers/voids.report_section, the
   // drill-down's own builder over the report's period (one answer). Worst rate of voids NOT re-issued first; 20 bills a list.
-  const voidsSection = (() => {
+  // a function, run when SECTIONS is built: naBox and the other helpers it uses are declared further down (no TDZ)
+  const voidsSectionHtml = () => {
     const VD = j.voids_detail;
     if (!VD || !VD.available) return naBox(T.vdNa);
     const B = VD.bands || {}, TT = VD.total || {};
@@ -1505,7 +1506,7 @@ function renderMgtReport(j, jM, jF) {
     return head + (VD.branches || []).map(block).join('')
       + (R.branches ? `<p class="text-[12px] text-slate-500 mgt-atom">${fill(T.vdRest, { n: num(R.branches), b: num(R.bills_total) })}</p>` : '')
       + (!(VD.branches || []).length && !R.branches ? naBox(T.vdNa) : '');
-  })();
+  };
 
   // §8 split — Peak Hours
   const peakWithSplit = peakHtml + (() => {
@@ -1935,7 +1936,7 @@ function renderMgtReport(j, jM, jF) {
     { id:'mgt-s6',  c:'#dc2626', brk:true, t:T.s6, h:leakWithSplit },
     // §7.1 (owner 2026-10-31): voided / reprinted bills by branch - long (20 bills a list a branch), so it starts a sheet and flows;
     // a branch's header and every bill row never split (.mgt-atom, tr)
-    { id:'mgt-s6b', c:'#b91c1c', brk:true, t:T.s6b, h:voidsSection },
+    { id:'mgt-s6b', c:'#b91c1c', brk:true, t:T.s6b, h:voidsSectionHtml() },
     { id:'mgt-s7',  c:'#059669', keep:true, t:T.s7, h:menu },
     { id:'mgt-s8',  c:'#0284c7', keep:true, t:T.s8, h:v8 + peakWithSplit },
     // §9 kept whole while its branch table fits a sheet (KPI row + ≤30 rows + split);
