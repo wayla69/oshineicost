@@ -250,6 +250,7 @@ def _no_usage_cache(monkeypatch):
     monkeypatch.setattr(forecast, "USAGE_CACHE_TTL", 0)
     forecast.clear_usage_cache()
     import core
+    core.invalidate_cache("_top_ordered_windows_cached")   # 2026-10-31: the phone's 60 เมนูที่สั่งเยอะ answer is cached the same way
     core.invalidate_cache("_menu_spike_cached")   # 2026-10-29: the web menu-spike answer is cached (core.HEAVY_TTL); a test swaps the DB under it
     yield
 

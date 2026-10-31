@@ -1611,7 +1611,7 @@ body #mobileSummary .ms-kpi .val { font-size: 30px; font-weight: 800; letter-spa
 .ms-watch-more { font-size: 13px; color: var(--text-muted); background: none; border: 0; padding: 6px 0 0; font: inherit; cursor: pointer; }
 /* 2026-10-31 · บิลยกเลิก / พิมพ์ซ้ำ period chips (เมื่อวาน · 7 วัน · เดือนนี้) right above its row */
 .ms-vw-chips { display: flex; gap: 6px; padding: 10px 0 2px; border-top: 1px solid var(--border); overflow-x: auto; scrollbar-width: none; }
-.ms-watch > .ms-vw-chips:first-child, #msWatch > .ms-vw-chips:first-child { border-top: 0; }
+.ms-watch > .ms-vw-chips:first-child, #msWatch > .ms-vw-chips:first-child, #msMenuTop > .ms-vw-chips:first-child { border-top: 0; }
 .ms-vw-chips::-webkit-scrollbar { display: none; }
 .ms-vw-chip { flex: 0 0 auto; min-height: 40px; padding: 0 14px; border-radius: 999px; border: 1px solid var(--border-control, #7d8aa0); background: var(--bg-card);
   color: var(--text-primary); font: inherit; font-size: 14px; font-weight: 600; white-space: nowrap; cursor: pointer; }
@@ -3382,6 +3382,11 @@ body.php-open { overflow: hidden; }
       <!-- DV6: the dishes that push the food cost per head up, in baht (msLoadMenu); a role without cost: ขายดี in plates -->
       <div class="ms-section-title" id="msMenuTitle">เมนูที่ดันต้นทุนต่อหัวขึ้น (บาท)</div>
       <div id="msMenuRisers" class="ms-card"></div>
+    </div>
+    <div class="ms-section" id="msMenuTopWrap">
+      <!-- 2026-10-31 (owner): the 60 most-ordered dishes, plates + plates per 100 customers vs the window before; chips สัปดาห์ · 15 วัน · เดือน (msLoadMenuTop) -->
+      <div class="ms-section-title">60 เมนูที่สั่งเยอะ</div>
+      <div id="msMenuTop" class="ms-card"></div>
     </div>
   </div>
 
