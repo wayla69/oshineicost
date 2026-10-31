@@ -628,7 +628,7 @@ async function renderHomeScorecard(focusDate) {
                  : s === 'down' ? '<span title="ต่ำกว่าปกติ">●</span>'
                  : '<span title="ปกติ">●</span>';
   const vsCell = r => r.vs_normal_baht == null ? `<span style="color:var(--text-muted)">${r.reported === false ? 'ข้อมูลยังไม่มา' : normalLbl(r.normal_weeks)}</span>`
-    : `<span data-ph-line class="font-semibold" style="color:${r.vs_normal_baht >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(r.vs_normal_baht)}</span><span data-ph-line class="block" style="color:var(--text-muted)">${r.vs_normal_pct != null ? (r.vs_normal_pct > 0 ? '+' : '') + r.vs_normal_pct.toFixed(0) + '%' : ''} · ปกติ ${fmt(r.normal)}</span>`;
+    : `<span data-ph-line class="font-semibold" style="color:${r.vs_normal_baht >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(r.vs_normal_baht)}</span><div data-ph-line style="color:var(--text-muted)">${r.vs_normal_pct != null ? (r.vs_normal_pct > 0 ? '+' : '') + r.vs_normal_pct.toFixed(0) + '%' : ''} · ปกติ ${fmt(r.normal)}</div>`;   // a div: the phone card takes the baht as the figure and this as its sub line (_phLines splits on blocks)
   const n = rows.length, TOP = 5, BOT = 5;
   el.innerHTML = `<table class="text-xs w-full" id="homeScoreTable">
     <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
