@@ -747,6 +747,7 @@ const _PH_DETAIL = {
   menu: { v: 'menu', t: 'เมนู' },
   profit: { v: 'profit', t: 'ต้นทุนอาหารและกำไร' },
   discounts: { v: 'discounts', t: 'ส่วนลด' },
+  voids: { v: 'voids', t: 'บิลยกเลิก / พิมพ์ซ้ำ' },   // 2026-10-31 (owner): the ตรวจวันนี้ card's drill-down (msLoadVoids)
 };
 let _phDetail = '', _phDetailPushed = false, _phHomeY = 0, _msVoiceN = 0;
 // the two pickers live in the header's chips while the shell is on (and go back to the summary when it goes)
@@ -787,7 +788,7 @@ function phTopRender() {
   if (bk) { bk.hidden = !back; bk.setAttribute('aria-label', dept ? 'กลับหน้าแรก' : 'กลับภาพรวม'); }
   if (mk) mk.hidden = back;
   const t = document.getElementById('phTopT');
-  if (t) t.textContent = det ? (D ? D.t : 'สรุปผู้บริหาร') : row ? row.label : (_PH_TOP_T[_phView] || 'หน้าแรก');
+  if (t) t.textContent = det ? (_phDetail === 'voids' && _msVoidBr ? _msVoidBr : D ? D.t : 'สรุปผู้บริหาร') : row ? row.label : (_PH_TOP_T[_phView] || 'หน้าแรก');
   const chips = document.getElementById('phTopChips'); if (chips) chips.hidden = !(ms && (det || _phView === 'home'));
   const av = document.getElementById('phTopAv'); if (av) { av.textContent = _phInitial(); av.classList.toggle('is-on', _phView === 'me'); }
   phTopSync();
@@ -834,7 +835,7 @@ function _phBackToCards() {
 window.addEventListener('popstate', e => {
   if (!phOn() || _phKind() !== 'centre') return;
   const d = e.state && e.state.phd;
-  if (d) { if (_phView === 'home' || _phView === 'summary') { if (_phView === 'home') _phHomeY = window.scrollY; _phDetailPushed = true; _phShowDetail(d); } return; }   // forward again
+  if (d) { if (d === 'voids') _msVoidFromState(e.state); if (_phView === 'home' || _phView === 'summary') { if (_phView === 'home') _phHomeY = window.scrollY; _phDetailPushed = true; _phShowDetail(d); } return; }   // forward again
   if (_phView === 'summary') _phBackToCards(); else _phDetailPushed = false;
 });
 // ── the overview cards of หน้าแรก ──
@@ -2406,8 +2407,8 @@ function msTrendBlock(trend, gran, height) {
 }
 
 // phone views → group colours (theme-groups.css): the section markers follow the view
-const _MS_GROUP = { summary: 'home', sales: 'sales', branches: 'buffet', menu: 'menu', profit: 'profit', discounts: 'money' };
-const _MS_VIEWS = ['summary', 'sales', 'branches', 'menu', 'profit', 'discounts'];
+const _MS_GROUP = { summary: 'home', sales: 'sales', branches: 'buffet', menu: 'menu', profit: 'profit', discounts: 'money', voids: 'money' };
+const _MS_VIEWS = ['summary', 'sales', 'branches', 'menu', 'profit', 'discounts', 'voids'];
 // a phone reader sees only what their role may open on the desktop (same module names as auth.py)
 const _msMod = m => !(window.AUTH && window.AUTH.enabled) || (window.AUTH.modules || []).includes(m);
 function msShowView(v) {
@@ -2433,6 +2434,7 @@ function msRenderActive() {
   else if (_msView === 'menu')      msLoadMenu();
   else if (_msView === 'profit')    msRenderProfit();
   else if (_msView === 'discounts') msRenderDiscounts();
+  else if (_msView === 'voids')     msLoadVoids();
 }
 
 // ── data: ONE management-report payload per (month, branch) drives the summary,
@@ -2814,8 +2816,10 @@ function msRenderWatch(j) {
     if (it.key === 'voids' && it.source === 'month') fact += ' · ยกเลิกนับทั้งเดือน';
     const baht = act ? (it.rows || []).reduce((s, r) => s + (+r.baht > 0 ? +r.baht : 0), 0) : 0;
     const title = esc(it.title) + (it.key === 'voids' && it.label ? ` · ${esc(it.label)}` : '');
+    // 2026-10-31 (owner): a tap on the voids row opens its drill-down (every branch, every bill); the ▾ still expands the sentence
     return (it.key === 'voids' ? _msVoidChips(it) : '') + msRow2({ cls: 'ms-watch-r', tone: tone(it.level), title, val: baht ? '฿' + fmt(baht) : '', valTone: baht ? 'bad' : '',
-      chips: act ? _msBrChips((it.rows || []).map(r => r.branch).filter(Boolean)) : '', fact: esc(fact), more: fact !== line ? esc(line) : '' });
+      chips: act ? _msBrChips((it.rows || []).map(r => r.branch).filter(Boolean)) : '', fact: esc(fact), more: fact !== line ? esc(line) : '',
+      onGo: it.key === 'voids' ? 'msOpenVoids()' : '', attrs: it.key === 'voids' ? ' data-go-kind="voids"' : '' });
   };
   const deadHtml = !dead.length ? '' : msRow2({ cls: 'ms-watch-r ms-watch-none', title: `ยังไม่มีข้อมูล ${fmtN(dead.length)} รายการ`, fact: esc(dead.map(it => it.title).join(' · ')),
     more: dead.map(it => `<b>${esc(it.title)}</b>: ${esc(it.line || '')}`).join('<br>') });
@@ -2824,6 +2828,172 @@ function msRenderWatch(j) {
   if (cnt) cnt.textContent = nAct ? `· ต้องดู ${fmtN(nAct)}` : '';
   wrap.style.display = '';
 }
+// ── บิลยกเลิก / พิมพ์ซ้ำ drill-down (owner 2026-10-31: "drill down ... ดูรายละเอียดทุกสาขาได้เลย รายสาขารายบิลเลย") ──
+// /api/reports/voids (routers/voids.py, the card's own counts and windows): level 1 = every branch of the window, level 2 = one branch's
+// cancelled bills and reprinted bills, level 3 = one bill (the row sheet). A tap on the card's row opens level 1 (the detail screen `voids`);
+// a branch row pushes a history entry (back returns to level 1 at its scroll); with one branch in the picker the screen opens on level 2.
+// The window chips are the card's (sessionStorage msVoidWin).
+let _msVoidBr = '', _msVoidY = 0, _msVoidRestore = false, _msVoidAnchor = '', _msVoidData = null, _msVoidSeq = 0;
+const _msVoidCache = {};
+function _msVoidWin() {
+  let k = 'month';
+  try { k = sessionStorage.getItem('msVoidWin') || 'month'; } catch (e) { /* private mode: the default */ }
+  return _MS_VW.some(([x]) => x === k) ? k : 'month';
+}
+function msOpenVoids() {
+  _msVoidBr = msBranch() || '';
+  msActionGo({ kind: 'ms', view: 'voids' });
+}
+// the history entry of a drill level: {phd: 'voids', vb: branch} - the shell's popstate (phone B) and the one below read it
+function _msVoidFromState(st) {
+  _msVoidRestore = !st.vb;
+  _msVoidBr = st.vb || msBranch() || '';
+}
+function msVoidsBranch(name) {
+  if (!name) return;
+  _msVoidY = window.scrollY;
+  try { history.pushState({ phd: 'voids', vb: name }, ''); _phDetailPushed = true; } catch (e) { /* no history: back goes to the cards */ }
+  _msVoidBr = name;
+  if (typeof phTopRender === 'function') phTopRender();
+  window.scrollTo(0, 0);
+  msLoadVoids();
+}
+function msVoidsWin(k) {
+  try { sessionStorage.setItem('msVoidWin', k); } catch (e) { /* private mode: this render only */ }
+  msLoadVoids();
+}
+// the "?" of the screen: the bands and what a reprint is
+function _msVoidHelp(j) {
+  const B = j.bands || {};
+  return uiQ('voids-drill', 'บิลยกเลิก / พิมพ์ซ้ำ', `<p><b>อัตรายกเลิก</b> = บิลยกเลิก ÷ (บิลขาย + บิลยกเลิก) ในช่วงเวลาที่เลือก</p>`
+    + `<p><b style="color:var(--bad-ink)">ต้องแก้</b> ตั้งแต่ ${B.fix}% · <b style="color:var(--amber-ink)">ต้องดู</b> ตั้งแต่ ${B.watch}%</p>`
+    + `<p>ช่วง "เมื่อวาน" ต้องมีอย่างน้อย ${j.min_bills_day} บิลจึงสรุปผล</p>`
+    + `<p><b>บิลพิมพ์ซ้ำ</b> = บิลที่มีส่วนลดและพิมพ์ใบเสร็จมากกว่า 1 ครั้ง</p>`
+    + `<p>บิลยกเลิกไม่มีรายการอาหาร เพราะระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p>`);
+}
+function _msVoidChipsHtml(j) {
+  const have = j.windows || ['month'];
+  return `<div class="ms-vw-chips" role="group" aria-label="ช่วงเวลาของบิลยกเลิก">` + _MS_VW.filter(([k]) => have.includes(k)).map(([k, t]) =>
+    `<button type="button" class="ms-vw-chip" aria-pressed="${k === j.window}" onclick="msVoidsWin('${k}')">${t}</button>`).join('') + '</div>';
+}
+const _msVoidTone = l => l === 'fix' ? 'bad' : l === 'watch' ? 'watch' : '';
+const _msHm = at => String(at || '').slice(11, 16);
+const _msDayTh = at => { const d = String(at || '').slice(0, 10); return d ? `${+d.slice(8, 10)} ${_MS_TH_MON[+d.slice(5, 7) - 1] || ''}` : ''; };
+async function msLoadVoids() {
+  const box = document.getElementById('msVoids'); if (!box) return;
+  const seq = ++_msVoidSeq, br = _msVoidBr;
+  const q = new URLSearchParams({ window: _msVoidWin(), lang: 'th' });
+  const mon = msMonth(); if (mon) q.set('month', mon);
+  if (br) { q.set('branch', br); if (br !== msBranch() && _msVoidAnchor) q.set('date', _msVoidAnchor); }   // level 2 reads level 1's window
+  const key = q.toString();
+  if (!_msVoidCache[key]) box.innerHTML = uiSkel(6);
+  let j;
+  try { j = _msVoidCache[key] || await api(`${API}/api/reports/voids?${key}`); }
+  catch (e) { if (seq === _msVoidSeq) box.innerHTML = uiEmpty({ t: 'โหลดไม่สำเร็จ', act: 'ลองอีกครั้ง', go: 'msLoadVoids()' }); return; }
+  if (seq !== _msVoidSeq) return;
+  if (!j || !j.available) { box.innerHTML = uiEmpty({ t: (j && j.line) || 'ยังไม่มีข้อมูลบิลยกเลิก' }); return; }
+  _msVoidCache[key] = j;
+  if (j.level === 1 && j.anchor) _msVoidAnchor = j.anchor;
+  _msVoidData = j;
+  box.innerHTML = j.level === 2 ? msVoidsL2Html(j) : msVoidsL1Html(j);
+  if (_msVoidRestore && j.level === 1) { const y = _msVoidY; requestAnimationFrame(() => window.scrollTo(0, y)); }
+  _msVoidRestore = false;
+}
+function _msVoidHead(j, T, title) {
+  const tone = _msVoidTone(T.level);
+  const rate = T.rate_pct != null ? `<b class="ms-vd-rate${tone ? ' is-' + tone : ''}">${T.rate_pct}%</b>` : '—';
+  return `<div class="ms-vd-head"><span class="ms-vd-h1">${esc(title)} · ${esc(j.label || '')}</span>${_msVoidHelp(j)}</div>`
+    + `<p class="ms-vd-sum">ยกเลิก ${rate} · ${fmtN(T.voids)} บิล · ฿${fmtN(T.amount)} · พิมพ์ซ้ำ ${fmtN(T.reprints)} บิล</p>`
+    + (j.source === 'month' ? `<p class="ms-vd-note">นับบิลยกเลิกทั้งเดือน (ไม่มีข้อมูลรายวันของช่วงนี้)</p>` : '');
+}
+// level 1 · every branch: company, then franchise; each sorted by the rate, the branches with no void at the bottom (grey)
+function msVoidsL1Html(j) {
+  const rows = j.rows || [], T = j.total || {}, B = j.bands || {};
+  if (j.source === 'none') return _msVoidChipsHtml(j) + uiEmpty({ t: 'ยังไม่มีข้อมูลบิลยกเลิกรายวันของช่วงนี้' });
+  const max = Math.max(1, ...rows.map(r => r.rate_pct || 0));
+  const row = r => {
+    const zero = !r.voids, tone = zero ? '' : _msVoidTone(r.level);
+    const col = tone === 'bad' ? 'var(--bad-ink)' : tone === 'watch' ? 'var(--amber-ink)' : 'var(--text-muted)';
+    return uiRow2({ cls: 'ms-vd-br' + (zero ? ' ms-vd-zero' : ''), tone, title: esc(r.branch),
+      val: r.rate_pct != null ? r.rate_pct + '%' : '—', valTone: tone,
+      fact: `${fmtN(r.voids)} บิล · ฿${fmtN(r.amount)} · พิมพ์ซ้ำ ${fmtN(r.reprints)}${r.few ? ' · บิลน้อย' : ''}`,
+      bar: zero ? null : { pct: 100 * (r.rate_pct || 0) / max, col },
+      onGo: 'msVoidsBranch(this.dataset.br)', attrs: ` data-br="${esc(r.branch)}"` });
+  };
+  const grp = (t, list) => list.length ? `<div class="ms-section-title ms-vd-grp">${t} <span>${fmtN(list.length)} สาขา</span></div><div class="ms-card ms-r2-list">${list.map(row).join('')}</div>` : '';
+  const lv = T.rate_pct == null ? '' : T.rate_pct >= B.fix ? 'fix' : T.rate_pct >= B.watch ? 'watch' : '';
+  return _msVoidChipsHtml(j) + _msVoidHead(j, { ...T, level: lv }, 'ทุกสาขา')
+    + (rows.length ? grp('สาขาบริษัท', rows.filter(r => r.type !== 'franchise')) + grp('สาขาแฟรนไชส์', rows.filter(r => r.type === 'franchise'))
+      : uiEmpty({ t: 'ไม่มีสาขาในช่วงนี้' }));
+}
+// level 2 · one branch: the header, the reasons, every cancelled bill by day (newest first, 20 then ดูทั้งหมด), every reprinted bill
+function msVoidsL2Html(j) {
+  const H = j.header || {}, N = H.normal;
+  const head = _msVoidChipsHtml(j) + _msVoidHead(j, H, j.branch)
+    + (N ? `<p class="ms-vd-note">ปกติของสาขา ${N.rate_pct}% (8 สัปดาห์ก่อนหน้า)</p>` : '');
+  const reasons = (j.reasons || []).length ? `<div class="ms-vd-reasons" role="list">` + j.reasons.map(r =>
+    `<span class="ms-vd-reason" role="listitem">${esc(r.reason)} <b>${fmtN(r.n)}</b></span>`).join('') + '</div>' : '';
+  const bills = j.bills || [], CAP = 20;
+  let lastDay = '', billsHtml = '';
+  bills.forEach((b, i) => {
+    const day = String(b.at || '').slice(0, 10), attr = dvMoreAttr('vd-bills', i, bills.length, CAP);
+    if (day !== lastDay) {
+      lastDay = day;
+      const same = bills.filter(x => String(x.at || '').slice(0, 10) === day);
+      billsHtml += `<div class="ms-vd-day"${attr}>${_msDayTh(b.at)} <span>${fmtN(same.length)} บิล · ฿${fmtN(same.reduce((s, x) => s + (x.amount || 0), 0))}</span></div>`;
+    }
+    billsHtml += uiRow2({ cls: 'ms-vd-bill', title: `${_msHm(b.at)} · ${esc(b.receipt || 'ไม่มีเลขที่บิล')}`, val: '฿' + fmtN(b.amount),
+      fact: esc([b.reason, b.user].filter(Boolean).join(' · ')) + (b.discount > 0 ? ` · มีส่วนลด ฿${fmtN(b.discount)}` : ''),
+      onGo: `msVoidBill('b',${i})`, attrs: attr });
+  });
+  const reps = j.reprints || [];
+  const repHtml = reps.map((r, i) => uiRow2({ cls: 'ms-vd-bill', tone: 'watch', title: `${_msDayTh(r.at)} ${_msHm(r.at)} · ${esc(r.receipt)}`, val: '฿' + fmtN(r.total),
+    fact: `พิมพ์ ${fmtN(r.prints)} ครั้ง · ส่วนลด ฿${fmtN(r.discount)}${r.cashier ? ' · ' + esc(r.cashier) : ''}`,
+    onGo: `msVoidBill('r',${i})`, attrs: dvMoreAttr('vd-reps', i, reps.length, CAP) })).join('');
+  const more = n => n ? `<p class="ms-vd-note">และอีก ${fmtN(n)} บิล</p>` : '';
+  return head
+    + `<div class="ms-section-title ms-vd-grp">บิลยกเลิก <span>${fmtN(H.voids)} บิล · ฿${fmtN(H.amount)}</span></div>`
+    + (bills.length ? reasons + `<div class="ms-card ms-r2-list">${billsHtml}</div>${dvMoreBtn('vd-bills', bills.length, CAP)}${more(j.bills_more)}`
+      : uiEmpty({ t: j.source === 'detail' ? 'ไม่มีบิลยกเลิกในช่วงนี้' : 'ไม่มีรายการบิลยกเลิกรายบิลของช่วงนี้', icon: 'check' }))
+    + `<div class="ms-section-title ms-vd-grp">บิลพิมพ์ซ้ำ <span>${fmtN(H.reprints)} บิล · ส่วนลด ฿${fmtN(H.reprint_baht)}</span></div>`
+    + (reps.length ? `<div class="ms-card ms-r2-list">${repHtml}</div>${dvMoreBtn('vd-reps', reps.length, CAP)}${more(j.reprints_more)}`
+      : uiEmpty({ t: 'ไม่มีบิลพิมพ์ซ้ำในช่วงนี้', icon: 'check' }));
+}
+// level 3 · one bill in the row sheet: a cancelled bill = its fields (the POS keeps no lines of a cancelled bill); a reprinted bill = its
+// lines and payments (/api/reports/voids/bill)
+async function msVoidBill(kind, i) {
+  const j = _msVoidData; if (!j || j.level !== 2) return;
+  const b = (kind === 'b' ? j.bills : j.reprints || [])[i]; if (!b) return;
+  const sh = document.getElementById('msSheet'), body = document.getElementById('msSheetBody'); if (!sh || !body) return;
+  const kv = pairs => `<dl class="ph-rs-list">${pairs.filter(p => p[1] !== '' && p[1] != null).map(([h, v]) => `<div class="ph-rs-row"><dt>${esc(h)}</dt><dd>${v}</dd></div>`).join('')}</dl>`;
+  document.getElementById('msSheetTitle').textContent = kind === 'b' ? 'บิลยกเลิก ' + (b.receipt || '') : 'บิลพิมพ์ซ้ำ ' + b.receipt;
+  document.getElementById('msSheetSub').textContent = `${j.branch} · ${_msDayTh(b.at)} ${_msHm(b.at)}`;
+  sh.classList.add('open', 'ph-rowsheet'); sh.scrollTop = 0; document.body.classList.add('ms-sheet-open');
+  const back = document.getElementById('phSheetBack'); if (back) back.hidden = false;
+  if (kind === 'b') {
+    body.innerHTML = `<div class="ph-rs">` + kv([['เลขที่บิล', esc(b.receipt || 'ไม่มีเลขที่บิล')], ['เวลา', `${_msDayTh(b.at)} ${_msHm(b.at)}`], ['ยอดบิล', '฿' + fmtN(b.amount)],
+      ['เหตุผล', esc(b.reason)], ['ผู้ยกเลิก', esc(b.user)], ['ส่วนลด', b.discount > 0 ? '฿' + fmtN(b.discount) : '']])
+      + `<p class="ms-vd-note">บิลที่ยกเลิกไม่มีรายการอาหาร ระบบ POS ไม่ส่งรายการของบิลที่ยกเลิก</p></div>`;
+    return;
+  }
+  body.innerHTML = '<div class="ph-rs">' + uiSkel(4) + '</div>';
+  let d;
+  try { d = await api(`${API}/api/reports/voids/bill?${new URLSearchParams({ branch: j.branch, receipt: b.receipt })}`); }
+  catch (e) { body.innerHTML = '<div class="ph-rs">' + uiEmpty({ t: 'โหลดไม่สำเร็จ' }) + '</div>'; return; }
+  if (!d || !d.available) { body.innerHTML = '<div class="ph-rs">' + uiEmpty({ t: (d && d.line) || 'ไม่พบบิลนี้' }) + '</div>'; return; }
+  const lines = (d.lines || []).map(l => `<div class="ph-rs-row"><dt>${esc(l.menu)} × ${fmtN(l.qty)}</dt><dd>฿${fmtN(l.rev)}</dd></div>`).join('');
+  const pays = (d.payments || []).map(p => `<div class="ph-rs-row"><dt>${esc(p.code)}</dt><dd>฿${fmtN(p.amount)}</dd></div>`).join('');
+  body.innerHTML = `<div class="ph-rs">` + kv([['ยอดบิล', '฿' + fmtN(d.total)], ['ส่วนลด', '฿' + fmtN(d.discount)], ['พิมพ์', fmtN(d.prints) + ' ครั้ง'],
+    ['แคชเชียร์', esc(d.cashier)], ['โต๊ะ', esc(d.table)], ['ลูกค้า', d.covers ? fmtN(d.covers) + ' คน' : '']])
+    + `<div class="ms-section-title ms-vd-grp">รายการอาหาร</div>` + (lines ? `<dl class="ph-rs-list">${lines}</dl>` : `<p class="ms-vd-note">ไม่มีรายการอาหารของบิลนี้ในระบบ</p>`)
+    + (pays ? `<div class="ms-section-title ms-vd-grp">การชำระเงิน</div><dl class="ph-rs-list">${pays}</dl>` : '') + '</div>';
+}
+// outside the phone shell (the plain mobile summary) the drill level still follows back / forward
+window.addEventListener('popstate', e => {
+  const st = e.state || {};
+  if (st.phd !== 'voids' || (phOn() && _phKind() === 'centre') || _msView !== 'voids') return;
+  _msVoidFromState(st); msLoadVoids();
+});
 const _MS_DP = { Lunch: 'กลางวัน (11–14)', Dinner: 'เย็น (17–22)', Other: 'อื่นๆ' };
 const _MS_DOW_EN = { Mon: 'จ.', Tue: 'อ.', Wed: 'พ.', Thu: 'พฤ.', Fri: 'ศ.', Sat: 'ส.', Sun: 'อา.' };
 const _hh = h => String(h).padStart(2, '0') + ':00';

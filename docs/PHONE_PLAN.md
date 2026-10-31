@@ -293,3 +293,23 @@ phone and the desktop (2 card columns on a phone, 3 at > 700 px); nothing of ano
 5. **Guard rails kept.** 17-franchise.js calls only eager helpers (01-core / 09c-mobile) or 18-launcher (`test_role_code_split.py`), never
    the management phone's detail machinery or `_msRpt`. The owner's write paths (messages to head office, the push device endpoints) are
    unchanged. The day card keeps no day-YoY; VAT is never revenue.
+
+## 12. บิลยกเลิก / พิมพ์ซ้ำ drill-down (owner 2026-10-31, "รายสาขารายบิลเลย เพราะเป็นเรื่องสำคัญมาก")
+
+The ตรวจวันนี้ card names three branches; the drill-down answers every branch and every bill, on the card's own counts
+(`mgt_watch.void_counts` / `reprint_rows` / `void_bounds`, shared with `_void_window`) so the card and the list never disagree.
+Pinned by `backend/test_voids_drilldown.py`.
+
+1. **Endpoint.** `GET /api/reports/voids?window=day|week|half|month&month&date&branch&group` (`routers/voids.py`, default `ttl_cache`).
+   Without `branch` = level 1: every branch of the scope (company + franchise, a closed branch only when it has bills in the window),
+   rate / cancelled bills / baht / reprints, sorted by the rate, no-void branches last, chain totals; `anchor` = the last finished day.
+   With `branch` = level 2: header (+ the branch's normal rate over the 8 weeks before the window), reasons, every cancelled bill
+   (`pos_cancel_bill_detail`, newest first, ≤ 500) and every discounted bill printed more than once (`sales_transaction`).
+   `GET /api/reports/voids/bill?branch&receipt` = level 3 of a reprinted bill: lines (`sale_bill_item`, when the sync kept them) and
+   payments. A cancelled bill is not in `sales_transaction` / `sale_bill_item` (the POS drops it), so level 3 of a void shows its fields only.
+   Rule: `MODULE_RULES` `/api/reports/voids` = `report.management`; a pinned login is refused another branch in the handler.
+2. **Phone.** The card's voids row is `uiRow2` + `onGo: msOpenVoids()` (▾ still reads the sentence) → detail `voids` (`#msv-voids`,
+   `msLoadVoids`). A branch row pushes `{phd:'voids', vb}`; back returns to level 1 at its scroll; level 2 passes level 1's `anchor` as
+   `date` so it reads the same window. One branch in the picker opens level 2 straight away. A bill opens the row sheet (`msVoidBill`).
+   Chips = the card's `msVoidWin`. Help behind "?": the bands, the reprint definition, why a void has no lines.
+

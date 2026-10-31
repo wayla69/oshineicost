@@ -290,6 +290,9 @@ MODULE_RULES = [
     ("GET", "/api/gp",                       {"profit.pnl"}),
     ("GET", "/api/reports/pnl-bill",         {"profit.pnl"}),
     ("GET", "/api/reports/management",       {"report.management"}),   # + /months and .xlsx (prefix): the owner's summary, management only by default
+    # 2026-10-31 (owner) บิลยกเลิก / พิมพ์ซ้ำ drill-down (routers/voids.py, + /bill): every branch, every bill - the stricter of the
+    # management report's rule and ส่วนลด's (ops.discounts); a pinned login is also refused another branch in the handler
+    ("GET", "/api/reports/voids",            {"report.management"}),
     ("GET", "/api/reports/ops",              {"ops.report"}),
     ("GET", "/api/ingredients",              {"cost.analysis", "ops.report",
                                               "supply.ordering"}),  # order plan + branch letter + purchases

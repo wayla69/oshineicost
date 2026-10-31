@@ -2851,6 +2851,11 @@ except ImportError:
     from routers.nav import router as _nav_router
 app.include_router(_nav_router)     # GET /api/nav/badges (PR-D4): the red task counts of the department menu
 try:
+    from .routers.voids import router as _voids_router
+except ImportError:
+    from routers.voids import router as _voids_router
+app.include_router(_voids_router)     # GET /api/reports/voids (+ /bill): the บิลยกเลิก / พิมพ์ซ้ำ drill-down (owner 2026-10-31)
+try:
     from .routers.cloud_sync_api import router as _cloud_sync_router
     from .routers.cloud_backup_api import router as _cloud_backup_router
     from .routers.cloud_jobs_api import router as _cloud_jobs_router

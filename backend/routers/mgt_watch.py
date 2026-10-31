@@ -260,8 +260,25 @@ def _detail_cover(con):
     return (lo, n < _DETAIL_KEEP) if lo else None
 
 
-def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0) -> dict:
-    """One window's verdict: per-branch cancelled bills % of bills (numerator and denominator over s..e) + reprints."""
+def void_level(rate) -> str:
+    """The band of one cancelled-bills rate (% of bills): fix >= T_VOID_FIX > watch >= T_VOID_WATCH > ok."""
+    return "fix" if rate >= T_VOID_FIX else "watch" if rate >= T_VOID_WATCH else "ok"
+
+
+VOID_SPANS = {"day": 0, "week": 6, "half": 14}     # days before the anchor day: เมื่อวาน · 7 วัน · 15 วัน
+
+
+def void_bounds(window, cs, ce, day):
+    """(s, e) of one window: month = the report's cs..ce; day / week / half end on `day` (the last finished day, <= ce)."""
+    if window not in VOID_SPANS or day is None:
+        return cs, ce
+    return day - _dt.timedelta(days=VOID_SPANS[window]), day
+
+
+def void_counts(con, ids, s, e, cover, month_ok) -> tuple:
+    """(source, {branch_id: (cancelled bills, baht)}, {branch_id: bills}) of one window s..e - the ONE count the card
+    (_void_window) and the drill-down (routers/voids.py) both read. source: detail (pos_cancel_bill_detail by day) | month
+    (the whole month of pos_cancel_bill, only when month_ok) | none."""
     ph = ",".join("?" * len(ids))
     lo = cover[0] if cover else None
     # the oldest day the detail table holds may be cut part-way (it keeps the newest N bills): it covers s only from the next day,
@@ -279,7 +296,21 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
             [s.strftime("%Y-%m")] + list(ids))}
     else:
         source, canc = "none", {}
-    bills = _bills(con, ids, s, e)
+    return source, canc, _bills(con, ids, s, e)
+
+
+def reprint_rows(con, s, e, where, params) -> list:
+    """Discounted bills printed more than once over s..e, per branch (most first): [{branch, bills, baht (the discount)}]."""
+    return [{"branch": r[0], "bills": r[1], "baht": r[2] or 0} for r in con.execute(f"""
+        SELECT b.name, COUNT(*), ROUND(COALESCE(SUM(st.discount),0))
+        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
+        WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND st.discount>0 AND COALESCE(st.print_times,0)>1
+        GROUP BY b.name ORDER BY COUNT(*) DESC""", {**params, "s": s.isoformat(), "e": e.isoformat()})]
+
+
+def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0) -> dict:
+    """One window's verdict: per-branch cancelled bills % of bills (numerator and denominator over s..e) + reprints."""
+    source, canc, bills = void_counts(con, ids, s, e, cover, month_ok)
     rows, few = [], 0
     for bid, (cb, amt) in canc.items():
         tot = bills.get(bid, 0) + cb
@@ -289,13 +320,8 @@ def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0
             few += 1
             continue
         rate = cb / tot * 100
-        rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2),
-                     "level": "fix" if rate >= T_VOID_FIX else "watch" if rate >= T_VOID_WATCH else "ok"})
-    rep = [{"branch": r[0], "bills": r[1], "baht": r[2] or 0} for r in con.execute(f"""
-        SELECT b.name, COUNT(*), ROUND(COALESCE(SUM(st.discount),0))
-        FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
-        WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND st.discount>0 AND COALESCE(st.print_times,0)>1
-        GROUP BY b.name ORDER BY COUNT(*) DESC""", {**params, "s": s.isoformat(), "e": e.isoformat()})]
+        rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2), "level": void_level(rate)})
+    rep = reprint_rows(con, s, e, where, params)
     n_bills = sum(bills.values()) + sum(cb for cb, _ in canc.values())
     out = {"range": [s.isoformat(), e.isoformat()], "label": range_label(s, e, th), "source": source, "bills": n_bills}
     if min_bills and 0 < n_bills < min_bills and source != "none":
@@ -335,9 +361,10 @@ def voids(con, ids, cs, ce, where, params, th=True) -> dict:
         d = None
     if d:
         day = min(_dt.date.fromisoformat(d[:10]), ce)
-        windows["day"] = _void_window(con, ids, day, day, where, params, th, cover, month_ok=False, min_bills=T_VOID_MIN_BILLS)
-        windows["week"] = _void_window(con, ids, day - _dt.timedelta(days=6), day, where, params, th, cover, month_ok=False)
-        windows["half"] = _void_window(con, ids, day - _dt.timedelta(days=14), day, where, params, th, cover, month_ok=False)   # 15 วัน (owner 2026-10-31)
+        for k in ("day", "week", "half"):           # 15 วัน = half (owner 2026-10-31)
+            s, e = void_bounds(k, cs, ce, day)
+            windows[k] = _void_window(con, ids, s, e, where, params, th, cover, month_ok=False,
+                                      min_bills=T_VOID_MIN_BILLS if k == "day" else 0)
     common = {"bands": {"watch": T_VOID_WATCH, "fix": T_VOID_FIX}, "range": month["range"], "label": month["label"],
               "source": month["source"], "min_bills_day": T_VOID_MIN_BILLS, "windows": windows}
     if not month["available"]:
