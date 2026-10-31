@@ -3,6 +3,10 @@
   {
    "baht": -2847,
    "baht_label": "cost above the 58% target",
+   "go": {
+    "kind": "ms",
+    "view": "profit"
+   },
    "sev": "med",
    "text": "Food cost 157.9% — 99.9 pts above the 58% target."
   }

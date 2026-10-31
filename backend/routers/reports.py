@@ -703,6 +703,11 @@ def _pt_tier_trends(con, ph, bids, *, month_from, a_to):
     }
 
 
+# owner 2026-10-31 ("กดแล้วทำงานต่อได้เลย"): a to-do line carries where its work is done - every price-tier line is
+# about a tier, so it opens the price-tier page (js/01-core.js pricetier)
+_PT_GO = {"kind": "tab", "tab": "pricetier"}
+
+
 @router.get("/api/reports/price-tier")
 @ttl_cache
 def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[str] = Query(None),
@@ -934,12 +939,12 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
         real_now = [x for x in tiers if str(x["tier"]).isdigit() and x["a"]["food_pct"] is not None]
         worst_now = max(real_now, key=lambda x: x["a"]["food_pct"], default=None)
         if worst_now and worst_now["a"]["food_pct"] >= 40:
-            actions.append({"title": f"ทบทวนความคุ้มของ tier {worst_now['label']}",
+            actions.append({"go": _PT_GO, "title": f"ทบทวนความคุ้มของ tier {worst_now['label']}",
                             "detail": f"COGS {worst_now['a']['food_pct']}% ของรายได้ "
                                       f"(GP {fb(worst_now['a']['gp_head'])}/หัว) ในช่วง {a_from} ถึง {a_to} — "
                                       f"ยังไม่มีเดือนก่อนเทียบเพื่อดูเทรนด์ แต่ใช้ตัวเลขนี้ตั้งเป็นเป้าคุมต้นทุนของเมนูใหม่ได้เลย"})
         if not actions:
-            actions.append({"title": "เก็บตัวเลขเดือนนี้ไว้เป็นฐาน (baseline)",
+            actions.append({"go": _PT_GO, "title": "เก็บตัวเลขเดือนนี้ไว้เป็นฐาน (baseline)",
                             "detail": f"เมนูใหม่เริ่ม {_PT_NEW_MENU_FROM} — ต้นทุน/หัวและ BoM เฉลี่ย/จานต่อ tier "
                                       f"ด้านล่างคือฐานของเมนูใหม่ พอถึงเดือนถัดไปที่มีข้อมูลเทียบได้ จะวิเคราะห์แนวโน้มให้อัตโนมัติ"})
         return {"ready": True, "scope": scope, "scope_label": _MI_SCOPE_LABEL[scope],
@@ -971,7 +976,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             insights.append(f"Tier {lose['label']} คนทานลดแรงสุด {lose['d_pax_pct']}% "
                             f"(สัดส่วน {lose['b']['share']}% → {lose['a']['share']}%)")
             if abs(lose["d_pax_pct"]) >= 5:
-                actions.append({"title": f"กู้ยอดลูกค้า Tier {lose['label']}",
+                actions.append({"go": _PT_GO, "title": f"กู้ยอดลูกค้า Tier {lose['label']}",
                                 "detail": f"คนทานลดลง {abs(lose['d_pax_pct'])}% เทียบ{period_word} "
                                           f"(เหลือ {lose['a']['pax']:,} คน) — ตรวจสาขาหลักที่ขาย tier นี้, "
                                           f"จัดโปรวันธรรมดา/ช่วง off-peak เฉพาะ tier, และเช็คว่าราคา/คู่แข่งในพื้นที่เปลี่ยนหรือไม่"})
@@ -982,7 +987,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     if mix_effect is not None and abs(mix_effect) >= 1:
         if mix_effect < 0:
             insights.append(f"ลูกค้าย้ายไป tier ถูกลง — ผลจาก mix อย่างเดียวกดรายได้/หัวลง {fb(-mix_effect)}")
-            actions.append({"title": "ดัน upsell ไป tier ที่สูงขึ้น",
+            actions.append({"go": _PT_GO, "title": "ดัน upsell ไป tier ที่สูงขึ้น",
                             "detail": f"สัดส่วนลูกค้าเลื่อนไป tier ราคาต่ำ ทำให้รายได้/หัวหายไป {fb(-mix_effect)} "
                                       f"ทั้งที่ราคาแต่ละ tier ไม่เปลี่ยน — เทรนพนักงานเชียร์อัปเกรด (เมนูเด่นเฉพาะ tier บน, "
                                       f"ป้ายเทียบสิทธิ์ที่โต๊ะ), ตั้งเป้า % อัปเกรดรายสาขา"})
@@ -997,7 +1002,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
             insights.append(f"ต้นทุน/หัว tier {x['label']} เพิ่ม {fb(x['d_cogs_head'])} "
                             f"({fb(x['b']['cogs_head'])} → {fb(x['a']['cogs_head'])})"
                             + (f" — ตัวดัน: {dtxt}" if dtxt else ""))
-            actions.append({"title": f"คุมต้นทุน/หัว tier {x['label']}",
+            actions.append({"go": _PT_GO, "title": f"คุมต้นทุน/หัว tier {x['label']}",
                             "detail": f"ต้นทุนอาหาร/หัวเพิ่ม {fb(x['d_cogs_head'])} เทียบ{period_word}"
                                       + (f" ตัวดันหลัก: {dtxt} — คุมพอร์ชัน/ความถี่เติมของเมนูเหล่านี้, "
                                          f"เช็คของเสียครัว และทบทวนต้นทุนวัตถุดิบกับซัพพลายเออร์" if dtxt else
@@ -1006,7 +1011,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     if worst_fp and worst_fp["a"]["food_pct"] >= 40:
         insights.append(f"Tier {worst_fp['label']} COGS สูงสุด {worst_fp['a']['food_pct']}% ของรายได้ "
                         f"(GP/หัว {fb(worst_fp['a']['gp_head'])})")
-        actions.append({"title": f"ทบทวนความคุ้มของ tier {worst_fp['label']}",
+        actions.append({"go": _PT_GO, "title": f"ทบทวนความคุ้มของ tier {worst_fp['label']}",
                         "detail": f"COGS {worst_fp['a']['food_pct']}% ของรายได้ (GP เหลือ {fb(worst_fp['a']['gp_head'])}/หัว) — "
                                   f"พิจารณาปรับไลน์เมนูเฉพาะ tier (สลับเมนูต้นทุนสูงเป็นเมนูภาพลักษณ์ดีแต่ต้นทุนต่ำกว่า), "
                                   f"หรือทดลองขึ้นราคาแบบ A/B บางสาขา"})
@@ -1014,7 +1019,7 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     if hc_up:
         t0 = max(hc_up, key=lambda x: x["d_hc_head"])
         insights.append(f"การทานเมนูแพง (ต้นทุน ≥฿30) tier {t0['label']} เพิ่ม {fb(t0['d_hc_head'])}/หัว")
-        actions.append({"title": f"เบรกเมนูต้นทุนสูงใน tier {t0['label']}",
+        actions.append({"go": _PT_GO, "title": f"เบรกเมนูต้นทุนสูงใน tier {t0['label']}",
                         "detail": f"เมนูแพง/หัวเพิ่ม {fb(t0['d_hc_head'])} — ใช้เทคนิค menu placement "
                                   f"(วางเมนูข้าว/ของดองไว้ต้น ๆ), ลดขนาดพอร์ชันต่อจาน (เติมได้แต่ชะลอ), "
                                   f"และตรวจว่าสาขาไหนปล่อยเมนูแพงเกินเพื่อน"})
@@ -1022,11 +1027,11 @@ def price_tier_report(date_from: Optional[str] = Query(None), date_to: Optional[
     if rising:
         names = ", ".join(f"{r['label']} (+{r['d_qty_head_pct']}%)" for r in rising[:4])
         insights.append(f"เมนูต้นทุนหลักที่ถูกทานเพิ่มชัดเจน: {names}")
-        actions.append({"title": "จัดการเมนูที่การทานพุ่ง",
+        actions.append({"go": _PT_GO, "title": "จัดการเมนูที่การทานพุ่ง",
                         "detail": f"{names} — ถ้าเป็นเมนูดึงลูกค้า (เช็คจากแท็บวิเคราะห์วัตถุดิบว่า GP/หัวของบิลที่สั่งไม่แย่ลง) "
                                   f"ให้คงไว้แต่ล็อกต้นทุนซื้อ; ถ้าไม่ใช่ ให้ลดความถี่เติม/ขนาดเสิร์ฟ"})
     if not actions:
-        actions.append({"title": "โครงสร้าง tier แข็งแรง",
+        actions.append({"go": _PT_GO, "title": "โครงสร้าง tier แข็งแรง",
                         "detail": "ไม่พบสัญญาณผิดปกติเกินเกณฑ์ในช่วงที่เลือก — คงกลยุทธ์ปัจจุบัน "
                                   "และติดตามสัดส่วน tier กับต้นทุน/หัวรายเดือนต่อไป"})
 
@@ -3385,6 +3390,10 @@ def report_management(
 
 
     # ---- auto-generated action items (localised, severity-ordered) -------
+    # owner 2026-10-31 ("กดแล้วทำงานต่อได้เลย"): every line carries `go`, where its work is done, for the phone's ต้องทำ
+    # (js/09c-mobile.js msActionGo): {"kind": "branch", "branch"} = the branch sheet · {"kind": "ms", "view", "focus"?, "branch"?,
+    # "menu"?} = a detail screen of the phone summary (a key of _PH_DETAIL); focus / branch / menu = what it highlights there ·
+    # {"kind": "tab", "tab"} = a page of the app
     pword = (("วัน" if period == "daily" else "เดือน" if period == "monthly" else "ปี" if period == "yearly" else "สัปดาห์") if th
              else ("day" if period == "daily" else "month" if period == "monthly" else "year" if period == "yearly" else "week"))
     actions = []
@@ -3399,12 +3408,14 @@ def report_management(
     _tgt_l = ("ห่างเป้า" if th else "short of target")
     if _hp and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
         actions.append({"sev": "high", "baht": round((headline.get("revenue") or 0) - (_hp.get("revenue") or 0)), "baht_label": _vs,
+            "go": {"kind": "ms", "view": "branches"},
             "text": (f"ยอดขายรวมทั้งเครือลดลง {abs(headline['rev_wow_pct']):.0f}% {_vs} — ตรวจสอบสาเหตุ"
                      if th else
                      f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% {_vs} — investigate drivers.")})
     for r in branches:
         if r["wow_pct"] is not None and r["wow_pct"] <= -25 and r["revenue"] > 0:
             actions.append({"sev": "high", "baht": r.get("rev_delta"), "baht_label": _vs,
+                "go": {"kind": "branch", "branch": r["branch"]},
                 "text": (f"{r['branch']} ยอดขายลดลง {abs(r['wow_pct']):.0f}% {_vs} (฿{r['revenue']:,.0f})"
                          if th else
                          f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% {_vs} (฿{r['revenue']:,.0f}).")})
@@ -3413,22 +3424,25 @@ def report_management(
         _where_th = (f" · ส่วนใหญ่ {_top['branch']} กะ{_top['shift']} ({_top['share_pct']}%)" if _top.get("branch") else "")
         _where_en = (f" · mostly {_top['branch']}, {_top['shift']} shift ({_top['share_pct']}%)" if _top.get("branch") else "")
         actions.append({"sev": "high", "baht": -round(cash_heavy.get("baht") or 0), "baht_label": _disc_l,
+            "go": {"kind": "ms", "view": "discounts", "focus": "cash_heavy", "branch": _top.get("branch") or None},
             "text": (f"{cash_heavy['bills']} บิลส่วนลดที่จ่ายด้วยเงินสดเป็นหลัก (฿{cash_heavy['baht']:,.0f}){_where_th} — ตรวจสอบความเสี่ยงเงินขาด"
                      if th else
                      f"{cash_heavy['bills']} cash-heavy discounted bills (฿{cash_heavy['baht']:,.0f}){_where_en} — review for skim risk.")})
     if heavy["bills"]:
         actions.append({"sev": "med", "baht": -round(heavy.get("baht") or 0), "baht_label": _disc_l,
+            "go": {"kind": "ms", "view": "discounts", "focus": "heavy"},
             "text": (f"{heavy['bills']} บิลให้ส่วนลด ≥30% (฿{heavy['baht']:,.0f}) ใน{pword}นี้"
                      if th else
                      f"{heavy['bills']} bills discounted ≥30% (฿{heavy['baht']:,.0f}) this {pword}.")})
     if reprint["bills"]:
         actions.append({"sev": "med", "baht": -round(reprint.get("baht") or 0), "baht_label": _disc_l,
+            "go": {"kind": "ms", "view": "discounts", "focus": "reprint"},
             "text": (f"{reprint['bills']} บิลส่วนลดถูกพิมพ์ซ้ำมากกว่า 1 ครั้ง — อาจมีการพิมพ์ซ้ำผิดปกติ"
                      if th else
                      f"{reprint['bills']} discounted bills reprinted >1× — possible re-print abuse.")})
     fc_target = ctx["food_cost_target"]
     if food_cost_pct is not None and food_cost_pct > fc_target:
-        actions.append({"sev": "med",
+        actions.append({"sev": "med", "go": {"kind": "ms", "view": "profit"},
             "text": (f"ต้นทุนอาหาร {food_cost_pct:.1f}% — เป้า {fc_target:g}% · {food_cost_status_th(food_cost_pct, fc_target)}"
                      if th else
                      f"Food cost {food_cost_pct:.1f}% — {food_cost_pct - fc_target:.1f} pts above the {fc_target:g}% target.")})
@@ -3441,13 +3455,13 @@ def report_management(
             word = "ยอดรวมทั้งเดือน" if month_complete else "ประมาณการสิ้นเดือน"
             if _ts.get("no_target_branches"):
                 word += f" {_ts['branches']} สาขาที่มีเป้า"
-            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l,
+            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l, "go": {"kind": "ms", "view": "target"},
                 "text": f"{word} ฿{projected:,.0f} ต่ำกว่าเป้า ฿{target:,.0f} อยู่ {gap:.0f}%"})
         else:
             word = "Month total" if month_complete else "Month-end projection"
             if _ts.get("no_target_branches"):
                 word += f" of the {_ts['branches']} branches with a target"
-            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l,
+            actions.append({"sev": "med", "baht": round(projected - target), "baht_label": _tgt_l, "go": {"kind": "ms", "view": "target"},
                 "text": f"{word} ฿{projected:,.0f} is {gap:.0f}% below target ฿{target:,.0f}."})
     _behind = [r for r in branches if r.get("vs_target_pct") is not None and r["vs_target_pct"] < 90]
     if _behind:
@@ -3457,7 +3471,7 @@ def report_management(
         _proj = any(r.get("target_basis") == "projected" for r in _behind)
         _gap = sum(r["target_gap"] if r.get("target_gap") is not None else
                    round((r.get("projected") or r["revenue"] or 0) - r["target"]) for r in _behind if r.get("target"))
-        actions.append({"sev": "med", "baht": _gap,
+        actions.append({"sev": "med", "baht": _gap, "go": {"kind": "ms", "view": "branches", "focus": "target"},
                         "baht_label": (f"ห่างเป้ารวม {len(_behind)} สาขา" if th else f"short of target, {len(_behind)} branches"),
             "text": (f"{len(_behind)} สาขาต่ำกว่า 90% ของเป้าเดือนนี้{' (ประมาณการสิ้นเดือน)' if _proj else ''}: {_names}{_more}"
                      if th else
@@ -3468,9 +3482,10 @@ def report_management(
         _cov = (menu_out or {}).get("covers") or 0
         actions.append({"sev": "low", "baht": -round((m0.get("delta") or 0) * _cov) if _cov else None,
                         "baht_label": ("ต้นทุนที่เพิ่มของเมนูนี้" if th else "cost added by this dish"),
+                        "go": {"kind": "ms", "view": "menu", "menu": m0.get("menu")},
                         "text": _cost_riser_action(m0, pword, th)})
     if gp.get("gp_pct_delta_pp") is not None and gp["gp_pct_delta_pp"] <= -3:
-        actions.append({"sev": "med", "baht": round(gp["gp_pct_delta_pp"] / 100.0 * (gp.get("revenue") or 0)),
+        actions.append({"sev": "med", "baht": round(gp["gp_pct_delta_pp"] / 100.0 * (gp.get("revenue") or 0)), "go": {"kind": "ms", "view": "profit"},
                         "baht_label": ("ผลต่อกำไรจากอัตรากำไรที่ลด" if th else "gross profit lost to the lower margin"),
             "text": (f"อัตรากำไรขั้นต้นลดลง {abs(gp['gp_pct_delta_pp']):.1f}pp เทียบ{pword}ก่อน — ตอนนี้ {gp['gp_pct']:.0f}%"
                      if th else
@@ -3487,7 +3502,7 @@ def report_management(
     actions.sort(key=lambda a: (sev_rank.get(a["sev"], 9), -abs(a.get("baht") or 0)))
     actions = actions[:7]
     if not actions:
-        actions = [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]
+        actions = [{"sev": "low", "go": {"kind": "ms", "view": "month"}, "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if th else "No critical issues flagged for this period.")}]
 
     # §12 — what the guests said over the same window (customer_feedback), the
     # window before, what waits now, and whether the fix loop held. Never lets
@@ -3609,7 +3624,7 @@ def strip_management_cost(d: dict) -> dict:
                       for r in (tier.get("rows") or []) if isinstance(r, dict)]
         out["tier"] = t2
     out["actions"] = [a for a in (out.get("actions") or []) if not (isinstance(a, dict) and _MGT_COST_ACTION.search(a.get("text") or ""))] or \
-        [{"sev": "low", "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if out.get("lang") == "th" else "No critical issues flagged for this period.")}]
+        [{"sev": "low", "go": {"kind": "ms", "view": "month"}, "text": ("ไม่พบประเด็นเร่งด่วนในช่วงนี้" if out.get("lang") == "th" else "No critical issues flagged for this period.")}]
     out.pop("stock_variance", None)
     return out
 
