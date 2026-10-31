@@ -115,6 +115,15 @@
  "lang": "en",
  "latest_day": "2026-06-03",
  "leak": {
+  "by_franchise_branch": [
+   {
+    "bills": 3,
+    "branch": "BranchB",
+    "disc": 60.0,
+    "pct": 2.1,
+    "sales": 2850.0
+   }
+  ],
   "by_master_branch": [],
   "cash_heavy": {
    "baht": 0,
@@ -391,6 +400,69 @@
   "items": [
    {
     "available": false,
+    "bands": {
+     "fix": 1.0,
+     "watch": 0.5
+    },
+    "key": "voids",
+    "label": "1–31 May",
+    "level": "none",
+    "line": "no cancel data this month",
+    "min_bills_day": 20,
+    "range": [
+     "2026-05-01",
+     "2026-05-31"
+    ],
+    "rows": [],
+    "source": "month",
+    "title": "Voids / reprints",
+    "windows": {
+     "day": {
+      "available": false,
+      "bills": 0,
+      "label": "31 May",
+      "level": "none",
+      "line": "no daily cancel data for this window",
+      "range": [
+       "2026-05-31",
+       "2026-05-31"
+      ],
+      "reprints": [],
+      "rows": [],
+      "source": "none"
+     },
+     "month": {
+      "available": false,
+      "bills": 3,
+      "label": "1–31 May",
+      "level": "none",
+      "line": "no cancel data in this window",
+      "range": [
+       "2026-05-01",
+       "2026-05-31"
+      ],
+      "reprints": [],
+      "rows": [],
+      "source": "month"
+     },
+     "week": {
+      "available": false,
+      "bills": 0,
+      "label": "25–31 May",
+      "level": "none",
+      "line": "no daily cancel data for this window",
+      "range": [
+       "2026-05-25",
+       "2026-05-31"
+      ],
+      "reprints": [],
+      "rows": [],
+      "source": "none"
+     }
+    }
+   },
+   {
+    "available": false,
     "key": "forced",
     "level": "none",
     "line": "no forced-order list",
@@ -428,14 +500,6 @@
     "line": "no comparison period",
     "rows": [],
     "title": "Buffet tier mix"
-   },
-   {
-    "available": false,
-    "key": "voids",
-    "level": "none",
-    "line": "no cancel data this month",
-    "rows": [],
-    "title": "Voids / reprints"
    },
    {
     "available": true,

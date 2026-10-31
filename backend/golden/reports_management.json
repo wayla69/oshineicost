@@ -147,6 +147,15 @@
  "lang": "en",
  "latest_day": "2026-06-03",
  "leak": {
+  "by_franchise_branch": [
+   {
+    "bills": 1,
+    "branch": "BranchB",
+    "disc": 20.0,
+    "pct": 2.1,
+    "sales": 950.0
+   }
+  ],
   "by_master_branch": [
    {
     "bills": 1,

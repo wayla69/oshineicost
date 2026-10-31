@@ -136,3 +136,78 @@ def test_build_answers_every_item_and_sorts_by_level(tmp_path):
     levels = [W.LEVELS[it["level"]] for it in out["items"]]
     assert levels == sorted(levels) and out["fix"] >= 1                 # the fixture's cancelled bills put voids first
     assert all(it["line"] for it in out["items"])
+
+
+# ── 2026-10-31 (owner): one window for the cancelled bills and the bills; three windows on the card ─────────────────────────────────
+WHERE = "st.source='Easy' AND b.name!='ALL'"
+
+
+def _detail(con, rows):
+    con.execute("CREATE TABLE IF NOT EXISTS pos_cancel_bill_detail(branch_id INT, period_month TEXT, sale_date TEXT, receipt_no TEXT, "
+                "reason_id INT, amount REAL, cancel_user TEXT, discount REAL)")
+    con.executemany("INSERT INTO pos_cancel_bill_detail VALUES(?,?,?,?,2,?,'cashier',0)",
+                    [(bid, d[:7], d, f"C-{i}", amt) for i, (bid, d, amt) in enumerate(rows)])
+    con.commit()
+
+
+def test_voids_count_the_cancelled_bills_over_the_bills_window_only(tmp_path):
+    con, ids = _db(tmp_path)
+    # the detail table holds history from May (covers 1 June); branch 1: two voids on 2 June inside 1-3 June, one on 4 June = the day
+    # after ce (the old monthly count took the whole month, 5 bills in pos_cancel_bill, and overstated the rate)
+    _detail(con, [(1, "2026-05-20T12:00:00", 100), (1, "2026-06-02T12:00:00", 300), (1, "2026-06-02T19:00:00", 200),
+                  (1, "2026-06-04T12:00:00", 900)])
+    out = W.voids(con, ids, CS, CE, WHERE, {})
+    assert out["source"] == "detail" and out["range"] == [CS.isoformat(), CE.isoformat()] and out["label"] == "1–3 มิ.ย."
+    r = out["rows"][0]
+    assert r["branch"] == ids[1] and r["bills"] == 2 and r["amount"] == 500          # 4 June is not counted
+    assert r["rate_pct"] == round(2 / (3 + 2) * 100, 2)                               # 3 real bills on 1-3 June + the 2 voided
+    # a window that starts on or before the detail table's first day falls back to the monthly table and says so
+    old = W.voids(con, ids, dt.date(2026, 5, 1), dt.date(2026, 5, 3), WHERE, {})
+    assert old["source"] == "month"
+
+
+def test_voids_answer_three_windows_and_the_month_is_the_top_level(tmp_path):
+    con, ids = _db(tmp_path)
+    _detail(con, [(1, "2026-05-20T12:00:00", 100), (1, "2026-06-02T12:00:00", 300), (1, "2026-06-03T12:00:00", 200)])
+    out = W.voids(con, ids, CS, CE, WHERE, {})
+    win = out["windows"]
+    assert set(win) == {"day", "week", "month"}
+    m = win["month"]
+    for k in ("level", "rows", "reprints", "line", "range", "label", "source"):
+        assert out[k] == m[k], k
+    assert win["day"]["range"] == ["2026-06-03", "2026-06-03"]                        # the last finished day with bills (the fixture ends 3 June)
+    assert win["week"]["range"] == ["2026-05-28", "2026-06-03"] and win["week"]["label"] == "28 พ.ค. – 3 มิ.ย."
+    for k in ("rows", "reprints", "line", "level", "range", "label", "source"):
+        assert k in win["day"] and k in win["week"], k
+
+
+def test_the_day_window_gives_no_verdict_on_a_handful_of_bills(tmp_path):
+    con, ids = _db(tmp_path)
+    _detail(con, [(1, "2026-05-20T12:00:00", 100), (1, "2026-06-03T12:00:00", 300)])
+    day = W.voids(con, ids, CS, CE, WHERE, {})["windows"]["day"]
+    assert day["level"] == "none" and day["rows"] == [] and day.get("few") is True and day["line"].startswith("บิลน้อย")
+    # 30 more bills on 3 June at branch 1: the same one void is now a rate with a verdict (1 / 32 = 3.1 % -> fix)
+    for i in range(30):
+        con.execute("INSERT INTO sales_transaction(branch_id,receipt_no,sold_at,customer_count,food_subtotal,drink_subtotal,other_subtotal,"
+                    "discount,service_charge,total_inc_vat,source) VALUES(1,?,'2026-06-03T13:00:00',2,900,100,0,0,0,1070,'Easy')", (f"D-{i}",))
+    con.commit()
+    day = W.voids(con, ids, CS, CE, WHERE, {})["windows"]["day"]
+    assert day["level"] == "fix" and day["rows"][0]["bills"] == 1 and day["rows"][0]["rate_pct"] == round(1 / 32 * 100, 2)
+
+
+def test_the_range_label_says_the_dates():
+    assert W.range_label(dt.date(2026, 10, 1), dt.date(2026, 10, 30)) == "1–30 ต.ค."
+    assert W.range_label(dt.date(2026, 10, 30), dt.date(2026, 10, 30)) == "30 ต.ค."
+    assert W.range_label(dt.date(2026, 9, 28), dt.date(2026, 10, 4)) == "28 ก.ย. – 4 ต.ค."
+    assert W.range_label(dt.date(2026, 10, 1), dt.date(2026, 10, 30), th=False) == "1–30 Oct"
+
+
+def test_the_phone_card_switches_the_voids_window_with_chips():
+    from pathlib import Path
+    from test_bom_center_batch2 import _fn
+    mob = (Path(__file__).resolve().parent.parent / "js" / "09c-mobile.js").read_text(encoding="utf-8")
+    assert "[['day', 'เมื่อวาน'], ['week', '7 วัน'], ['month', 'เดือนนี้']]" in mob
+    assert "sessionStorage.setItem('msVoidWin', k)" in _fn(mob, "msSetVoidWin") and "msRenderWatch(_msRpt)" in _fn(mob, "msSetVoidWin")
+    assert "sessionStorage.getItem('msVoidWin')" in _fn(mob, "_msVoidKey")
+    rw = _fn(mob, "msRenderWatch")
+    assert "W.items.map(_msVoidItem)" in rw and "_msVoidChips(it)" in rw and "it.label" in rw and "ยกเลิกนับทั้งเดือน" in rw

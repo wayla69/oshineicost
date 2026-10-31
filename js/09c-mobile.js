@@ -2716,24 +2716,51 @@ function msActionsHtml(j) {
 // PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: payload.watch.items, each a finding with its level (fix / watch / ok / none), the
 // sentence that names the branches and the action, and the rows behind it. Sorted by level on the server. Unavailable items fold
 // into one grey row (their reasons behind a tap), so a month with no issue slips still reads as a short card. Phone B: the two-line rows.
+// 2026-10-31 (owner) · บิลยกเลิก / พิมพ์ซ้ำ: the item carries three windows (windows.day / week / month, each the item's own shape, the
+// numerator and the bills over one range); chips เมื่อวาน · 7 วัน · เดือนนี้ switch the row client-side, the pick is kept for the session
+const _MS_VW = [['day', 'เมื่อวาน'], ['week', '7 วัน'], ['month', 'เดือนนี้']];
+function _msVoidKey(it) {
+  let k = 'month';
+  try { k = sessionStorage.getItem('msVoidWin') || 'month'; } catch (e) { /* private mode: the default */ }
+  return ((it || {}).windows || {})[k] ? k : 'month';
+}
+function msSetVoidWin(k) {
+  try { sessionStorage.setItem('msVoidWin', k); } catch (e) { /* private mode: this render only */ }
+  if (_msRpt) msRenderWatch(_msRpt);
+}
+function _msVoidItem(it) {
+  if (!it || it.key !== 'voids' || !it.windows) return it;
+  const k = _msVoidKey(it), w = it.windows[k] || it;
+  return { ...it, ...w, key: 'voids', title: it.title, available: !!(it.available || w.available), _vk: k };
+}
+function _msVoidChips(it) {
+  const W = it.windows || {};
+  if (_MS_VW.filter(([k]) => W[k]).length < 2) return '';
+  return `<div class="ms-vw-chips" role="group" aria-label="ช่วงเวลาของบิลยกเลิก">` + _MS_VW.filter(([k]) => W[k]).map(([k, t]) =>
+    `<button type="button" class="ms-vw-chip" aria-pressed="${k === it._vk}" onclick="msSetVoidWin('${k}')">${t}</button>`).join('') + '</div>';
+}
 function msRenderWatch(j) {
   const wrap = document.getElementById('msWatchWrap'), el = document.getElementById('msWatch'), cnt = document.getElementById('msWatchCount');
   if (!wrap || !el) return;
   const W = j.watch;
   if (!W || !(W.items || []).length) { wrap.style.display = 'none'; return; }
-  const live = W.items.filter(it => it.available), dead = W.items.filter(it => !it.available);
+  const items = W.items.map(_msVoidItem), ord = { fix: 0, watch: 1, ok: 2, none: 3 };
+  const live = items.filter(it => it.available).sort((a, b) => (ord[a.level] ?? 9) - (ord[b.level] ?? 9)), dead = items.filter(it => !it.available);
   const tone = l => l === 'fix' ? 'bad' : l === 'watch' ? 'watch' : l === 'ok' ? 'good' : '';
   const row = it => {
     const line = String(it.line || ''), act = it.level === 'fix' || it.level === 'watch';
-    const fact = line.split(' — ')[0].split(': ')[0];                       // the finding without the branch list and the advice
+    let fact = line.split(' — ')[0].split(': ')[0];                         // the finding without the branch list and the advice
+    if (it.key === 'voids' && it.source === 'month') fact += ' · ยกเลิกนับทั้งเดือน';
     const baht = act ? (it.rows || []).reduce((s, r) => s + (+r.baht > 0 ? +r.baht : 0), 0) : 0;
-    return msRow2({ cls: 'ms-watch-r', tone: tone(it.level), title: esc(it.title), val: baht ? '฿' + fmt(baht) : '', valTone: baht ? 'bad' : '',
+    const title = esc(it.title) + (it.key === 'voids' && it.label ? ` · ${esc(it.label)}` : '');
+    return (it.key === 'voids' ? _msVoidChips(it) : '') + msRow2({ cls: 'ms-watch-r', tone: tone(it.level), title, val: baht ? '฿' + fmt(baht) : '', valTone: baht ? 'bad' : '',
       chips: act ? _msBrChips((it.rows || []).map(r => r.branch).filter(Boolean)) : '', fact: esc(fact), more: fact !== line ? esc(line) : '' });
   };
   const deadHtml = !dead.length ? '' : msRow2({ cls: 'ms-watch-r ms-watch-none', title: `ยังไม่มีข้อมูล ${fmtN(dead.length)} รายการ`, fact: esc(dead.map(it => it.title).join(' · ')),
     more: dead.map(it => `<b>${esc(it.title)}</b>: ${esc(it.line || '')}`).join('<br>') });
   el.innerHTML = live.map(row).join('') + deadHtml;
-  if (cnt) cnt.textContent = (W.fix || W.watch) ? `· ต้องดู ${fmtN((W.fix || 0) + (W.watch || 0))}` : '';
+  const nAct = items.filter(it => it.level === 'fix' || it.level === 'watch').length;   // follows the chosen voids window
+  if (cnt) cnt.textContent = nAct ? `· ต้องดู ${fmtN(nAct)}` : '';
   wrap.style.display = '';
 }
 const _MS_DP = { Lunch: 'กลางวัน (11–14)', Dinner: 'เย็น (17–22)', Other: 'อื่นๆ' };
@@ -3235,11 +3262,19 @@ function msRenderDiscounts() {
   document.getElementById('msDiscKpis').innerHTML =
     `<div class="ms-kpi" style="grid-column:1/-1"><p class="lbl">ส่วนลดรวม${j.partial ? ' (สะสม)' : ''}</p><p class="val" style="color:${textInk(c)}">${fmt(H.discount || 0)}</p><p class="sub"><b style="color:${textInk(c)}">${H.discount_pct != null ? H.discount_pct.toFixed(1) + '%' : '—'}</b> <span style="${_msMuted};font-size:13px">ของยอดก่อนลด${pol != null ? ` · เพดาน ${pol}%` : ''}${over ? ` · เกินเพดาน ${fmt(over)}` : ''}</span></p></div>`;
   document.getElementById('msDiscCards').innerHTML = msLeakCards(L) || _msNone('ไม่มีข้อมูลส่วนลดช่วงนี้');
-  const mb = L.by_master_branch || [], maxP = Math.max(1, ...mb.map(x => x.pct || 0));
-  document.getElementById('msDiscBranches').innerHTML = mb.length ? mb.map(x => {
+  document.getElementById('msDiscBranches').innerHTML = msDiscBranchRows(L.by_master_branch, pol, 'เฉพาะสาขาบริษัท') || _msNone('ไม่มีข้อมูลรายสาขา');
+  // 2026-10-31 (owner): the franchise branches in the same layout under the company list; hidden when there is none in scope
+  const fr = msDiscBranchRows(L.by_franchise_branch, pol, 'เฉพาะสาขาแฟรนไชส์'), frWrap = document.getElementById('msDiscFrWrap');
+  if (frWrap) { document.getElementById('msDiscFranchise').innerHTML = fr; frWrap.style.display = fr ? '' : 'none'; }
+}
+// one discount-by-branch list: bar + % of the branch's sales + baht, tap = the branch sheet; '' when there is no row
+function msDiscBranchRows(rows, pol, scope) {
+  const mb = rows || [], maxP = Math.max(1, ...mb.map(x => x.pct || 0));
+  if (!mb.length) return '';
+  return mb.map(x => {
     const bad = pol != null && x.pct > pol;
     return `<div class="ms-row" data-br="${esc(x.branch)}" onclick="msOpenBranch(this.dataset.br)" style="cursor:pointer;padding:6px 0"><span style="width:88px;font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(x.branch)}</span>${msBar(Math.round(100 * (x.pct || 0) / maxP), bad ? '#ef4444' : '#f59e0b')}<span style="width:40px;text-align:right;font-size:13px;font-weight:600;font-variant-numeric:tabular-nums;color:${textInk(bad ? '#ef4444' : '#475569')}">${x.pct != null ? x.pct.toFixed(1) + '%' : '—'}</span><span style="width:58px;text-align:right;font-size:13px;${_msMuted};font-variant-numeric:tabular-nums">${fmt(x.disc)}</span></div>`;
-  }).join('') + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">เฉพาะสาขาบริษัท · % = ส่วนลด ÷ ยอดขายของสาขา · แตะเพื่อดูสาขา</p>` : _msNone('ไม่มีข้อมูลรายสาขา');
+  }).join('') + `<p style="font-size:13px;${_msMuted};margin:6px 0 4px">${scope} · % = ส่วนลด ÷ ยอดขายของสาขา · แตะเพื่อดูสาขา</p>`;
 }
 
 // ── BRANCH SHEET: tap a branch anywhere → everything about it for the month ──

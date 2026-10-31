@@ -229,18 +229,64 @@ def new_menus(con, ids, ce, th=True) -> dict:
 
 
 # ── 12 · cancelled bills and reprinted bills per branch ─────────────────────────────────────────────────────────────
-def voids(con, ids, cs, ce, where, params, th=True) -> dict:
-    t = "บิลยกเลิก / พิมพ์ซ้ำ" if th else "Voids / reprints"
-    mon = cs.strftime("%Y-%m")
+# 2026-10-31 (owner): the cancelled bills and the bill denominator share ONE window. The count comes from
+# pos_cancel_bill_detail (one row per voided bill, the sync keeps the 20,000 most recent ~ 11 months) by date(sale_date);
+# only a window older than that table falls back to the monthly pos_cancel_bill (whole month, "source": "month").
+# Three windows are answered at once - เมื่อวาน (the last finished day, rules.latest_settled_day, the hero's anchor),
+# 7 วัน (the 7 finished days ending there) and เดือนนี้ (cs..ce) - the phone's chips switch between them client-side; the
+# top-level fields stay the month window. The bands are per-window rates; the day window needs T_VOID_MIN_BILLS bills.
+T_VOID_MIN_BILLS = 20            # small-sample guard of the เมื่อวาน window
+_DETAIL_KEEP = 20000             # sync_mssql keeps this many voided bills in pos_cancel_bill_detail
+_MON_TH = ["ม.ค.", "ก.พ.", "มี.ค.", "เม.ย.", "พ.ค.", "มิ.ย.", "ก.ค.", "ส.ค.", "ก.ย.", "ต.ค.", "พ.ย.", "ธ.ค."]
+_MON_EN = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+
+
+def range_label(s, e, th=True) -> str:
+    """'1–30 ต.ค.' / '31 ต.ค.' / '28 ก.ย. – 4 ต.ค.' (no year: the card's month is on the page)."""
+    M = _MON_TH if th else _MON_EN
+    if s == e:
+        return f"{e.day} {M[e.month - 1]}"
+    if (s.year, s.month) == (e.year, e.month):
+        return f"{s.day}–{e.day} {M[e.month - 1]}"
+    return f"{s.day} {M[s.month - 1]} – {e.day} {M[e.month - 1]}"
+
+
+def _detail_cover(con):
+    """(first day held, whole history?) of pos_cancel_bill_detail, or None when the table is missing or empty."""
+    try:
+        lo, n = con.execute("SELECT MIN(date(sale_date)), COUNT(*) FROM pos_cancel_bill_detail").fetchone()
+    except Exception:
+        return None
+    return (lo, n < _DETAIL_KEEP) if lo else None
+
+
+def _void_window(con, ids, s, e, where, params, th, cover, month_ok, min_bills=0) -> dict:
+    """One window's verdict: per-branch cancelled bills % of bills (numerator and denominator over s..e) + reprints."""
     ph = ",".join("?" * len(ids))
-    canc = {r[0]: (r[1] or 0, r[2] or 0) for r in con.execute(
-        f"SELECT branch_id, SUM(bills), SUM(amount) FROM pos_cancel_bill WHERE period_month=? AND branch_id IN ({ph}) GROUP BY branch_id",
-        [mon] + list(ids))}
-    bills = _bills(con, ids, cs, ce)
-    rows = []
+    lo = cover[0] if cover else None
+    # the oldest day the detail table holds may be cut part-way (it keeps the newest N bills): it covers s only from the next day,
+    # unless the table holds the whole history
+    covered = bool(cover) and (lo < s.isoformat() or (cover[1] and lo <= s.isoformat()))
+    if covered:
+        source = "detail"
+        canc = {r[0]: (r[1] or 0, r[2] or 0) for r in con.execute(
+            f"SELECT branch_id, COUNT(*), SUM(amount) FROM pos_cancel_bill_detail WHERE branch_id IN ({ph}) "
+            f"AND date(sale_date) BETWEEN ? AND ? GROUP BY branch_id", list(ids) + [s.isoformat(), e.isoformat()])}
+    elif month_ok:
+        source = "month"
+        canc = {r[0]: (r[1] or 0, r[2] or 0) for r in con.execute(
+            f"SELECT branch_id, SUM(bills), SUM(amount) FROM pos_cancel_bill WHERE period_month=? AND branch_id IN ({ph}) GROUP BY branch_id",
+            [s.strftime("%Y-%m")] + list(ids))}
+    else:
+        source, canc = "none", {}
+    bills = _bills(con, ids, s, e)
+    rows, few = [], 0
     for bid, (cb, amt) in canc.items():
         tot = bills.get(bid, 0) + cb
         if tot <= 0 or cb <= 0:
+            continue
+        if tot < min_bills:                         # a handful of bills says nothing - no verdict
+            few += 1
             continue
         rate = cb / tot * 100
         rows.append({"branch": ids[bid], "bills": cb, "amount": round(amt), "rate_pct": round(rate, 2),
@@ -249,9 +295,19 @@ def voids(con, ids, cs, ce, where, params, th=True) -> dict:
         SELECT b.name, COUNT(*), ROUND(COALESCE(SUM(st.discount),0))
         FROM sales_transaction st JOIN branches b ON b.branch_id=st.branch_id
         WHERE {where} AND date(st.sold_at) BETWEEN :s AND :e AND st.discount>0 AND COALESCE(st.print_times,0)>1
-        GROUP BY b.name ORDER BY COUNT(*) DESC""", {**params, "s": cs.isoformat(), "e": ce.isoformat()})]
+        GROUP BY b.name ORDER BY COUNT(*) DESC""", {**params, "s": s.isoformat(), "e": e.isoformat()})]
+    n_bills = sum(bills.values()) + sum(cb for cb, _ in canc.values())
+    out = {"range": [s.isoformat(), e.isoformat()], "label": range_label(s, e, th), "source": source, "bills": n_bills}
+    if min_bills and 0 < n_bills < min_bills and source != "none":
+        return {**out, "available": True, "level": "none", "rows": [], "reprints": rep[:3], "few": True,
+                "line": (f"บิลน้อย ({n_bills:,} บิล) — ยังสรุปไม่ได้" if th else f"too few bills ({n_bills:,}) - no verdict")}
     if not rows and not rep:
-        return _unavailable("voids", t, "ยังไม่มีข้อมูลบิลยกเลิกของเดือนนี้" if th else "no cancel data this month")
+        if n_bills and source == "detail":          # the detail table covers the window: none voided is a real zero
+            return {**out, "available": True, "level": "ok", "rows": [], "reprints": [],
+                    "line": "ไม่มีบิลยกเลิกและไม่มีบิลพิมพ์ซ้ำ" if th else "no voids and no reprints"}
+        why = ("ยังไม่มีข้อมูลบิลยกเลิกรายวันของช่วงนี้" if th else "no daily cancel data for this window") if source == "none" \
+            else ("ยังไม่มีข้อมูลบิลยกเลิกของช่วงนี้" if th else "no cancel data in this window")
+        return {**out, "available": False, "level": "none", "rows": [], "reprints": [], "line": why}
     bad = sorted((r for r in rows if r["level"] != "ok"), key=lambda r: (LEVELS[r["level"]], -r["rate_pct"]))
     level = bad[0]["level"] if bad else ("watch" if rep else "ok")
     parts = []
@@ -262,8 +318,31 @@ def voids(con, ids, cs, ce, where, params, th=True) -> dict:
     line = " | ".join(parts) if parts else ("ทุกสาขาต่ำกว่า 0.5% และไม่มีบิลพิมพ์ซ้ำ" if th else "every branch under 0.5% and no reprints")
     if bad or rep:
         line += (" — ตรวจที่สาขา" if th else " - audit at the branch")
-    return {"key": "voids", "title": t, "available": True, "level": level, "rows": bad[:3], "reprints": rep[:3],
-            "bands": {"watch": T_VOID_WATCH, "fix": T_VOID_FIX}, "line": line}
+    if few:
+        line += (f" (บิลน้อย {few} สาขา ยังไม่สรุป)" if th else f" ({few} branches with too few bills, no verdict)")
+    return {**out, "available": True, "level": level, "rows": bad[:3], "reprints": rep[:3], "line": line}
+
+
+def voids(con, ids, cs, ce, where, params, th=True) -> dict:
+    t = "บิลยกเลิก / พิมพ์ซ้ำ" if th else "Voids / reprints"
+    cover = _detail_cover(con)
+    month = _void_window(con, ids, cs, ce, where, params, th, cover, month_ok=True)
+    windows = {"month": month}
+    try:
+        from rules import latest_settled_day
+        d = latest_settled_day(con, where=where.replace("st.", "t."), params=params)["day"]
+    except Exception:                               # pragma: no cover - the month still answers
+        d = None
+    if d:
+        day = min(_dt.date.fromisoformat(d[:10]), ce)
+        windows["day"] = _void_window(con, ids, day, day, where, params, th, cover, month_ok=False, min_bills=T_VOID_MIN_BILLS)
+        windows["week"] = _void_window(con, ids, day - _dt.timedelta(days=6), day, where, params, th, cover, month_ok=False)
+    common = {"bands": {"watch": T_VOID_WATCH, "fix": T_VOID_FIX}, "range": month["range"], "label": month["label"],
+              "source": month["source"], "min_bills_day": T_VOID_MIN_BILLS, "windows": windows}
+    if not month["available"]:
+        return {**_unavailable("voids", t, "ยังไม่มีข้อมูลบิลยกเลิกของเดือนนี้" if th else "no cancel data this month"), **common}
+    return {"key": "voids", "title": t, "available": True, "level": month["level"], "rows": month["rows"], "reprints": month["reprints"],
+            "line": month["line"], "bills": month["bills"], **common}
 
 
 # ── 13 · bank-vs-POS sign-off of the month to close ─────────────────────────────────────────────────────────────────
