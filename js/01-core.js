@@ -3241,8 +3241,21 @@ function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+'
 // chip of at most 6 characters (uiChipShort, never wraps) + one short fact (one line, ellipsis) + an optional thin bar; everything else sits
 // behind a tap: o.more = the row expands, o.branch = the branch sheet (msOpenBranch), o.go = a call. The bar on the left = the row's meaning
 // (red money lost / overdue, amber ต้องดู, green ok, grey no data). o = { title, val, valTone, tone, chips, chip: { t, tone }, fact, bar: { pct, col },
-// more, branch, go, cls, attrs }. title / val / fact / more are HTML (the caller escapes); chip.t is text.
+// more, branch, go, onGo, cls, attrs }. title / val / fact / more are HTML (the caller escapes); chip.t is text.
+// o.onGo (owner 2026-10-31, "กดแล้วทำงานต่อได้เลย") = a call (JS, `this` = the row) run by a tap on the row - the row takes you to the work;
+// with o.more as well, the ▾ is its own button and only it expands the sentence. A chip, link or button inside the row keeps its own tap.
 function uiRow2(o) {
+  if (o.onGo) {
+    const run = `if(!uiRow2Skip(event)){${o.onGo}}`;
+    const chev = o.more ? `<button type="button" class="ms-r2-m ms-r2-mb" aria-label="อ่านทั้งหมด" aria-expanded="false" onclick="uiRow2Chev(this,event)">▾</button>`
+      : '<span class="ms-r2-m" aria-hidden="true">›</span>';
+    const chip = o.chip && o.chip.t ? uiChip(o.chip.t, o.chip.tone) : '';
+    const bar = o.bar && o.bar.pct != null ? `<span class="ui-r2-bar" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, Math.round(o.bar.pct)))}%${o.bar.col ? ';background:' + esc(o.bar.col) : ''}"></i></span>` : '';
+    return `<div class="ms-r2 ui-r2 ui-r2-go${o.tone ? ' is-' + o.tone : ''}${o.cls ? ' ' + o.cls : ''}" role="button" tabindex="0" onclick="${esc(run)}" onkeydown="if((event.key==='Enter'||event.key===' ')&&!uiRow2Skip(event)){event.preventDefault();${esc(o.onGo)}}"${o.attrs || ''}>`
+      + `<div class="ms-r2-a"><span class="ms-r2-t">${o.title}</span>` + (o.val ? `<span class="ms-r2-v${o.valTone ? ' is-' + o.valTone : ''}">${o.val}</span>` : '') + '</div>'
+      + `<div class="ms-r2-b">${chip}${o.chips || ''}${o.fact ? `<span class="ms-r2-f">${o.fact}</span>` : ''}${bar}${chev}</div>`
+      + (o.more ? `<div class="ms-r2-x">${o.more}</div>` : '') + '</div>';
+  }
   const act = o.more ? ` role="button" tabindex="0" aria-expanded="false" onclick="uiRow2Toggle(this,event)" onkeydown="uiRow2Key(this,event)"`
     : o.branch ? ` data-br="${esc(o.branch)}" role="button" tabindex="0" onclick="event.stopPropagation();msOpenBranch(this.dataset.br)" onkeydown="if(event.key==='Enter'){event.stopPropagation();msOpenBranch(this.dataset.br)}"`
     : o.go ? ` role="button" tabindex="0" onclick="${esc(o.go)}" onkeydown="if(event.key==='Enter'){${esc(o.go)}}"` : '';
@@ -3259,6 +3272,22 @@ function uiRow2Toggle(el, e) {
   const on = el.classList.toggle('is-open'); el.setAttribute('aria-expanded', on ? 'true' : 'false');
 }
 function uiRow2Key(el, e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); uiRow2Toggle(el); } }
+// o.onGo rows: a tap on a chip / link / button inside the row is not the row's tap
+function uiRow2Skip(e) { const t = e && e.target; return !!(t && t.closest && t.closest('.ms-watch-br, a, button')); }
+// the ▾ of an o.onGo row: expands / folds the full sentence, never goes
+function uiRow2Chev(btn, e) {
+  if (e) e.stopPropagation();
+  const row = btn.closest('.ui-r2'); if (!row) return;
+  const on = row.classList.toggle('is-open'); btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+// the place a tap went to: the row / card it is about gets the accent tint for 2 s (index.html .ui-hl) and comes into view
+function uiFlash(el) {
+  if (!el) return false;
+  try { el.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch (e) { el.scrollIntoView(); }
+  el.classList.remove('ui-hl'); void el.offsetWidth; el.classList.add('ui-hl');
+  setTimeout(() => el.classList.remove('ui-hl'), 2000);
+  return true;
+}
 // a status chip in at most 6 characters (the Thai vowel and tone marks above / below a letter take no room): the app's long status words have
 // a short form; anything else keeps its first word, else its first 6 characters + "…". The full words stay in the chip's title / aria-label.
 const _UI_CHIP_SHORT = [

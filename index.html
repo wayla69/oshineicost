@@ -2458,6 +2458,12 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ms-r2-f { min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .ms-r2-m { flex: 0 0 auto; margin-left: auto; padding-left: 4px; font-size: 12px; color: var(--text-secondary); }
 .ms-r2.is-open .ms-r2-m { transform: rotate(180deg); }
+/* owner 2026-10-31 ("กดแล้วทำงานต่อได้เลย", js/01-core.js uiRow2 o.onGo): the row goes, its ▾ is a button of its own (44 px tap target) */
+.ms-r2-mb { min-width: 44px; min-height: 32px; margin: -6px 0 -6px auto; padding: 0 10px; text-align: center; border: 0; background: none; font: inherit; font-size: 14px; color: var(--text-secondary); cursor: pointer; }
+.ms-r2-mb:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; border-radius: 6px; }
+.ms-r2.is-open .ms-r2-mb { transform: rotate(180deg); }
+/* the place a tap went to: the accent tint for 2 s (js/01-core.js uiFlash) */
+.ui-hl { background: var(--accent-soft) !important; box-shadow: 0 0 0 3px var(--accent-soft); border-radius: 8px; transition: background-color .3s ease, box-shadow .3s ease; }
 .ms-r2-x { display: none; margin-top: 6px; font-size: 13px; line-height: 1.5; color: var(--text-primary); overflow-wrap: anywhere; }
 .ms-r2.is-open .ms-r2-x { display: block; }
 .ms-r2-list { padding-top: 2px; padding-bottom: 2px; }

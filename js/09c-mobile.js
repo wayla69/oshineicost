@@ -2705,13 +2705,73 @@ function _msSplitLine(text, names) {
 }
 // DV6 (phone table review 2026-10-25, top-10 #9): every to-do line shows the baht it is about on the right (actions[].baht, signed:
 // red = sales lost / money given away / cost added, green = the opposite; dvBaht, js/01-core.js) with what the figure is (a.baht_label) under it
+// owner 2026-10-31 ("กดแล้วทำงานต่อได้เลย"): a tap on the row goes where the work is done (actions[].go, msActionGo); the ▾ expands the sentence;
+// a branch chip opens that branch's sheet
 function msActionsHtml(j) {
   const names = (j.branches || []).map(x => x.branch).filter(Boolean).sort((x, y) => y.length - x.length);
   return (j.actions || []).map(a => {
-    const b = a.baht, has = b != null && b !== 0, L = _msSplitLine(a.text, names);
+    const b = a.baht, has = b != null && b !== 0, L = _msSplitLine(a.text, names), go = a.go && a.go.kind ? a.go : null;
     return msRow2({ cls: 'ms-act', tone: (has && b < 0) || a.sev === 'high' ? 'bad' : 'watch', title: esc(L.title), val: has ? dvBaht(b) : '', valTone: has ? (b < 0 ? 'bad' : 'good') : '',
-      chips: _msBrChips(L.branches), fact: esc(a.baht_label || ''), more: L.more ? esc(a.text) : '' });
+      chips: _msBrChips(L.branches), fact: esc(a.baht_label || ''), more: L.more ? esc(a.text) : '',
+      onGo: go ? 'msActionGo(JSON.parse(this.dataset.go))' : '', attrs: go ? ` data-go="${esc(JSON.stringify(go))}" data-go-kind="${esc(go.kind)}"` : '' });
   }).join('') || _msNone('ไม่พบประเด็นเร่งด่วน');
+}
+// ── a ต้องทำ row's tap (actions[].go, backend/routers/reports.py): the place the work is done, with the branch / dish / sort already chosen ──
+// branch → the branch sheet · ms → a detail screen of this summary (pushed on the history, so back returns to ต้องทำ), then its focus is
+// tinted for 2 s (uiFlash): the leak card (cash_heavy / heavy / reprint) and the branch's row, the เป้า sort of สาขา, the dish's row of เมนู ·
+// tab → a page of the app
+const _MS_FOCUS_CARD = { cash_heavy: 'ลดแล้วจ่ายเงินสด', heavy: 'ลดหนัก', reprint: 'บิลพิมพ์ซ้ำ' };
+async function msActionGo(go) {
+  if (!go || !go.kind) return;
+  if (go.kind === 'branch') { if (go.branch) msOpenBranch(go.branch); return; }
+  if (go.kind === 'tab') {
+    if (!go.tab) return;
+    if (phOn() && typeof phOpenPage === 'function') await phOpenPage(() => (typeof deptOpenPage === 'function' ? deptOpenPage({ tab: go.tab }) : switchTab(go.tab)));
+    else await showFullDashboard(go.tab);
+    return;
+  }
+  if (go.kind !== 'ms') return;
+  const v = _PH_DETAIL[go.view] ? go.view : 'month';
+  if (v === 'branches' && go.focus === 'target') _msBranchSort = 'tgt';      // msRenderBranches falls back to ยอด when no branch has a target
+  if (phOn() && _phKind() === 'centre') {
+    if (_phView === 'summary' && _phDetail) {                                // from ต้องทำ: a new history entry, so back returns here
+      try { history.pushState({ phd: v }, ''); _phDetailPushed = true; } catch (e) { /* no history: the back arrow goes to the cards */ }
+      _phShowDetail(v);
+    } else phOpenDetail(v);
+  } else msSwitchView(_PH_DETAIL[v].v);
+  await msGoFocus(v, go);
+}
+// wait (≤ 2 s) for the element a go points at - the เมนู list of a role without cost loads after the screen opens
+async function _msWaitFor(fn) {
+  for (let i = 0; i < 20; i++) { const el = fn(); if (el) return el; await new Promise(r => setTimeout(r, 100)); }
+  return null;
+}
+async function msGoFocus(v, go) {
+  await new Promise(r => requestAnimationFrame(() => r()));
+  if (v === 'discounts' && go.focus) {
+    const word = _MS_FOCUS_CARD[go.focus];
+    const card = word && [...document.querySelectorAll('#msDiscCards .ms-kpi')].find(c => ((c.querySelector('.lbl') || {}).textContent || '').startsWith(word));
+    if (!uiFlash(card)) {                                                    // no card (an unavailable leak): the section's heading
+      const h = [...document.querySelectorAll('#msv-discounts .ms-section-title')].find(t => /รั่วไหล/.test(t.textContent || ''));
+      if (h) h.scrollIntoView({ block: 'start' });
+    }
+    if (go.branch) {
+      const row = [...document.querySelectorAll('#msDiscBranches [data-br]')].find(r => /** @type {HTMLElement} */ (r).dataset.br === go.branch);
+      if (row) { row.classList.add('ui-hl'); setTimeout(() => row.classList.remove('ui-hl'), 2000); }
+    }
+  } else if (v === 'branches' && go.focus === 'target') {
+    const seg = document.getElementById('msSortTgt');
+    if (seg && seg.style.display !== 'none') uiFlash(seg);
+  } else if (v === 'menu' && go.menu) {
+    const want = _msNorm(go.menu);
+    const nameOf = r => { const n = r.querySelector('.ms-menu-name'); return _msNorm(n ? (n.getAttribute('title') || n.textContent) : String((r.querySelector('.ms-r2-t') || {}).textContent || '').replace(/^\d+\.\s*/, '')); };
+    const row = await _msWaitFor(() => [...document.querySelectorAll('#msMenuRisers .ui-r2')].find(r => nameOf(r) === want)
+      || [...document.querySelectorAll('#msMenuRisers .ui-r2')].find(r => { const n = nameOf(r); return n && (n.includes(want) || want.includes(n)); }));
+    if (row && /** @type {HTMLElement} */ (row).hidden) {                  // past the first rows: show them all first
+      const more = document.querySelector('#msMenuRisers .dv-more[aria-expanded="false"]'); if (more) dvMoreToggle(more);
+    }
+    uiFlash(row);
+  }
 }
 // PR-PW (owner 2026-10-29, no. 7-10, 12-14) · ตรวจวันนี้: payload.watch.items, each a finding with its level (fix / watch / ok / none), the
 // sentence that names the branches and the action, and the rows behind it. Sorted by level on the server. Unavailable items fold
