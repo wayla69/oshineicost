@@ -179,7 +179,8 @@ def test_period_compare_cuts_every_period_to_the_same_days(pc):
     j = pc.get("/api/analysis/period_compare", params={"a_month_from": w["cur"][0][:7], "a_month_to": w["cur"][0][:7],
                                                          "b_month_from": w["prev"][0][:7], "b_month_to": w["prev"][0][:7]}).json()
     assert j["to_date"] is True and j["n_days"] == w["days"]
-    assert j["windows"]["a"] == list(w["cur"]) and j["windows"]["b"] == list(w["prev"])
+    # B is listed only when it had to be cut: on day 30 of a 31-day month a 30-day previous month is already whole (2026-10-30)
+    assert j["windows"]["a"] == list(w["cur"]) and j["windows"].get("b", list(w["prev"])) == list(w["prev"])
     assert j["delta"]["revenue"] == 0.0
 
 

@@ -1314,20 +1314,21 @@ const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4
 // B1_PAL mirrors the --ch-* tokens in docs/ui-kit/tokens.css (backend/test_charts_b1.py keeps them equal); canvas charts cannot
 // read a CSS variable, so the plugin below takes these. a/aw above the average (weekend brighter), b/bw below it, t the latest
 // bar (gold, dark edge), c the 6 categorical series colours, spare 6 more for a chart with more series, s the 5-step sequential
-// scale, avg the average line, gi gold as text. Colour-blind safe: teal/indigo vs lilac vs gold, never red against green.
+// scale, avg the average line, gi gold as text. Colour-blind safe: teal vs lavender vs amber, never red against green.
+// Pastel A (2026-10-31): every -1/-2 pair is one colour, so the bars are flat (no gradient on screen).
 const B1_PAL = {
   light: {
-    a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: '#9a84e6', bw2: '#8468d8',
-    t1: '#f0a500', t2: '#b86e00', tstroke: '#7a4a00', avg: '#475569', gi: '#7a4500',
-    c: ['#3a2fb5', '#0e8f87', '#c25e00', '#b01d62', '#1d78c9', '#6b7399'],
-    spare: ['#6a62d8', '#38a89f', '#d9822b', '#d4577f', '#4a97dc', '#8a92b8'],
+    a1: '#4e9a8f', a2: '#4e9a8f', aw1: '#72b2a8', aw2: '#72b2a8', b1: '#9aa3cf', b2: '#9aa3cf', bw1: '#b3bade', bw2: '#b3bade',
+    t1: '#e0a43a', t2: '#e0a43a', tstroke: '#7a5a20', avg: '#4a5568', gi: '#7a5a20',
+    c: ['#5b6ba8', '#4e9a8f', '#d08a3e', '#c0607a', '#5a8fc8', '#8b7ab8'],
+    spare: ['#8290c4', '#72b2a8', '#e0a866', '#d4849a', '#80a9d8', '#a99cc9'],
     s: ['#7686da', '#6a66d4', '#5b52cc', '#3f33a8', '#2b1f80'],
   },
   dark: {
-    a1: '#2dd4bf', a2: '#818cf8', aw1: '#5eead4', aw2: '#a5b4fc', b1: '#8b78d8', b2: '#7a66c8', bw1: '#9a88e4', bw2: '#8975d6',
-    t1: '#fcd34d', t2: '#f5b82e', tstroke: '#fff3c4', avg: '#c3cddb', gi: '#fcd34d',
-    c: ['#9d98ff', '#2dd4bf', '#fbbf24', '#f472b6', '#60a5fa', '#b4b9e0'],
-    spare: ['#b7b3ff', '#6fe3d3', '#fcd34d', '#f9a8d4', '#93c5fd', '#d3d7f0'],
+    a1: '#5fb3a7', a2: '#5fb3a7', aw1: '#7cc4b9', aw2: '#7cc4b9', b1: '#7e89be', b2: '#7e89be', bw1: '#959fcc', bw2: '#959fcc',
+    t1: '#e0b25a', t2: '#e0b25a', tstroke: '#fff3c4', avg: '#b6bfd0', gi: '#f0ce85',
+    c: ['#9aa7e0', '#5fb3a7', '#e0b25a', '#e58fa6', '#7fb0e3', '#b4a6d8'],
+    spare: ['#b8c1ea', '#86c8bd', '#ebc988', '#efb0c0', '#a3c6ec', '#cbc1e6'],
     s: ['#5c6bc0', '#7d86d8', '#9d98e8', '#c0b8f6', '#e6e0ff'],
   },
 };
@@ -1736,29 +1737,11 @@ function _glanceDot(ctx, x, y, color, surface) {
 // A see-through colour (many charts fade their non-highlighted bars) is flattened onto the card surface first, so it keeps
 // its tone but nothing shows through it.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
-// Lift a colour in HSL: +dl lightness (clamped to 0.86 so it never turns white) and
-// saturation × ks (clamped to 1) — the pastel that keeps its hue.
-function _glanceLift(c, dl, ks) {
-  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-  let h = 0, sat = 0, l = (mx + mn) / 2;
-  if (mx !== mn) {
-    const d = mx - mn;
-    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-    h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    h /= 6;
-  }
-  l = Math.min(0.86, l + dl); sat = Math.min(1, sat * ks);
-  const f = (p, q, t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
-  if (sat === 0) { const v = Math.round(l * 255); return [v, v, v, 1]; }
-  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, pp = 2 * l - q;
-  return [Math.round(f(pp, q, h + 1 / 3) * 255), Math.round(f(pp, q, h) * 255), Math.round(f(pp, q, h - 1 / 3) * 255), 1];
-}
 // One bar's fill: the tip colour easing to the base colour along the bar (so a short bar is still clearly its colour),
 // drawn per element because each bar has its own length and its own kind (B1) or series colour.
 function _glanceBarGrad(ctx, el, horizontal, tip, base) {
   const t = horizontal ? el.x : el.y, b = el.base;
-  if (!isFinite(t) || !isFinite(b) || t === b) return base;
+  if (tip === base || !isFinite(t) || !isFinite(b) || t === b) return base;   // Pastel A: one colour = a flat fill
   const g = horizontal ? ctx.createLinearGradient(t, 0, b, 0) : ctx.createLinearGradient(0, t, 0, b);
   g.addColorStop(0, tip);
   g.addColorStop(1, base);
@@ -2222,9 +2205,9 @@ const GLANCE_PLUGIN = {
             } else {
               rgba = _glanceRgba(own.backgroundColor);
               if (!rgba || !(rgba[3] > 0)) return;
-              // theme B categorical bars: the series colour, a touch lighter at the tip (a see-through colour is flattened onto the card first)
+              // categorical bars: the series colour, flat (Pastel A 2026-10-31: no lighter tip; a see-through colour is flattened onto the card first)
               const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-              cTip = _glanceCss(_glanceLift(solid, 0.10, 1.05), 1); cBase = _glanceCss(solid, 1);
+              cTip = cBase = _glanceCss(solid, 1);
             }
             // A per-bar copy of the options: bars of one dataset share one options object, and every bar here has its own fill.
             const copy = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
@@ -2244,10 +2227,8 @@ const GLANCE_PLUGIN = {
           if (lo.fill !== true && lo.fill !== 'origin' && lo.fill !== 'start') return;
           const rgba = _glanceRgba(lo.borderColor);
           if (!rgba) return;
-          const grad = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
-          grad.addColorStop(0, _glanceCss(rgba, 0.24));
-          grad.addColorStop(1, _glanceCss(rgba, 0.01));
-          swap(lo, 'backgroundColor', grad);
+          // Pastel A (2026-10-31): a flat, light wash under the line instead of a fade
+          swap(lo, 'backgroundColor', _glanceCss(rgba, 0.12));
         }
       });
     }
