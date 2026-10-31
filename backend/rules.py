@@ -407,6 +407,170 @@ def latest_settled_day(con, where: str = "t.source='Easy' AND b.name!='ALL'", pa
     return {"day": counts[0][0] if counts else None, "skipped_day": None, "skipped_bills": None}
 
 
+# ─── The ONE daily baseline: "ปกติ" (owner 2026-10-31, docs/UI_REVIEW_MOBILE_2026-10-31.md no. 12) ─────────────────────
+# Every DAILY comparison in the app (phone hero and its เมื่อวาน detail, the branch scorecard, the Daily Brief, the
+# management report's daily mode, ร้านของฉัน · สรุปประจำวัน, the morning push) compares a day with ONE normal: the MEDIAN of
+# the same weekday over the 8 weeks before it. The owner proposed the 8-week same-weekday average; the median keeps one
+# holiday or half-closed day from dragging the normal. A same weekday with no bills (the branch was shut, or its data never
+# came) is skipped, not counted as zero. Fewer than 2 such days = no verdict (the figure shows, the pill says "ยังไม่มีฐาน");
+# 2..7 = a verdict labelled "ปกติจาก n สัปดาห์". Weekly / monthly / yearly comparisons are a different question and keep
+# their own bases (periods.py, the weekday-fair MTD pace, month_projection).
+BASELINE_WEEKS = 8                 # same weekdays looked back over
+BASELINE_MIN_WEEKS = 2             # fewer usable weeks = no verdict
+BELOW_NORMAL_PCT = -8.0            # a day this far under its normal = "ต่ำกว่าปกติ" (the Daily Brief's rule since 2026-09)
+ABOVE_NORMAL_PCT = 10.0            # a day this far over its normal = "สูงกว่าปกติ"
+BIG_BELOW_NORMAL_PCT = -15.0       # red, not amber
+
+
+def _median(xs):
+    xs = sorted(x for x in xs if x is not None)
+    n = len(xs)
+    if not n:
+        return None
+    return xs[n // 2] if n % 2 else (xs[n // 2 - 1] + xs[n // 2]) / 2.0
+
+
+def baseline_dates(day, weeks: int = BASELINE_WEEKS) -> list:
+    """The same weekday on each of the `weeks` weeks before `day` (ISO strings, newest first)."""
+    import datetime as _dt
+    d = _dt.date.fromisoformat(str(day)[:10])
+    return [(d - _dt.timedelta(days=7 * k)).isoformat() for k in range(1, weeks + 1)]
+
+
+def baseline_label(n_weeks: Optional[int], short: bool = False) -> str:
+    """The words for the normal: "เทียบปกติ (ค่ากลาง 8 สัปดาห์)" on the desktop, "เทียบปกติ" on the phone,
+    "เทียบปกติจาก n สัปดาห์" while fewer than 8 weeks exist, "ยังไม่มีฐาน" under 2."""
+    n = n_weeks or 0
+    if n < BASELINE_MIN_WEEKS:
+        return "ยังไม่มีฐาน"
+    if n < BASELINE_WEEKS:
+        return f"เทียบปกติจาก {n} สัปดาห์"
+    return "เทียบปกติ" if short else f"เทียบปกติ (ค่ากลาง {BASELINE_WEEKS} สัปดาห์)"
+
+
+def _pct_vs(cur, base):
+    return round((cur - base) / base * 100, 1) if (cur is not None and base) else None
+
+
+def baseline_from_days(by_day: dict, day: str, weeks: int = BASELINE_WEEKS) -> dict:
+    """The baseline of `day` from per-day sums {iso_day: {"rev", "cust", "bills", "disc"}} (one branch, or the chain
+    summed per day). Pure Python: the scorecard, the franchise table and the tests call it on rows they already hold.
+    → {"day", "revenue", "customers", "bills", "rev_per_head", "discount_pct", "normal": {revenue, customers,
+       rev_per_head, discount_pct, n_weeks, dates, weeks}, "vs_normal_pct", "vs_normal_baht", "cust_vs_normal_pct",
+       "rph_vs_normal_pct", "has_verdict", "below_normal", "status", "label", "label_short"}
+    status: "nobase" (< 2 usable weeks) | "missing" (no bills on the day) | "down" | "up" | "ok"."""
+    cur = by_day.get(day) or {}
+    used = []
+    for d in baseline_dates(day, weeks):
+        x = by_day.get(d)
+        if x and (x.get("bills") or 0) > 0:
+            used.append((d, x))
+    rev = float(cur.get("rev") or 0)
+    cust = float(cur.get("cust") or 0)
+    bills = int(cur.get("bills") or 0)
+    disc = float(cur.get("disc") or 0)
+
+    def dshare(r, dd):
+        return (dd / (r + dd) * 100) if (r + dd) > 0 else None
+    n = len(used)
+    m_rev = _median([float(x.get("rev") or 0) for _, x in used])
+    m_cust = _median([float(x.get("cust") or 0) for _, x in used])
+    m_rph = _median([(float(x.get("rev") or 0) / x["cust"]) if x.get("cust") else None for _, x in used])
+    m_disc = _median([dshare(float(x.get("rev") or 0), float(x.get("disc") or 0)) for _, x in used])
+    m_bills = _median([float(x.get("bills") or 0) for _, x in used])
+    m_tkt = _median([(float(x.get("rev") or 0) / x["bills"]) if x.get("bills") else None for _, x in used])
+    ok = n >= BASELINE_MIN_WEEKS and bool(m_rev)
+    live = ok and bills > 0
+    vs = _pct_vs(rev, m_rev) if live else None
+    rph = rev / cust if cust else None
+    ds = dshare(rev, disc)
+    status = ("nobase" if not ok else "missing" if bills <= 0 else
+              "down" if vs is not None and vs <= BELOW_NORMAL_PCT else
+              "up" if vs is not None and vs >= ABOVE_NORMAL_PCT else "ok")
+    return {
+        "day": day, "revenue": round(rev, 2), "customers": cust, "bills": bills,
+        "rev_per_head": round(rph, 1) if rph is not None else None,
+        "discount_pct": round(ds, 1) if ds is not None else None,
+        "normal": {"revenue": round(m_rev, 2) if m_rev is not None else None,
+                   "customers": round(m_cust, 1) if m_cust is not None else None,
+                   "rev_per_head": round(m_rph, 1) if m_rph is not None else None,
+                   "discount_pct": round(m_disc, 1) if m_disc is not None else None,
+                   "bills": round(m_bills, 1) if m_bills is not None else None,
+                   "avg_ticket": round(m_tkt, 1) if m_tkt is not None else None,
+                   "n_weeks": n, "dates": [d for d, _ in used], "weeks": weeks},
+        "vs_normal_pct": vs,
+        "vs_normal_baht": round(rev - m_rev) if vs is not None else None,
+        "cust_vs_normal_pct": _pct_vs(cust, m_cust) if live else None,
+        "rph_vs_normal_pct": _pct_vs(rph, m_rph) if (live and rph is not None) else None,
+        "has_verdict": ok,
+        "below_normal": status == "down",
+        "status": status,
+        "label": baseline_label(n), "label_short": baseline_label(n, short=True),
+    }
+
+
+def daily_series(con, where: str, params: Optional[dict], dates: list, alias: str = "t") -> dict:
+    """Per-branch per-day sums for the given ISO dates: {branch: {day: {"rev", "cust", "bills", "disc"}}}.
+    `where` uses the aliases `alias` (sales_transaction, default t) and b (branches); revenue = net_revenue_sum."""
+    dates = sorted(set(str(d)[:10] for d in dates if d))
+    if not dates:
+        return {}
+    ph = ", ".join(f":_bd{i}" for i in range(len(dates)))
+    q = {**(params or {}), **{f"_bd{i}": d for i, d in enumerate(dates)}}
+    a = alias
+    rows = con.execute(
+        f"SELECT b.name AS branch, date({a}.sold_at) AS d, {net_revenue_sum(a)} AS rev, "
+        f"COALESCE(SUM({a}.customer_count),0) AS cust, COUNT(*) AS bills, COALESCE(SUM({a}.discount),0) AS disc "
+        f"FROM sales_transaction {a} JOIN branches b ON b.branch_id={a}.branch_id "
+        f"WHERE {where} AND date({a}.sold_at) IN ({ph}) GROUP BY b.name, date({a}.sold_at)", q).fetchall()
+    per: dict = {}
+    for r in rows:
+        per.setdefault(r[0], {})[r[1]] = {"rev": r[2] or 0, "cust": r[3] or 0, "bills": r[4] or 0, "disc": r[5] or 0}
+    return per
+
+
+def chain_days(per: dict) -> dict:
+    """daily_series summed across branches per day (the chain-wide variant: sum per day, then the median)."""
+    out: dict = {}
+    for dm in per.values():
+        for d, x in dm.items():
+            c = out.setdefault(d, {"rev": 0.0, "cust": 0.0, "bills": 0, "disc": 0.0})
+            for k in c:
+                c[k] += x[k]
+    return out
+
+
+def chain_baseline(con, per: dict, day: str, weeks: int = BASELINE_WEEKS, keep: Optional[str] = None) -> dict:
+    """The chain-wide baseline from daily_series rows: the branches trading now (one shut over the day and the 7 before -
+    closed_branches, the scorecard's own rows - does not hold up the normal with the weeks it traded in), summed per
+    day, then the median across days. `keep` = the branch the page is filtered to (never left out)."""
+    import datetime as _dt
+    wk0 = (_dt.date.fromisoformat(day) - _dt.timedelta(days=7)).isoformat()
+    shut = closed_branches(con, [(wk0, day)], keep=keep)
+    return baseline_from_days(chain_days({nm: dm for nm, dm in per.items() if nm not in shut}), day, weeks)
+
+
+def daily_baseline(con, where: str = "t.source='Easy' AND b.name!='ALL'", params: Optional[dict] = None,
+                   day: Optional[str] = None, weeks: int = BASELINE_WEEKS, by_branch: bool = False,
+                   alias: str = "t", keep: Optional[str] = None):
+    """THE daily baseline ("ปกติ") of `day` - the median of the same weekday over the `weeks` weeks before it (see the
+    block above). `day` defaults to the last FINISHED day whose bills arrived (latest_settled_day on the same scope).
+    `where` uses the aliases `alias` (sales_transaction, default t) and b (branches); revenue = net_revenue_sum (ex-VAT,
+    less service charge).
+    Chain-wide (by_branch=False): the scope summed per day, then the median across days → baseline_from_days' dict.
+    by_branch=True → {branch_name: baseline_from_days' dict}, each branch on its own days. None when there is no day."""
+    if not day:
+        w = where if alias == "t" else where.replace(f"{alias}.", "t.")
+        day = latest_settled_day(con, where=w, params=params)["day"]
+        if not day:
+            return None
+    day = str(day)[:10]
+    per = daily_series(con, where, params, [day] + baseline_dates(day, weeks), alias=alias)
+    if by_branch:
+        return {nm: baseline_from_days(dm, day, weeks) for nm, dm in per.items()}
+    return chain_baseline(con, per, day, weeks, keep=keep)
+
+
 def month_projection(con, where: str, params: Optional[dict], month_first, days_elapsed: int, days_total: int,
                      mtd: float) -> dict:
     """THE month-end projection of a month in progress (DV1, phone table review 2026-10-25: the overview page projected

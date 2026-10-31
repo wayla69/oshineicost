@@ -1615,6 +1615,11 @@ def _mgt_window(con, *, DOW, MON, _cal, _dt, date, dlabel, month, mtd, params, p
     today_th = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
     if date:
         focus = date[:10]
+    elif period == "daily":
+        # 2026-10-31: the daily report's day is the brief's and the scorecard's - the last finished day whose bills have
+        # arrived (rules.latest_settled_day steps back over a day the POS has not posted yet), so the three name one day
+        from rules import latest_settled_day
+        focus = (latest_settled_day(con, where=where.replace("st.", "t."), params=params)["day"] or maxd)[:10]
     else:
         _cd = con.execute(
             f"SELECT MAX(date(st.sold_at)) d FROM sales_transaction st "
@@ -1953,6 +1958,51 @@ def _mgt_branches(con, *, branch, ce, cs, group, has_prev, has_yoy, is_mtd=False
         pr = prev_rank_map.get(b["branch"])
         b["rank_change"] = (pr - (i + 1)) if pr else None  # positive = moved up
     return {"branches": branches, **({"branches_ly_hidden": ly_hidden} if ly_hidden else {})}
+
+
+def _mgt_daily_normal(con, ctx) -> None:
+    """The daily report's headline and branch league on THE daily baseline (owner 2026-10-31): "ปกติ" = the median of the
+    same weekday over the 8 weeks before (rules.daily_baseline - the chain the phone hero and the Daily Brief quote, each
+    branch the scorecard's own figure). In place on ctx: headline.prev becomes the normal (revenue, customers, bills, per
+    head, per bill) and the *_wow_pct fields compare with it; each league row's wow_pct / prev_revenue / rev_delta likewise,
+    plus normal_weeks and below_normal. Under 2 usable weeks there is no comparison (null). comp_label names the normal;
+    prev_label names what the sections below the league still compare with (the GP bridge, menus, dayparts, payments:
+    the same weekday last week - a menu or a tender has no 8-week normal)."""
+    from rules import baseline_dates, baseline_from_days, baseline_label, chain_baseline, daily_series
+    focus, where, params, pct, th = ctx["focus"], ctx["where"], ctx["params"], ctx["pct"], ctx["th"]
+    per = daily_series(con, where, params, [focus] + baseline_dates(focus), alias="st")
+    ch = chain_baseline(con, per, focus, keep=ctx.get("branch"))
+    H, N = ctx["headline"], ch["normal"]
+    if ch["has_verdict"]:
+        H["prev"] = {"revenue": N["revenue"], "customers": N["customers"], "bills": N["bills"],
+                     "rev_per_head": N["rev_per_head"], "avg_ticket": N["avg_ticket"]}
+        H["rev_wow_pct"] = pct(H["revenue"], N["revenue"])
+        H["cust_wow_pct"] = pct(H["customers"], N["customers"])
+        H["bills_wow_pct"] = pct(H["bills"], N["bills"])
+        H["rph_wow_pct"] = pct(H["rev_per_head"] or 0, N["rev_per_head"]) if N["rev_per_head"] else None
+        H["ticket_wow_pct"] = pct(H["avg_ticket"] or 0, N["avg_ticket"]) if N["avg_ticket"] else None
+    else:
+        H.pop("prev", None)
+        for k in ("rev_wow_pct", "cust_wow_pct", "bills_wow_pct", "rph_wow_pct", "ticket_wow_pct"):
+            H[k] = None
+    H["basis"] = "normal"
+    H["normal_weeks"] = N["n_weeks"]
+    H["normal_dates"] = N["dates"]
+    for b in ctx.get("branches") or []:
+        bl = baseline_from_days(per.get(b["branch"], {}), focus)
+        b["wow_pct"] = bl["vs_normal_pct"]
+        b["prev_revenue"] = bl["normal"]["revenue"] if bl["has_verdict"] else None
+        b["rev_delta"] = bl["vs_normal_baht"]
+        b["normal_weeks"] = bl["normal"]["n_weeks"]
+        b["below_normal"] = bl["below_normal"]
+    n = N["n_weeks"]
+    if th:
+        ctx["comp_label"] = baseline_label(n).replace("เทียบ", "", 1) if n >= 2 else "ปกติ (ยังไม่มีฐาน)"
+        ctx["prev_label"] = "วันเดียวกันสัปดาห์ก่อน"
+    else:
+        ctx["comp_label"] = ("normal (median of the same weekday, 8 weeks)" if n >= 8 else
+                             f"normal (median of {n} weeks)" if n >= 2 else "normal (no base yet)")
+        ctx["prev_label"] = "same weekday last week"
 
 
 def _cph_split(q_cur, cost_cur, q_prev, cost_prev, covers_cur, covers_prev) -> dict:
@@ -3272,6 +3322,8 @@ def report_management(
         ctx.update(out)
         out = _mgt_branches(con, branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), is_mtd=ctx.get("is_mtd"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), period=ctx.get("period"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
         ctx.update(out)
+        if period == "daily":
+            _mgt_daily_normal(con, ctx)          # the one daily baseline (rules.daily_baseline)
         out = _mgt_leak(con, ce=ctx.get("ce"), cs=ctx.get("cs"), has_prev=ctx.get("has_prev"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), ps=ctx.get("ps"), where=ctx.get("where"))
         ctx.update(out)
         out = _mgt_menu(con, _cal=ctx.get("_cal"), _dt=ctx.get("_dt"), branch=ctx.get("branch"), ce=ctx.get("ce"), cs=ctx.get("cs"), cur=ctx.get("cur"), group=ctx.get("group"), has_prev=ctx.get("has_prev"), has_yoy=ctx.get("has_yoy"), leak=ctx.get("leak"), params=ctx.get("params"), pct=ctx.get("pct"), pe=ctx.get("pe"), prev=ctx.get("prev"), ps=ctx.get("ps"), where=ctx.get("where"), ye=ctx.get("ye"), ys=ctx.get("ys"))
@@ -3318,7 +3370,6 @@ def report_management(
     payment = ctx["payment"]
     pe = ctx["pe"]
     peak = ctx["peak"]
-    prev = ctx["prev"]
     projected = ctx["projected"]
     ps = ctx["ps"]
     reprint = ctx["reprint"]
@@ -3341,19 +3392,22 @@ def report_management(
     # lost against the comparison, money given away or cost added; > 0 = the opposite) and `baht_label`, what the figure is.
     # Within one severity the lines run by the size of that baht.
     _vs = (f"เทียบ{pword}ก่อน" if th else f"vs last {pword}")
+    if period == "daily":                    # the daily report compares with the normal (rules.daily_baseline)
+        _vs = ("เทียบปกติ" if th else "vs normal")
+    _hp = headline.get("prev")
     _disc_l = ("ส่วนลดของบิลเหล่านี้" if th else "discount on these bills")
     _tgt_l = ("ห่างเป้า" if th else "short of target")
-    if prev and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
-        actions.append({"sev": "high", "baht": round((headline.get("revenue") or 0) - (prev.get("revenue") or 0)), "baht_label": _vs,
-            "text": (f"ยอดขายรวมทั้งเครือลดลง {abs(headline['rev_wow_pct']):.0f}% เทียบ{pword}ก่อน — ตรวจสอบสาเหตุ"
+    if _hp and headline.get("rev_wow_pct") is not None and headline["rev_wow_pct"] <= -10:
+        actions.append({"sev": "high", "baht": round((headline.get("revenue") or 0) - (_hp.get("revenue") or 0)), "baht_label": _vs,
+            "text": (f"ยอดขายรวมทั้งเครือลดลง {abs(headline['rev_wow_pct']):.0f}% {_vs} — ตรวจสอบสาเหตุ"
                      if th else
-                     f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% vs last {pword} — investigate drivers.")})
+                     f"Chain net sales down {abs(headline['rev_wow_pct']):.0f}% {_vs} — investigate drivers.")})
     for r in branches:
         if r["wow_pct"] is not None and r["wow_pct"] <= -25 and r["revenue"] > 0:
             actions.append({"sev": "high", "baht": r.get("rev_delta"), "baht_label": _vs,
-                "text": (f"{r['branch']} ยอดขายลดลง {abs(r['wow_pct']):.0f}% เทียบ{pword}ก่อน (฿{r['revenue']:,.0f})"
+                "text": (f"{r['branch']} ยอดขายลดลง {abs(r['wow_pct']):.0f}% {_vs} (฿{r['revenue']:,.0f})"
                          if th else
-                         f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% vs last {pword} (฿{r['revenue']:,.0f}).")})
+                         f"{r['branch']} net sales down {abs(r['wow_pct']):.0f}% {_vs} (฿{r['revenue']:,.0f}).")})
     if cash_heavy.get("bills"):
         _top = cash_heavy.get("top") or {}
         _where_th = (f" · ส่วนใหญ่ {_top['branch']} กะ{_top['shift']} ({_top['share_pct']}%)" if _top.get("branch") else "")
@@ -3484,6 +3538,7 @@ def report_management(
         "label": label,
         "watch": watch,
         "comp_label": comp_label,
+        **({"prev_label": ctx["prev_label"]} if ctx.get("prev_label") else {}),   # daily: what the sections under the league compare with
         "focus": focus,
         "range": [cs.isoformat(), ce.isoformat()],
         "comp_range": [ps.isoformat(), pe.isoformat()] if has_prev else None,
@@ -3819,7 +3874,7 @@ _MGT_DEFS_TH = [
     ("ยอดเฉลี่ย/บิล", "ยอดขายสุทธิ ÷ จำนวนบิล — หนึ่งบิลอาจมีหลายหัว"),
     ("ต้นทุนอาหาร %", "ต้นทุนตามสูตร BoM ÷ ยอดขายสุทธิของเดือนนั้น · เมนูที่ยังไม่มีต้นทุนคิดเป็น ฿0 "
                       "ตัวเลขจึงเป็นขั้นต่ำ"),
-    ("ฐานการเปรียบเทียบ", "รายวัน = วันเดียวกันของสัปดาห์ก่อน · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · "
+    ("ฐานการเปรียบเทียบ", "รายวัน = ปกติ (ค่ากลางของวันเดียวกันใน 8 สัปดาห์ก่อน ไม่นับวันที่ไม่มียอดขาย) · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · "
                           "รายเดือน = เดือนก่อน (ถ่วงตามวันในสัปดาห์เมื่อเดือนยังไม่ครบ)"),
     ("ประมาณการ", "อัตราเฉลี่ยถ่วงตามวันในสัปดาห์ — ต่อยอดจากวันที่ผ่านมาโดยอิงรูปแบบวันของเดือนก่อน"),
     ("ส่วนลดหนัก", "บิลที่ให้ส่วนลดตั้งแต่ 30% ของมูลค่าก่อนลด"),

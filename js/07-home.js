@@ -87,8 +87,8 @@ function _homeStatus(brief, sd, scorecard) {
   const fcp = brief.food_cost_pct_mtd;
   const mom = sd && sd.total ? sd.total.mom_pct : null;
   const branches = (scorecard && scorecard.branches) || [];
-  const worstDrift = branches.reduce((m, b) => (b.vs_avg_pct != null && b.vs_avg_pct < m ? b.vs_avg_pct : m), 0);
-  const downCount = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8)).length;
+  const worstDrift = branches.reduce((m, b) => (b.reported !== false && b.vs_normal_pct != null && b.vs_normal_pct < m ? b.vs_normal_pct : m), 0);
+  const downCount = belowNormalRows(scorecard).length;     // the scorecard's one verdict (rules.daily_baseline)
   // Food cost colours the whole page only when it is genuinely off: above THIS business's
   // one target (red; Settings → ค่าเริ่มต้น, 58%), or climbing / not yet trustworthy (amber). The old bars (45% / 38%) are
   // à-la-carte norms — for a buffet they were true every day, so the band at the top of
@@ -110,13 +110,14 @@ function renderHomeStatusBand(brief, fc, sd, scorecard) {
     amber: { bg: 'rgba(245,158,11,0.10)', bd: '#f59e0b', word: 'ต้องระวัง', wc: '#92400e' },
     red:   { bg: 'rgba(239,68,68,0.09)',  bd: '#ef4444', word: 'ต้องรีบดู', wc: '#991b1b' },
   }[s.level];
-  const wow = brief.revenue_wow ? ((brief.revenue_yesterday - brief.revenue_wow) / brief.revenue_wow * 100) : null;
-  const wowTxt = wow != null ? `(${wow >= 0 ? '+' : ''}${wow.toFixed(0)}% เทียบสัปดาห์ก่อน)` : '';
+  // the day against "ปกติ": the median of the same weekday over 8 weeks (rules.daily_baseline; the phone hero's own figure)
+  const vsN = brief.revenue_vs_normal_pct;
+  const wowTxt = vsN != null ? `${vsN >= 0 ? '+' : '−'}${Math.abs(vsN).toFixed(0)}% ${normalLbl(brief.normal_weeks)}` : normalLbl(brief.normal_weeks);
   const projTxt = fc && fc.available ? ` คาดจบเดือน ~<b>${fmt(fc.projected)}</b>` : '';
   const skipNote = brief.skipped_day ? ` · <span style="color:var(--text-muted)">ข้อมูลวันที่ ${brief.skipped_day} มีเพียง ${brief.skipped_bills} บิล ยังมาไม่ครบ จึงแสดงวันก่อนหน้า</span>` : '';
   const line1 = `เมื่อวาน (${fmtDateTh(brief.yesterday)}) ทำได้ <b>${fmt(brief.revenue_yesterday || 0)}</b> ${wowTxt} · เดือนนี้ทำไป <b>${fmt(brief.mtd_revenue || 0)}</b> ใน ${brief.mtd_days || 0} วัน${projTxt}${skipNote}`;
   const bits = [];
-  if (s.downCount) bits.push(`${s.downCount} สาขาต่ำกว่าปกติ`);
+  // the count of branches below normal lives on ONE card (สาขาที่ต้องดู, review 2026-10-31 no. 12); the band's colour still counts it
   if (s.fcRed) bits.push(`ต้นทุนอาหาร ${brief.food_cost_pct_mtd.toFixed(1)}% ${fcStatusText(brief.food_cost_pct_mtd, s.H.t)} (เป้า ${fcTargetTxt(s.H.t)}%)`);
   else if (s.fcAmber && s.H.c.delta_pp >= 3) bits.push(`ต้นทุนอาหารขึ้น ${s.H.c.delta_pp.toFixed(1)} จุด เทียบช่วงเดียวกันเดือนก่อน`);
   else if (s.fcAmber) bits.push(`ต้นทุนครบแค่ ${s.H.c.coverage_pct.toFixed(0)}% ของจาน`);
@@ -161,8 +162,7 @@ function _homeCostHealth(brief) {
 function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
   const el = document.getElementById('home-decision-tiles'); if (!el) return;
   const branches = (scorecard && scorecard.branches) || [];
-  const down = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
-                       .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
+  const down = belowNormalRows(scorecard);
   const mom = sd && sd.total ? sd.total.mom_pct : null;
   const momColor = mom == null ? '#64748b' : mom >= 0 ? '#059669' : mom <= -5 ? '#dc2626' : '#f59e0b';
   // Food cost is judged against THIS business's one target (Settings → ค่าเริ่มต้น; 58%, owner
@@ -183,10 +183,11 @@ function renderHomeDecisionTiles(brief, fc, sd, scorecard) {
     {
       icon: '', label: 'สาขาที่ต้องดู',
       value: down.length ? `${down.length} สาขา` : 'ครบทุกสาขา',
-      sub: down.length ? 'ต่ำกว่าค่าปกติของตัวเอง' : 'ไม่มีสาขาต่ำกว่าปกติ',
-      foot: down.length ? down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}`).join(' · ') : 'ทุกสาขาปกติ',
+      sub: down.length ? 'ต่ำกว่าปกติของตัวเอง · ค่ากลางวันเดียวกัน 8 สัปดาห์' : 'ไม่มีสาขาต่ำกว่าปกติ',
+      foot: down.length ? down.slice(0, 2).map(b => `${esc(b.branch)} ${b.vs_normal_pct != null ? b.vs_normal_pct.toFixed(0) + '%' : ''}`).join(' · ') : 'ทุกสาขาปกติ',
       footColor: down.length ? '#dc2626' : '#059669', valColor: down.length ? '#dc2626' : '#059669',
-      go: down.length ? `homeDrillBranch('${(down[0].branch || '').replace(/'/g, "\\'")}')` : '',
+      // the full list is the scorecard below (one fact, one card): the tile opens it
+      go: "document.getElementById('home-branch-scorecard')?.scrollIntoView({behavior:'smooth',block:'center'})",
     },
     {
       icon: '', label: 'สุขภาพมาร์จิ้น (ต้นทุนอาหาร %)',
@@ -254,15 +255,7 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
     A.push({ p: 6, sev: 'amber', icon: '', text: `ยังไม่ได้อัปโหลดใบเบิกวัตถุดิบเดือน ${esc(RQ.missing_month)} — รายงานเบิกจริง vs สูตรจึงยังไม่มีเดือนนั้น`, act: 'อัปโหลด', go: "switchTab('branchbom')" });
   if (CH.pending_review && CH.pending_review.count)
     A.push({ p: 6, sev: 'amber', icon: '', text: `${CH.pending_review.count} เมนูใช้ต้นทุนที่ระบบประมาณให้ (฿${fmtN(CH.pending_review.cogs_month || 0)}/เดือน) — รอครัวตรวจปริมาณแล้วกดยืนยัน`, act: 'ตรวจและยืนยัน', go: "switchTab('coverage')" });
-  const down = branches.filter(b => b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8))
-                       .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
-  down.slice(0, 3).forEach(b => {
-    const big = b.vs_avg_pct != null && b.vs_avg_pct <= -15;
-    const wowBit = b.vs_wow_pct != null ? ` · เทียบสัปดาห์ก่อน ${b.vs_wow_pct >= 0 ? '+' : ''}${b.vs_wow_pct.toFixed(0)}%` : '';
-    A.push({ p: big ? 0 : 2, sev: big ? 'red' : 'amber', icon: '',
-      text: `${esc(b.branch)} ต่ำกว่าค่าปกติ ${b.vs_avg_pct != null ? Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${wowBit} — เจาะดูสาเหตุ`,
-      act: 'เจาะสาขา', go: `homeDrillBranch('${(b.branch || '').replace(/'/g, "\\'")}')` });
-  });
+  // the branches below normal are NOT repeated here (review 2026-10-31 no. 12): the สาขาที่ต้องดู card answers it once
   if (sd && sd.total && sd.total.mom_pct != null && sd.total.mom_pct < -3)
     A.push({ p: 3, sev: 'amber', icon: '▼', text: `เดือนนี้ยอดขายต่ำกว่าช่วงเดียวกันของเดือนก่อน ${Math.abs(sd.total.mom_pct).toFixed(0)}% (${(periodOf(sd) || {}).label_th || ''} เทียบ ${(periodOf(sd) || {}).prev_label_th || ''})`, act: 'ดูยอดรายวัน', go: "switchTab('dailysales')" });
   // /api/analysis/anomalies scans the WHOLE history (its own panel wants that), and its
@@ -279,9 +272,9 @@ function renderHomeActionQueue(brief, fc, sd, scorecard, anomaly, leak, todo) {
   ((anomaly && anomaly.insights) || []).filter(a => a.severity === 'bad')
     .filter(a => !a.period || !_cut || String(a.period).slice(0, 7) >= _cut).slice(0, 3)
     .forEach(a => A.push({ p: 4, sev: 'amber', icon: '⚠', text: esc(String(a.message || '').replace(/^\s*⚠\s*/, '')) }));   // the message may carry its own ⚠
-  const up = branches.filter(b => b.status === 'up' && b.vs_avg_pct != null).sort((a, b) => b.vs_avg_pct - a.vs_avg_pct)[0];
-  if (up && up.vs_avg_pct >= 10)
-    A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_avg_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
+  const up = branches.filter(b => b.status === 'up' && b.vs_normal_pct != null).sort((a, b) => b.vs_normal_pct - a.vs_normal_pct)[0];
+  if (up && up.vs_normal_pct >= 10)
+    A.push({ p: 9, sev: 'green', icon: '▲', text: `${esc(up.branch)} เหนือปกติ +${up.vs_normal_pct.toFixed(0)}% — ดูว่าทำอะไรดีแล้วขยายผล`, act: 'เจาะสาขา', go: `homeDrillBranch('${(up.branch || '').replace(/'/g, "\\'")}')` });
   // วัตถุดิบและใบสั่งซื้อ: at most three of my open items from หน้างาน, overdue ones first
   if (todo && Array.isArray(todo.items)) {
     const isMine = i => typeof _shmMine === 'function' ? _shmMine(i) : (i.owner_modules || []).some(hasModule);
@@ -612,7 +605,8 @@ function renderHomeTrend7(sd) {
 }
 
 // ── Branch scorecard for Home (yesterday performance, richer than a bar) ──
-// DV2: ranked by the baht below the branch's own normal (the trailing 7-day average), most below first; "ต่างจากปกติ" is column 2 with the %
+// DV2: ranked by the baht below the branch's own normal (the median of the same weekday over 8 weeks, rules.daily_baseline), most below
+// first; "ต่างจากปกติ" is column 2 with the %
 // under it; the 5 lowest and the 5 highest show, the rest behind "ดูทั้งหมด"; the top bar's branch narrows the list.
 async function renderHomeScorecard(focusDate) {
   const el = document.getElementById('home-branch-scorecard');
@@ -625,21 +619,19 @@ async function renderHomeScorecard(focusDate) {
   let d;
   try { d = await api(`${API}/api/home/branch-scorecard?${p}`); }
   catch (e) { el.innerHTML = '<p class="text-xs text-red-500 py-3">โหลดไม่สำเร็จ</p>'; return null; }
-  const rows = (d.branches || []).slice().sort((a, b) => (a.vs_avg_baht ?? Infinity) - (b.vs_avg_baht ?? Infinity) || (b.revenue || 0) - (a.revenue || 0));
+  const rows = (d.branches || []).slice().sort((a, b) => (a.vs_normal_baht ?? Infinity) - (b.vs_normal_baht ?? Infinity) || (b.revenue || 0) - (a.revenue || 0));
   if (!rows.length) { el.innerHTML = '<p class="text-xs text-slate-400 py-3">ไม่มีข้อมูล</p>'; return d; }
   const dot = s => s === 'up' ? '<span title="เหนือปกติ">●</span>'
                  : s === 'down' ? '<span title="ต่ำกว่าปกติ">●</span>'
                  : '<span title="ปกติ">●</span>';
-  const pctCell = (v, hb = true) => v == null ? '<span class="text-slate-300">—</span>'
-    : `<span style="color:${(v >= 0) === hb ? 'var(--good-ink)' : 'var(--bad-ink)'}">${v > 0 ? '▲' : v < 0 ? '▼' : ''} ${Math.abs(v).toFixed(0)}%</span>`;
-  const vsCell = r => r.vs_avg_baht == null ? '<span class="text-slate-300">—</span>'
-    : `<span data-ph-line class="font-semibold" style="color:${r.vs_avg_baht >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(r.vs_avg_baht)}</span><span data-ph-line class="block" style="color:var(--text-muted)">${r.vs_avg_pct != null ? (r.vs_avg_pct > 0 ? '+' : '') + r.vs_avg_pct.toFixed(0) + '%' : ''} · ปกติ ${fmt(r.avg7)}</span>`;
+  const vsCell = r => r.vs_normal_baht == null ? `<span style="color:var(--text-muted)">${r.reported === false ? 'ข้อมูลยังไม่มา' : normalLbl(r.normal_weeks)}</span>`
+    : `<span data-ph-line class="font-semibold" style="color:${r.vs_normal_baht >= 0 ? 'var(--good-ink)' : 'var(--bad-ink)'}">${dvBaht(r.vs_normal_baht)}</span><span data-ph-line class="block" style="color:var(--text-muted)">${r.vs_normal_pct != null ? (r.vs_normal_pct > 0 ? '+' : '') + r.vs_normal_pct.toFixed(0) + '%' : ''} · ปกติ ${fmt(r.normal)}</span>`;
   const n = rows.length, TOP = 5, BOT = 5;
   el.innerHTML = `<table class="text-xs w-full" id="homeScoreTable">
     <thead><tr class="text-left border-b border-slate-200" style="color:var(--text-muted)">
       <th class="py-1.5 pr-2"></th><th class="py-1.5 pr-2">สาขา</th>
       <th class="py-1.5 pr-2 text-right">ต่างจากปกติ</th><th class="py-1.5 pr-2 text-right">ยอดเมื่อวาน</th>
-      <th class="py-1.5 pr-2 text-center">7 วัน</th><th class="py-1.5 pr-2 text-right">vs สัปดาห์ก่อน</th>
+      <th class="py-1.5 pr-2 text-center">7 วัน</th>
       <th class="py-1.5 pr-2 text-right">ยอด/หัว</th><th class="py-1.5 text-right">บิล</th>
     </tr></thead><tbody>` +
     rows.map((r, i) => `<tr class="border-t border-slate-100 hover:bg-indigo-50/40 cursor-pointer"${dvMoreAttr('homeScore', i, n, TOP, BOT)} onclick="homeDrillBranch('${(r.branch || '').replace(/'/g, "\\'")}')" title="เจาะดูสาขา ${esc(r.branch)}">
@@ -648,20 +640,19 @@ async function renderHomeScorecard(focusDate) {
       <td class="py-1.5 pr-2 text-right tabular-nums">${vsCell(r)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${fmt(r.revenue)}</td>
       <td class="py-1.5 pr-2 text-center">${_sparkSvg(r.spark, r.status === 'down' ? '#ef4444' : '#10b981')}</td>
-      <td class="py-1.5 pr-2 text-right tabular-nums">${pctCell(r.vs_wow_pct)}</td>
       <td class="py-1.5 pr-2 text-right tabular-nums">${r.rev_per_head != null ? fmt(r.rev_per_head) : '—'}</td>
       <td class="py-1.5 text-right tabular-nums">${fmtN(r.bills)}</td>
     </tr>`).join('') + `</tbody></table>` + dvMoreBtn('homeScore', n, TOP, BOT);
   // DV5 · the answer strip: the two branches furthest below their normal in baht, and the chain against its normal
-  const below = rows.filter(r => r.vs_avg_baht != null && r.vs_avg_baht < 0);
-  const pctS = r => r.vs_avg_pct != null ? `${ansPct(r.vs_avg_pct, 0)} · ปกติ ฿${fmt(r.avg7)}` : '';
-  const sumR = rows.reduce((a, r) => a + (r.revenue || 0), 0), sumV = rows.reduce((a, r) => a + (r.vs_avg_baht || 0), 0);
-  const base = sumR - sumV;
+  const below = rows.filter(r => r.vs_normal_baht != null && r.vs_normal_baht < 0);
+  const pctS = r => r.vs_normal_pct != null ? `${ansPct(r.vs_normal_pct, 0)} · ปกติ ฿${fmt(r.normal)}` : '';
+  // the chain against ITS normal (d.chain: the scope summed per day, then the median) - the phone hero's and the brief's figure
+  const C = d.chain || {};
   pageAnswer('home', [
-    below[0] && ansLine('ต่ำกว่าปกติมากสุด', `${below[0].branch} ${dvBaht(below[0].vs_avg_baht)}`, pctS(below[0]), 'bad', '#homeScoreTable'),
-    below[1] && ansLine('อันดับถัดไป', `${below[1].branch} ${dvBaht(below[1].vs_avg_baht)}`, pctS(below[1]), 'bad', '#homeScoreTable'),
-    rows.length && ansLine(getBranch() ? 'ยอดของสาขาเทียบปกติ' : 'ทั้งเครือเทียบปกติ', `฿${fmt(sumR)} · ${dvBaht(sumV)}`,
-      base > 0 ? `${ansPct(sumV / base * 100)} · ปกติ = เฉลี่ย 7 วันก่อนหน้า` : '', ansTone(sumV), '#homeScoreTable'),
+    below[0] && ansLine('ต่ำกว่าปกติมากสุด', `${below[0].branch} ${dvBaht(below[0].vs_normal_baht)}`, pctS(below[0]), 'bad', '#homeScoreTable'),
+    below[1] && ansLine('อันดับถัดไป', `${below[1].branch} ${dvBaht(below[1].vs_normal_baht)}`, pctS(below[1]), 'bad', '#homeScoreTable'),
+    rows.length && ansLine(getBranch() ? 'ยอดของสาขาเทียบปกติ' : 'ทั้งเครือเทียบปกติ', `฿${fmt(C.revenue || 0)} · ${C.vs_normal_baht != null ? dvBaht(C.vs_normal_baht) : normalLbl(C.normal_weeks)}`,
+      C.vs_normal_pct != null ? `${ansPct(C.vs_normal_pct)} · ปกติ = ค่ากลางวันเดียวกัน 8 สัปดาห์` : '', ansTone(C.vs_normal_baht || 0), '#homeScoreTable'),
   ]);
   return d;
 }

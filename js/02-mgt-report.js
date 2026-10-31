@@ -353,7 +353,7 @@ const MGT_I18N = {
     scope:'Scope: ', comparedWith:'   ·   compared with ', allBranches:'All branches', groupPfx:'Group: ',
     title:'Management Summary Report', generated:'Generated:', exportExcel:'Export Excel',
     printPdf:'Print / Export PDF', daily:'Daily', weekly:'Weekly', monthly:'Monthly', loading:'Loading…',
-    compDaily:'vs last week', compWeekly:'vs prev week', compMonthly:'vs prev month',
+    compDaily:'vs same weekday last week', compNormal:'vs normal', compWeekly:'vs prev week', compMonthly:'vs prev month',
     masterFranchise:'Master · Franchise breakdown', master:'Master', franchise:'Franchise',
     netSales:'Net Sales', netSalesVat:'Net Sales (ex-VAT)', grossProfit:'Gross Profit',
     afterFoodCost:'after food cost', marginAfter:'% margin · after food cost',
@@ -494,7 +494,7 @@ const MGT_I18N = {
     scope:'ขอบเขต: ', comparedWith:'   ·   เทียบกับ ', allBranches:'ทุกสาขา', groupPfx:'กลุ่ม: ',
     title:'รายงานสรุปผู้บริหาร', generated:'จัดทำเมื่อ:', exportExcel:'ส่งออก Excel',
     printPdf:'พิมพ์ / บันทึก PDF', daily:'รายวัน', weekly:'รายสัปดาห์', monthly:'รายเดือน', loading:'กำลังโหลด…',
-    compDaily:'เทียบสัปดาห์ก่อน', compWeekly:'เทียบสัปดาห์ก่อน', compMonthly:'เทียบเดือนก่อน',
+    compDaily:'เทียบวันเดียวกันสัปดาห์ก่อน', compNormal:'เทียบปกติ', compWeekly:'เทียบสัปดาห์ก่อน', compMonthly:'เทียบเดือนก่อน',
     masterFranchise:'แยกตามบริษัท · แฟรนไชส์', master:'บริษัท', franchise:'แฟรนไชส์',
     netSales:'ยอดขายสุทธิ', netSalesVat:'ยอดขายสุทธิ (ไม่รวม VAT)', grossProfit:'กำไรขั้นต้น',
     afterFoodCost:'หลังหักต้นทุนอาหาร', marginAfter:'% อัตรากำไร · หลังหักต้นทุนอาหาร',
@@ -602,7 +602,7 @@ const MGT_I18N = {
       ['จำนวนหัว','ลูกค้าที่รับบริการ (pax บนบิล) · ยอดต่อหัว = ยอดขายสุทธิ ÷ จำนวนหัว'],
       ['ยอดเฉลี่ย/บิล','ยอดขายสุทธิ ÷ จำนวนบิล — หนึ่งบิลอาจมีหลายหัว'],
       ['ต้นทุนอาหาร %','ต้นทุนตามสูตร BoM ÷ ยอดขายสุทธิของเดือนนั้น · เมนูที่ยังไม่มีต้นทุนคิดเป็น ฿0 ตัวเลขจึงเป็น“ขั้นต่ำ” — ดูความครอบคลุมในข้อ 3'],
-      ['ฐานการเปรียบเทียบ','รายวัน = วันเดียวกันของสัปดาห์ก่อน · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · รายเดือน = เดือนก่อน (ถ่วงตามวันในสัปดาห์เมื่อเดือนยังไม่ครบ)'],
+      ['ฐานการเปรียบเทียบ','รายวัน = ปกติ (ค่ากลางของวันเดียวกันใน 8 สัปดาห์ก่อน ไม่นับวันที่ไม่มียอดขาย) · รายสัปดาห์ = สัปดาห์ จ.–อา. ก่อนหน้า · รายเดือน = เดือนก่อน (ถ่วงตามวันในสัปดาห์เมื่อเดือนยังไม่ครบ)'],
       ['ประมาณการ','อัตราเฉลี่ยถ่วงตามวันในสัปดาห์ — ต่อยอดจากวันที่ผ่านมาโดยอิงรูปแบบวันของเดือนก่อน'],
       ['ส่วนลดหนัก','บิลที่ให้ส่วนลดตั้งแต่ 30% ของมูลค่าก่อนลด'],
       ['ส่วนลดจ่ายเงินสด','บิลส่วนลดที่ชำระด้วยเงินสดเป็นหลัก — รูปแบบความเสี่ยงเงินขาด'],
@@ -672,8 +672,12 @@ function renderMgtReport(j, jM, jF) {
   const isYearly = j.period === 'yearly';          // PR-PP2: its comparison is the year before; its trend is monthly
   const isMonthTrend = isMonthly || isYearly;
   const compShort = isDaily ? T.compDaily : isYearly ? T.compYearly : isMonthly ? T.compMonthly : T.compWeekly;
-  // Delta badge label: daily & weekly compare week-over-week; monthly is month-over-month; yearly year-over-year.
-  const dLbl = isYearly ? 'YoY' : isMonthly ? 'MoM' : 'WoW';
+  // 2026-10-31 (owner, the one daily baseline): the DAILY headline and branch league compare with "ปกติ" - the median of the
+  // same weekday over 8 weeks (backend rules.daily_baseline, the phone hero's and the Daily Brief's figure). The sections
+  // below them (menus, dayparts, payments, the GP bridge) keep the same weekday last week: a menu or a tender has no normal.
+  const compHead = isDaily ? T.compNormal : compShort;
+  // Delta badge label: daily compares with the normal; weekly week-over-week; monthly month-over-month; yearly year-over-year.
+  const dLbl = isDaily ? T.compNormal : isYearly ? 'YoY' : isMonthly ? 'MoM' : 'WoW';
   // WoW badge straight from current/prev values (the §6/§8/§9/§10 sections whose
   // backend supplies a prev figure rather than a precomputed %). prev=0 → "—".
   const wowVal = (cur, prev) => (prev == null) ? '' : wow(prev ? (cur - prev) / prev * 100 : null);
@@ -736,7 +740,7 @@ function renderMgtReport(j, jM, jF) {
   // §1 — Headline KPIs (incl. Gross Profit; WoW + YoY where available)
   const G = j.gp || {};
   const kpis = `<div class="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mgt-atom">
-      ${kpi(T.netSalesVat, bigCell(H.revenue),   compShort,  H.rev_wow_pct, yoyOk ? H.rev_yoy_pct : null)}
+      ${kpi(T.netSalesVat, bigCell(H.revenue),   compHead,  H.rev_wow_pct, yoyOk ? H.rev_yoy_pct : null)}
       ${kpi(T.grossProfit, bigCell(G.gp),
             G.cost_basis === 'unavailable'
               ? `<span style="color:var(--amber-ink)">${isTH ? 'ไม่มีข้อมูลต้นทุนรายวันก่อน ' + (G.cost_from || '') : 'no daily cost data before ' + (G.cost_from || '')}</span>`
@@ -932,7 +936,7 @@ function renderMgtReport(j, jM, jF) {
         <th class="text-left py-2 pl-1 w-5">#</th><th class="py-2 w-7"></th>
         <th class="text-left py-2">${T.branch}</th><th class="text-right py-2">${T.netSales}</th>
         <th class="text-right py-2">${T.covers}</th><th class="text-right py-2">${T.spendHeadShort}</th>
-        <th class="text-right py-2">${T.share}</th><th class="text-right py-2${(_lgYoy || _lgTgt) ? '' : ' pr-1'}">${compShort}</th>
+        <th class="text-right py-2">${T.share}</th><th class="text-right py-2${(_lgYoy || _lgTgt) ? '' : ' pr-1'}">${compHead}</th>
         ${_lgYoy ? `<th class="text-right py-2">${T.lgYoy}</th>` : ''}${_lgTgt ? `<th class="text-right py-2">${T.lgTarget}</th><th class="text-right py-2 pr-1">${T.lgVsTarget}</th>` : ''}
       </tr></thead><tbody>${brRows || `<tr><td class="py-3 text-slate-400" colspan="${_lgCols}">${T.noBranchData}</td></tr>`}</tbody>
     </table></div>`;
@@ -1170,8 +1174,8 @@ function renderMgtReport(j, jM, jF) {
   const mag    = v => v == null ? '' : Math.abs(v).toFixed(1) + '%';
   const signed = v => v == null ? '' : (v >= 0 ? '+' : '−') + Math.abs(v).toFixed(1) + '%';
   const moved  = (v, up, dn, flat) => v == null ? flat : v >= 1 ? up : v <= -1 ? dn : flat;
-  const compW  = isTH ? (isDaily ? 'วันเดียวกันสัปดาห์ก่อน' : isYearly ? 'ปีก่อน' : isMonthly ? 'เดือนก่อนหน้า' : 'สัปดาห์ก่อนหน้า')
-                      : (isDaily ? 'the same weekday last week' : isYearly ? 'the previous year' : isMonthly ? 'the previous month' : 'the previous week');
+  const compW  = isTH ? (isDaily ? 'ปกติ (ค่ากลางของวันเดียวกัน 8 สัปดาห์)' : isYearly ? 'ปีก่อน' : isMonthly ? 'เดือนก่อนหน้า' : 'สัปดาห์ก่อนหน้า')
+                      : (isDaily ? 'the normal (median of the same weekday over 8 weeks)' : isYearly ? 'the previous year' : isMonthly ? 'the previous month' : 'the previous week');
   const pNoun  = isTH ? (isDaily ? 'วัน' : isYearly ? 'ปี' : isMonthly ? 'เดือน' : 'สัปดาห์') : (isDaily ? 'day' : isYearly ? 'year' : isMonthly ? 'month' : 'week');
   const brs    = j.branches || [];
   const ex     = [];
@@ -1613,7 +1617,7 @@ function renderMgtReport(j, jM, jF) {
   const footnote = isTH
     // RV-M: the report is a light sheet in both themes - its foot takes the sheet's own muted ink (the theme's dark-mode grey read 3.1:1 on it),
     // and stock mode names no BoM
-    ? `<p class="text-[11px] px-1 mgt-foot" style="color:#5f6c80">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว ${stkWord('(อิงสูตร BoM)', '(อิงต้นทุนต่อจาน)')}, ${isDaily ? 'วันนี้เทียบสัปดาห์ก่อน' : isYearly ? 'ปีนี้เทียบปีก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % ${stkWord('เป็นตัวเลขอิง BoM ของ', 'อิงต้นทุนต่อจานของ')} ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
+    ? `<p class="text-[11px] px-1 mgt-foot" style="color:#5f6c80">ยอดขายสุทธิเป็นยอดไม่รวม VAT (ยอดรวม ÷ 1.07) · ต้นทุนต่อหัว = ต้นทุนอาหารของเมนู ÷ จำนวนหัว ${stkWord('(อิงสูตร BoM)', '(อิงต้นทุนต่อจาน)')}, ${isDaily ? 'วันนี้เทียบวันเดียวกันสัปดาห์ก่อน' : isYearly ? 'ปีนี้เทียบปีก่อน' : isMonthly ? 'เดือนนี้เทียบเดือนก่อน' : 'สัปดาห์นี้เทียบสัปดาห์ก่อน'} · ต้นทุนอาหาร % ${stkWord('เป็นตัวเลขอิง BoM ของ', 'อิงต้นทุนต่อจานของ')} ${footMonth} · ข้อมูลล่าสุดถึงวันที่ ${j.latest_day || '—'}</p>`
     : `<p class="text-[11px] text-slate-400 px-1 mgt-foot">Net sales are ex-VAT (total ÷ 1.07). Cost / head = dish food COGS ÷ covers (BoM basis), this ${isDaily ? 'day' : isYearly ? 'year' : isMonthly ? 'month' : 'week'} vs ${compShort.replace('vs ', '')}. Food cost % is the BoM figure for ${footMonth}. Latest data day: ${j.latest_day || '—'}.</p>`;
   // Section verdict lines — one scannable takeaway (colour = good/watch/bad) at the
   // top of §3/§4/§8/§9/§10, matching §6/§11. Empty string when the data is absent.

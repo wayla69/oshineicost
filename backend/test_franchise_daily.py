@@ -51,7 +51,9 @@ def test_the_day_is_the_last_finished_day_and_matches_the_summary(world):
     assert D["revenue"] == row["revenue"] and D["bills"] == row["bills"] and D["customers"] == row["customers"]
     assert D["weekday"] == row["weekday"] == "พุธ"                                          # 3 June 2026 is a Wednesday
     assert D["per_head"] == round(D["revenue"] / D["customers"]) and D["per_bill"] == round(D["revenue"] / D["bills"])
-    assert D["last_week_date"] == "2026-05-27" and D["vs_last_week_pct"] == row["vs_last_week_pct"]
+    # THE daily comparison (2026-10-31): against "ปกติ", the median of the same weekday over 8 weeks - the same figure as the
+    # summary's daily table and the scorecard's row for the branch
+    assert "vs_last_week_pct" not in D and D["vs_normal_pct"] == row["vs_normal_pct"] and D["normal_weeks"] == row["normal_weeks"]
     assert not any("year" in k or "yoy" in k for k in D)                                   # no last-year figure for the day
 
 

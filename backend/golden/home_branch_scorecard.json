@@ -1,17 +1,23 @@
 {
+ "baseline_weeks": 8,
+ "below_count": 0,
  "branches": [
   {
-   "avg7": 950.0,
+   "below_normal": false,
    "bills": 1,
    "branch": "BranchA",
-   "cust_vs_avg_pct": 0.0,
+   "cust_vs_normal_pct": null,
    "customers": 4,
    "discount_pct": 2.1,
-   "discount_pct_avg7": 2.1,
+   "discount_pct_normal": null,
+   "normal": null,
+   "normal_customers": null,
+   "normal_rph": null,
+   "normal_weeks": 0,
    "reported": true,
    "rev_per_head": 237.5,
    "revenue": 950.0,
-   "rph_vs_avg_pct": 0.0,
+   "rph_vs_normal_pct": null,
    "spark": [
     0,
     0,
@@ -22,24 +28,26 @@
     950.0,
     950.0
    ],
-   "status": "ok",
-   "vs_avg_baht": 0.0,
-   "vs_avg_pct": 0.0,
-   "vs_wow_pct": null,
-   "wow": null
+   "status": "nobase",
+   "vs_normal_baht": null,
+   "vs_normal_pct": null
   },
   {
-   "avg7": 950.0,
+   "below_normal": false,
    "bills": 1,
    "branch": "BranchB",
-   "cust_vs_avg_pct": 0.0,
+   "cust_vs_normal_pct": null,
    "customers": 4,
    "discount_pct": 2.1,
-   "discount_pct_avg7": 2.1,
+   "discount_pct_normal": null,
+   "normal": null,
+   "normal_customers": null,
+   "normal_rph": null,
+   "normal_weeks": 0,
    "reported": true,
    "rev_per_head": 237.5,
    "revenue": 950.0,
-   "rph_vs_avg_pct": 0.0,
+   "rph_vs_normal_pct": null,
    "spark": [
     0,
     0,
@@ -50,13 +58,22 @@
     950.0,
     950.0
    ],
-   "status": "ok",
-   "vs_avg_baht": 0.0,
-   "vs_avg_pct": 0.0,
-   "vs_wow_pct": null,
-   "wow": null
+   "status": "nobase",
+   "vs_normal_baht": null,
+   "vs_normal_pct": null
   }
  ],
+ "chain": {
+  "bills": 2,
+  "customers": 8.0,
+  "normal": null,
+  "normal_dates": [],
+  "normal_weeks": 0,
+  "revenue": 1900.0,
+  "status": "nobase",
+  "vs_normal_baht": null,
+  "vs_normal_pct": null
+ },
  "date": "2026-06-03",
  "days": [
   "2026-05-27",
@@ -69,6 +86,8 @@
   "2026-06-03"
  ],
  "missing": [],
+ "normal_label": "ยังไม่มีฐาน",
+ "normal_label_short": "ยังไม่มีฐาน",
  "reported": 2,
  "skipped_bills": null,
  "skipped_day": null

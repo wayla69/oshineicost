@@ -44,12 +44,12 @@ def test_the_new_sections_have_the_agreed_shape(world):
     assert [x["date"] for x in s["daily"]] == ["2026-06-01", "2026-06-02", "2026-06-03"]          # the month up to its last day
     assert s["daily_through"] == "2026-06-03" == s["through"] == s["last_day"]["date"]
     for x in s["daily"]:
-        assert set(x) == {"date", "weekday", "revenue", "bills", "customers", "per_bill", "vs_last_week_pct"}
+        assert set(x) == {"date", "weekday", "revenue", "bills", "customers", "per_bill", "vs_normal_pct", "normal_weeks"}
     first = s["daily"][0]
     assert first["weekday"] == "จันทร์"                                                         # 1 June 2026 is a Monday
     # the dashboard's revenue rule: 1070 / 1.07 - 50 service charge = 950, one bill of 4 customers
     assert first["revenue"] == 950.0 and first["bills"] == 1 and first["customers"] == 4 and first["per_bill"] == 950
-    assert first["vs_last_week_pct"] is None                                                     # 25 May has no sales
+    assert first["vs_normal_pct"] is None and first["normal_weeks"] == 0                          # no Monday before has sales
     t = d["trend_12m"]
     assert {"months", "latest"} == set(t) and t["months"] and t["latest"] == t["months"][-1]
     for m in t["months"]:
@@ -95,15 +95,15 @@ def _flat_numbers(o):
 
 def test_the_daily_table_holds_finished_days_only(bkk_frozen):
     """rules.closed_day_clause: the day still trading (Thai today) never reaches the table or the bars, even when the
-    caller asks for it, and the change is on the same weekday a week earlier."""
+    caller asks for it, and the change is against the normal: the median of the same weekday over the 8 weeks before."""
     from routers import franchise as F
     con = sqlite3.connect(":memory:")
     con.execute("CREATE TABLE sales_transaction(branch_id INT, sold_at TEXT, total_inc_vat REAL, service_charge REAL, "
                 "customer_count INT, source TEXT)")
     today = con.execute("SELECT date('now','+7 hours')").fetchone()[0]
     td = date.fromisoformat(today)
-    y, wk = (td - timedelta(days=1)).isoformat(), (td - timedelta(days=8)).isoformat()
-    for d, amt in ((today, 10700.0), (y, 2140.0), (wk, 1070.0)):
+    y, wk, wk2 = (td - timedelta(days=1)).isoformat(), (td - timedelta(days=8)).isoformat(), (td - timedelta(days=15)).isoformat()
+    for d, amt in ((today, 10700.0), (y, 2140.0), (wk, 1070.0), (wk2, 1070.0)):
         con.execute("INSERT INTO sales_transaction VALUES(2, ?, ?, 0, 2, 'Easy')", (d + "T12:00:00", amt))
     sales = {}
     F._daily(con, sales, 2, today)                                     # asked for today: today stays out
@@ -115,7 +115,7 @@ def test_the_daily_table_holds_finished_days_only(bkk_frozen):
     assert sales["daily_through"] == y and sales["last_day"]["revenue"] == 2000.0
     assert {x["day"]: x["revenue"] for x in sales["series_30d"]}[y] == 2000.0
     row = [x for x in sales["daily"] if x["date"] == y][0]
-    assert row["vs_last_week_pct"] == 100.0 and row["per_bill"] == 2000 and row["customers"] == 2
+    assert row["vs_normal_pct"] == 100.0 and row["normal_weeks"] == 2 and row["per_bill"] == 2000 and row["customers"] == 2
     assert all(x["date"] < today for x in sales["daily"])
 
 

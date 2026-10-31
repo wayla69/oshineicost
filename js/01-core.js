@@ -3213,6 +3213,18 @@ function deskShow(btn) {
   const ed = note.nextElementSibling; if (ed && ed.classList.contains('desk-only')) ed.classList.add('desk-force');
 }
 // a signed baht figure: +฿193.0K / −฿537.0K
+// THE daily baseline (owner 2026-10-31, backend rules.daily_baseline): "ปกติ" = the median of the same weekday over the 8 weeks
+// before, days without bills skipped. The verdict (below_normal, status) comes from the backend; these are only the words and
+// the one list every screen counts ("N สาขาต่ำกว่าปกติ" = scorecard.below_count = belowNormalRows(sc).length).
+function normalLbl(n, short) {
+  n = n || 0;
+  if (n < 2) return 'ยังไม่มีฐาน';
+  if (n < 8) return `เทียบปกติจาก ${n} สัปดาห์`;
+  return short ? 'เทียบปกติ' : 'เทียบปกติ (ค่ากลาง 8 สัปดาห์)';
+}
+function belowNormalRows(sc) {
+  return ((sc || {}).branches || []).filter(b => b.below_normal).sort((a, b) => (a.vs_normal_pct ?? 0) - (b.vs_normal_pct ?? 0));
+}
 function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
 
 // ── DV5 (phone table review 2026-10-25) · the ANSWER STRIP: three lines at the top of an analytics page on a phone in แตะง่าย - the

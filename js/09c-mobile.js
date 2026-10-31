@@ -309,11 +309,14 @@ async function phLoadYesterday() {
     const brief = await _msBriefCache[''];
     if (!document.getElementById('phYestV')) return;                    // another view replaced the home meanwhile
     if (!brief || !brief.yesterday) { document.getElementById('phYest').hidden = true; return; }
-    const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow, wowPct = wow ? Math.round((rev - wow) / wow * 1000) / 10 : null;
+    const rev = brief.revenue_yesterday || 0, vsN = brief.revenue_vs_normal_pct;
     document.getElementById('phYestL').textContent = brief.skipped_day ? 'ยอดขายวันล่าสุดที่ข้อมูลครบ' : 'ยอดขายเมื่อวาน';
     v.textContent = '฿' + fmtN(rev);
     // PR-PD (owner 2026-10-29, no. 16): the change is a pill with its arrow and word, never a colour alone
-    document.getElementById('phYestS').innerHTML = wowPct == null ? '' : `${_phPill(wowPct)} <span>เทียบวันเดียวกันสัปดาห์ก่อน</span>`;
+    // 2026-10-31: against "ปกติ" (the median of the same weekday over 8 weeks, rules.daily_baseline) - the one daily base
+    document.getElementById('phYestS').innerHTML = vsN == null
+      ? `<span class="ph-pill">${normalLbl(brief.normal_weeks, true)}</span>`
+      : `${_phPill(vsN)} <span>${normalLbl(brief.normal_weeks, true)}</span>`;
     phLoadYesterdayLines();
   } catch (e) {
     delete _msBriefCache[''];
@@ -330,20 +333,18 @@ function _phPill(pct, goodUp = true) {
   const up = pct > 0, flat = pct === 0, good = flat ? null : (up === goodUp);
   return `<span class="ph-pill ${flat ? '' : good ? 'ph-pill-good' : 'ph-pill-bad'}">${flat ? '±' : up ? '▲' : '▼'} ${Math.abs(pct).toFixed(Math.abs(pct) >= 10 ? 0 : 1)}%</span>`;
 }
-// the cause behind a branch below its normal (scorecard: cust_vs_avg_pct, rph_vs_avg_pct, discount_pct): the parts that moved, largest first
+// the cause behind a branch below its normal (scorecard: cust_vs_normal_pct, rph_vs_normal_pct, discount_pct against discount_pct_normal -
+// all on the one daily baseline): the parts that moved, largest first
 function _phCauseTxt(b) {
   const parts = [];
-  if (b.cust_vs_avg_pct != null && b.cust_vs_avg_pct <= -8) parts.push({ k: Math.abs(b.cust_vs_avg_pct), t: `ลูกค้า −${Math.abs(b.cust_vs_avg_pct).toFixed(0)}%` });
-  if (b.rph_vs_avg_pct != null && b.rph_vs_avg_pct <= -5) parts.push({ k: Math.abs(b.rph_vs_avg_pct), t: `ยอด/หัว −${Math.abs(b.rph_vs_avg_pct).toFixed(0)}%` });
-  const dp = b.discount_pct, da = b.discount_pct_avg7;
+  if (b.cust_vs_normal_pct != null && b.cust_vs_normal_pct <= -8) parts.push({ k: Math.abs(b.cust_vs_normal_pct), t: `ลูกค้า −${Math.abs(b.cust_vs_normal_pct).toFixed(0)}%` });
+  if (b.rph_vs_normal_pct != null && b.rph_vs_normal_pct <= -5) parts.push({ k: Math.abs(b.rph_vs_normal_pct), t: `ยอด/หัว −${Math.abs(b.rph_vs_normal_pct).toFixed(0)}%` });
+  const dp = b.discount_pct, da = b.discount_pct_normal;
   if (dp != null && dp >= 2.5 && (da == null || dp >= da + 1)) parts.push({ k: dp * 4, t: `ส่วนลด ${dp.toFixed(1)}%` });
   const t = parts.sort((a, c) => c.k - a.k).slice(0, 2).map(x => x.t).join(', ');
   return t ? `(${t})` : '';
 }
-function _phDownRows(sc) {
-  return ((sc || {}).branches || []).filter(b => b.reported !== false && (b.status === 'down' || (b.vs_avg_pct != null && b.vs_avg_pct <= -8)))
-    .sort((a, b) => (a.vs_avg_pct ?? 0) - (b.vs_avg_pct ?? 0));
-}
+function _phDownRows(sc) { return belowNormalRows(sc); }      // the scorecard's one verdict (below_normal), lowest first
 async function phLoadYesterdayLines() {
   const c = document.getElementById('phYestCause'), t = document.getElementById('phYestTrust'), pd = document.getElementById('phYestPend');
   if (!c || !t) return;
@@ -353,7 +354,7 @@ async function phLoadYesterdayLines() {
     if (!document.getElementById('phYestCause')) return;
     const rows = (sc && sc.branches) || [], down = _phDownRows(sc);
     // phone B (owner 2026-10-30): the cause line as chips - the count first (red), then the two branches with what moved
-    const top = down.slice(0, 2).map(b => { const why = _phCauseTxt(b).replace(/^\(|\)$/g, ''); return `<span class="ph-cz">${esc(b.branch)}${b.vs_avg_pct != null ? ' −' + Math.abs(b.vs_avg_pct).toFixed(0) + '%' : ''}${why ? ' · ' + esc(why) : ''}</span>`; });
+    const top = down.slice(0, 2).map(b => { const why = _phCauseTxt(b).replace(/^\(|\)$/g, ''); return `<span class="ph-cz">${esc(b.branch)}${b.vs_normal_pct != null ? ' −' + Math.abs(b.vs_normal_pct).toFixed(0) + '%' : ''}${why ? ' · ' + esc(why) : ''}</span>`; });
     c.innerHTML = down.length ? `<span class="ph-cz ph-cz-bad">${fmtN(down.length)} สาขาต่ำกว่าปกติ</span>${top.join('')}` : '<span class="ph-cz ph-cz-good">ทุกสาขาอยู่ในเกณฑ์ปกติ</span>';
     c.hidden = !rows.length;
     const miss = sc.missing || rows.filter(b => b.reported === false).map(b => b.branch);
@@ -2614,8 +2615,8 @@ function msRenderSummary() {
 }
 
 // ── เมื่อวาน: the Daily Brief's first card on the phone. The last finished day's
-// revenue against the same weekday last week, its customers and bills, and the
-// branches below their own normal — from the same /api/home/brief and
+// revenue against its normal (the median of the same weekday over 8 weeks, rules.daily_baseline),
+// its customers and bills, and the branches below their own normal — from the same /api/home/brief and
 // /api/home/branch-scorecard the desktop reads, so the two never disagree. Tap →
 // the worst branch's sheet (the chosen branch's own sheet when one is picked).
 // Hidden when the reader picked an older month: that month has no "yesterday". ──
@@ -2646,22 +2647,21 @@ async function msLoadYesterday() {
 function msYestListHtml(sc) {
   const rows = ((sc || {}).branches || []).slice();
   if (rows.length < 2) return '';
-  const k = b => b.reported === false ? 1e9 : (b.vs_avg_pct ?? 0);
+  const k = b => b.reported === false ? 1e9 : b.vs_normal_pct == null ? 1e8 : b.vs_normal_pct;
   rows.sort((a, b) => k(a) - k(b));
   return rows.map(b => {
-    const miss = b.reported === false, v = b.vs_avg_pct, down = !miss && (b.status === 'down' || (v != null && v <= -8));
+    const miss = b.reported === false, v = b.vs_normal_pct, down = !!b.below_normal;
     const why = _phCauseTxt(b).replace(/^\(|\)$/g, '');
-    return msRow2({ tone: miss ? '' : down ? 'bad' : 'good', title: esc(b.branch), val: miss ? '' : '฿' + fmt(b.revenue || 0),
-      fact: miss ? 'ข้อมูลยังไม่มา' : `${v != null ? msPchip(Math.round(v)) + ' ' : ''}เทียบปกติ 7 วัน${why ? ' · ' + esc(why) : ''}`, branch: b.branch });
+    return msRow2({ tone: miss || v == null ? '' : down ? 'bad' : 'good', title: esc(b.branch), val: miss ? '' : '฿' + fmt(b.revenue || 0),
+      fact: miss ? 'ข้อมูลยังไม่มา' : `${v != null ? msPchip(Math.round(v)) + ' ' : ''}${normalLbl(b.normal_weeks, true)}${why ? ' · ' + esc(why) : ''}`, branch: b.branch });
   }).join('');
 }
 function msYesterdayHtml(brief, sc, br) {
-  const rev = brief.revenue_yesterday || 0, wow = brief.revenue_wow;
-  const wowPct = wow ? Math.round((rev - wow) / wow * 1000) / 10 : null;
+  const rev = brief.revenue_yesterday || 0, vsN = brief.revenue_vs_normal_pct;
   const d = new Date(brief.yesterday + 'T00:00:00');
   const when = isNaN(d) ? brief.yesterday : `${_MS_TH_DOW[d.getDay()]} ${d.getDate()} ${_MS_TH_MON[d.getMonth()]}`;
   const rows = ((sc || {}).branches || []);
-  // the Daily Brief's rule (js/07-home.js): status down, or 8 % or more under the branch's trailing average
+  // the scorecard's one verdict (below_normal: 8 % or more under the median of the same weekday over 8 weeks);
   // PR-PD no. 4: a branch whose bills have not arrived (reported: false) is not "down"
   const down = _phDownRows(sc);
   const miss = (sc && sc.missing) || rows.filter(b => b.reported === false).map(b => b.branch);
@@ -2669,17 +2669,15 @@ function msYesterdayHtml(brief, sc, br) {
   let line3 = '', go = '', target = '';
   if (br) {
     const me = rows.find(b => b.branch === br);
-    if (me && me.vs_avg_pct != null) {
-      line3 = me.vs_avg_pct <= -8
-        ? `<span style="${bad}">ต่ำกว่าค่าปกติของสาขา ${Math.abs(me.vs_avg_pct).toFixed(0)}%</span>`
-        : `<span style="${good}">อยู่ในเกณฑ์ปกติของสาขา (${me.vs_avg_pct >= 0 ? '+' : ''}${me.vs_avg_pct.toFixed(0)}% เทียบค่าเฉลี่ย 7 วัน)</span>`;
+    if (me && me.vs_normal_pct != null) {
+      line3 = me.below_normal
+        ? `<span style="${bad}">ต่ำกว่าปกติของสาขา ${Math.abs(me.vs_normal_pct).toFixed(0)}%</span>`
+        : `<span style="${good}">อยู่ในเกณฑ์ปกติของสาขา (${me.vs_normal_pct >= 0 ? '+' : ''}${me.vs_normal_pct.toFixed(0)}% ${normalLbl(me.normal_weeks, true)})</span>`;
     }
     go = 'msOpenBranch(this.dataset.br)'; target = br;
   } else {
-    // PR-PD no. 1: the cause beside the branch ("ปลวกแดง −40% ลูกค้า −35%"), so the call is about the right thing
-    line3 = down.length
-      ? `<span style="${bad}">${down.length} สาขาต่ำกว่าปกติ</span> · ${down.slice(0, 2).map(b => { const why = _phCauseTxt(b); return `${esc(b.branch)} ${b.vs_avg_pct != null ? b.vs_avg_pct.toFixed(0) + '%' : ''}${why ? ` <span style="${_msMuted}">${why}</span>` : ''}`; }).join(' · ')}`
-      : `<span style="${good}">ทุกสาขาอยู่ในเกณฑ์ปกติ</span>`;
+    // 2026-10-31 (review no. 12, one fact once): the count of branches below normal is the phone hero's; the list right
+    // below this card (msYestListHtml) is where every branch lives, so this card repeats neither
     if (down.length) { go = 'msOpenBranch(this.dataset.br)'; target = down[0].branch; }
     else go = "msSwitchView('branches')";
   }
@@ -2692,7 +2690,7 @@ function msYesterdayHtml(brief, sc, br) {
   if (!br && miss.length) skipNote += `<p style="font-size:13px;color:var(--amber-ink);margin-top:4px">ข้อมูลยังไม่มา ${fmtN(miss.length)} สาขา: ${esc(miss.slice(0, 4).join(' · '))}${miss.length > 4 ? ` +${miss.length - 4}` : ''} — ไม่นับเป็นสาขาต่ำกว่าปกติ</p>`;
   return `<div data-br="${esc(target)}" onclick="${go}" role="button" aria-label="เมื่อวาน — แตะเพื่อดูรายสาขา" style="cursor:pointer;min-height:44px">
     <p style="font-size:13px;${_msMuted}">${brief.skipped_day ? 'วันล่าสุดที่ข้อมูลครบ' : 'เมื่อวาน'} · ${esc(when)}${br ? ' · ' + esc(br) : ''}</p>
-    <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${wowPct != null ? msPchip(wowPct) : ''}<span style="font-size:13px;${_msMuted}">เทียบวันเดียวกันสัปดาห์ก่อน</span></p>
+    <p style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:2px"><b style="font-size:24px;line-height:1.1">${fmt(rev)}</b>${vsN != null ? msPchip(vsN) : ''}<span style="font-size:13px;${_msMuted}">${normalLbl(brief.normal_weeks, true)}</span></p>
     <p style="font-size:13px;${_msMuted};margin-top:2px">ลูกค้า ${fmtN(brief.customer_yesterday || 0)} · ${fmtN(brief.tx_yesterday || 0)} บิล · ${fmt(brief.avg_ticket_yesterday || 0)}/บิล</p>
     ${line3 ? `<p style="font-size:13px;margin-top:6px;display:flex;align-items:center;gap:6px"><span style="flex:1;min-width:0">${line3}</span><span style="${_msMuted}">›</span></p>` : ''}
     ${skipNote}
