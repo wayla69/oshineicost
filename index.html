@@ -2610,6 +2610,7 @@ body.ph-on .tskf-btn, body.ph-on #shmFilter .tskf-btn { flex: 0 0 auto; min-widt
   body.ph-on .content-area, body.ph-on.franchise-phone .content-area, body.ph-on.supply-phone .content-area { padding-bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }
   body.ph-on .ohb-actbar, body.ph-on .brn-sticky-bottom { bottom: calc(56px - 76px + env(safe-area-inset-bottom, 0px)) !important; }
   body.ph-on #uiToasts { bottom: calc(76px + env(safe-area-inset-bottom, 0px)); }   /* PR-D6: above the bottom navigation */
+  body.ph-on #home-branch-scorecard { max-height: none !important; overflow: visible !important; }   /* 2026-10-31: the card list is part of the page, never a box that scrolls inside it */
   /* the branch and franchise logins had their top bar laid over the tab strip (it held the user chip, now a row of ฉัน); a pinned login has no
      title or filters there (switchTab hides the scope of a page with its own controls), so with the strip gone the bar goes too */
   body.ph-on.supply-phone .top-bar, body.ph-on.franchise-phone .top-bar { display: none !important; }
