@@ -74,6 +74,9 @@ async function loadHome() {
     renderHomeMoversRevenue(movers);
     renderHomePeakHours(hourly, brief.yesterday);
     renderHomeTrend7(trend7);
+    // phone review item 11 (owner 2026-10-31): one chart per question on a phone - the month's pace stays; ชั่วโมงพีค and เทรนด์ 7 วัน fold
+    const pk = document.getElementById('chartHomePeak');
+    uiPhoneFold(pk && pk.closest('.grid'), 'กราฟอื่น (2): ชั่วโมงพีค · เทรนด์ 7 วัน');
 
     // External market & industry context (independent — never blocks the brief)
     loadMarket();

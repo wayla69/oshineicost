@@ -813,16 +813,25 @@ function phOn() { return document.body.classList.contains('ph-on'); }
 // inside the scaled frame (js/09c-mobile.js); the A4 report body, charts and icons keep their sizes. Marked data-ptf so it is undone exactly.
 const PH_TEXT_FLOOR = 12;
 let _phFloorT = null, _phFloorObs = null;
+// Phone review item 7 (owner 2026-10-31): while a page loads, a phone shows grey blocks, not the words - an element whose whole text is a
+// loading line ("กำลังโหลด…", "กำลังคำนวณ…") is drawn as a skeleton bar (.ui-skel-line: the words stay for a screen reader), in the same pass
+const _PH_BUSY_RE = /^กำลัง(?:โหลด|คำนวณ|ตรวจสอบ|เปิด)[^\s]{0,12}?[.…]*$/;
 function phTextFloor() {
   const on = phOn() && !document.body.classList.contains('ph-fit');
-  if (!on) { document.querySelectorAll('[data-ptf]').forEach(el => { if (!el.dataset.phf) el.style.removeProperty('font-size'); delete el.dataset.ptf; }); return 0; }
+  if (!on) {
+    document.querySelectorAll('[data-ptf]').forEach(el => { if (!el.dataset.phf) el.style.removeProperty('font-size'); delete el.dataset.ptf; });
+    document.querySelectorAll('.ui-skel-line').forEach(el => el.classList.remove('ui-skel-line'));
+    return 0;
+  }
   const root = document.querySelector('.content-area') || document.body;
+  root.querySelectorAll('.ui-skel-line').forEach(el => { if (el.childElementCount || !_PH_BUSY_RE.test((el.textContent || '').trim())) el.classList.remove('ui-skel-line'); });
   const seen = new Set(), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   let n, lifted = 0;
   while ((n = w.nextNode())) {
     const el = n.parentElement;
     if (!el || seen.has(el) || !n.textContent.trim()) continue;
     seen.add(el);
+    if (!el.childElementCount && _PH_BUSY_RE.test(n.textContent.trim()) && !el.closest('button, select, option, .ph-frame')) el.classList.add('ui-skel-line');
     if (el.offsetParent === null || el.closest('svg, #mgtRptBody, .ph-frame')) continue;
     if (parseFloat(getComputedStyle(el).fontSize) < PH_TEXT_FLOOR) { el.style.fontSize = PH_TEXT_FLOOR + 'px'; el.dataset.ptf = '1'; lifted++; }
   }
@@ -3227,6 +3236,132 @@ function belowNormalRows(sc) {
 }
 function dvBaht(v) { const x = _num(v); return x == null ? '—' : (x >= 0 ? '+' : '−') + '฿' + fmt(Math.abs(x)); }
 
+// ── Phone review set 2 (owner 2026-10-31, docs/UI_REVIEW_MOBILE_2026-10-31.md items 3, 7, 8) · the shared phone building blocks ──────────
+// uiRow2(o) - THE list row (item 3): line 1 = the name (one line, ellipsis) + the ONE key number (bold, right, tabular figures); line 2 = a status
+// chip of at most 6 characters (uiChipShort, never wraps) + one short fact (one line, ellipsis) + an optional thin bar; everything else sits
+// behind a tap: o.more = the row expands, o.branch = the branch sheet (msOpenBranch), o.go = a call. The bar on the left = the row's meaning
+// (red money lost / overdue, amber ต้องดู, green ok, grey no data). o = { title, val, valTone, tone, chips, chip: { t, tone }, fact, bar: { pct, col },
+// more, branch, go, cls, attrs }. title / val / fact / more are HTML (the caller escapes); chip.t is text.
+function uiRow2(o) {
+  const act = o.more ? ` role="button" tabindex="0" aria-expanded="false" onclick="uiRow2Toggle(this,event)" onkeydown="uiRow2Key(this,event)"`
+    : o.branch ? ` data-br="${esc(o.branch)}" role="button" tabindex="0" onclick="event.stopPropagation();msOpenBranch(this.dataset.br)" onkeydown="if(event.key==='Enter'){event.stopPropagation();msOpenBranch(this.dataset.br)}"`
+    : o.go ? ` role="button" tabindex="0" onclick="${esc(o.go)}" onkeydown="if(event.key==='Enter'){${esc(o.go)}}"` : '';
+  const chip = o.chip && o.chip.t ? uiChip(o.chip.t, o.chip.tone) : '';
+  const bar = o.bar && o.bar.pct != null ? `<span class="ui-r2-bar" aria-hidden="true"><i style="width:${Math.max(0, Math.min(100, Math.round(o.bar.pct)))}%${o.bar.col ? ';background:' + esc(o.bar.col) : ''}"></i></span>` : '';
+  return `<div class="ms-r2 ui-r2${o.tone ? ' is-' + o.tone : ''}${o.cls ? ' ' + o.cls : ''}"${act}${o.attrs || ''}><div class="ms-r2-a"><span class="ms-r2-t">${o.title}</span>`
+    + (o.val ? `<span class="ms-r2-v${o.valTone ? ' is-' + o.valTone : ''}">${o.val}</span>` : '') + '</div>'
+    + `<div class="ms-r2-b">${chip}${o.chips || ''}${o.fact ? `<span class="ms-r2-f">${o.fact}</span>` : ''}${bar}${o.more ? '<span class="ms-r2-m" aria-hidden="true">▾</span>' : (o.branch || o.go) ? '<span class="ms-r2-m" aria-hidden="true">›</span>' : ''}</div>`
+    + (o.more ? `<div class="ms-r2-x">${o.more}</div>` : '') + '</div>';
+}
+function uiRow2Toggle(el, e) {
+  if (e && e.target && e.target.closest && e.target.closest('.ms-watch-br, a, button')) return;   // a branch chip opens its sheet, not the row
+  if (e) e.stopPropagation();
+  const on = el.classList.toggle('is-open'); el.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+function uiRow2Key(el, e) { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); uiRow2Toggle(el); } }
+// a status chip in at most 6 characters (the Thai vowel and tone marks above / below a letter take no room): the app's long status words have
+// a short form; anything else keeps its first word, else its first 6 characters + "…". The full words stay in the chip's title / aria-label.
+const _UI_CHIP_SHORT = [
+  [/^ไม่มีในตาราง/, 'ใช้เดิม'], [/^รอยืนยัน/, 'รอยืนยัน'], [/^คลังจัดส่งแล้ว/, 'ส่งแล้ว'], [/^สาขารับแล้ว/, 'รับแล้ว'], [/^ส่งช้า/, 'ส่งช้า'],
+  [/^สาขาแก้ไข/, 'แก้ไข'], [/^คีย์บัญชีแล้ว/, 'คีย์แล้ว'], [/^รอฝ่ายวิเคราะห์/, 'รอตรวจ'], [/^รอประสานงานขาย/, 'รอตรวจ'], [/^อนุมัติ/, 'อนุมัติ'],
+  [/^ส่งตรงวัน/, 'ตรงวัน'], [/^รอขั้นตอนก่อนหน้า/, 'รอก่อน'], [/^ประมาณการ/, 'ประมาณ'], [/^ยืนยันแล้ว/, 'ยืนยัน'], [/^สูตรเสนอ/, 'เสนอ'],
+  [/^ไม่มีต้นทุน/, 'ไม่มีทุน'], [/^ยังไม่บันทึก/, 'ยังไม่ทำ'], [/^ยังไม่นำเข้า/, 'ยังไม่มี'], [/^เปลี่ยนเกิน/, 'เปลี่ยน'],
+];
+const _uiCells = s => String(s || '').replace(/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/g, '').length;
+function uiChipShort(t) {
+  const s = String(t == null ? '' : t).replace(/^[!✓✔×✕●○⚠\s]+/, '').replace(/\s+/g, ' ').trim();
+  if (_uiCells(s) <= 6) return s;
+  const hit = _UI_CHIP_SHORT.find(([re]) => re.test(s));
+  if (hit) return hit[1];
+  const w = s.split(/[\s·(:,]+/)[0];
+  if (w && _uiCells(w) <= 6) return w;
+  let out = '', n = 0;
+  for (const ch of w || s) { if (!/[\u0E31\u0E34-\u0E3A\u0E47-\u0E4E]/.test(ch)) { if (n === 6) break; n++; } out += ch; }
+  return out + '…';
+}
+// the chip: colour = meaning (bad red · watch amber · good green · neu grey), one line
+function uiChip(t, tone) {
+  const full = String(t == null ? '' : t).trim(), s = uiChipShort(full);
+  const tn = { bad: 'fix', fix: 'fix', warn: 'watch', watch: 'watch', good: 'good' }[tone] || 'neu';
+  return `<span class="ui-chip" data-tone="${tn}"${s !== full ? ` title="${esc(full)}" aria-label="${esc(full)}"` : ''}>${esc(s)}</span>`;
+}
+// uiEmpty(o) - ONE empty state per page (item 7): an icon, one line saying why, one button to the fix or to the manual's task. A page whose
+// data is entirely empty shows this card alone; an empty sub-section is hidden instead. o = { t, act, go, icon: 'inbox' | 'check' | 'doc' | 'msg' }
+const _UI_EMPTY_ICON = { inbox: 'M4 13h4l2 3h4l2-3h4M4 13l2-8h12l2 8v6H4z', check: 'M20 6L9 17l-5-5', doc: 'M14 3H6v18h12V7zM14 3v4h4M9 13h6M9 17h6',
+  msg: 'M4 5h16v11H8l-4 4z', box: 'M3 7l9-4 9 4-9 4zM3 7v10l9 4 9-4V7M12 11v10' };
+function uiEmpty(o) {
+  const ic = _UI_EMPTY_ICON[o.icon || 'inbox'] || _UI_EMPTY_ICON.inbox;
+  return `<div class="ui-empty" role="status"><svg class="ui-empty-i" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="${ic}"/></svg>`
+    + `<span class="ui-empty-t">${esc(o.t || 'ยังไม่มีรายการ')}</span>`
+    + (o.act && o.go ? `<button type="button" class="ui-empty-b" onclick="${esc(o.go)}">${esc(o.act)}</button>` : '') + '</div>';
+}
+// item 11: a block of charts that answers a second question folds on a phone (closed; its charts are sized again when it opens)
+function uiPhoneFold(el, label) {
+  if (!el || typeof phOn !== 'function' || !phOn() || el.closest('details.ui-fold')) return;
+  const d = document.createElement('details'); d.className = 'ph-more ui-fold';
+  d.innerHTML = '<summary>' + esc(label) + '</summary>';
+  el.before(d); d.appendChild(el);
+  d.addEventListener('toggle', () => { if (d.open) el.querySelectorAll('canvas').forEach(c => { const ch = chartInstances[c.id]; if (ch) ch.resize(); }); });
+}
+// the button of an empty card that has no fix of its own: the manual's task for it (tabs/47-manual.html, an <article class="mt"> id)
+async function uiManualGo(id) {
+  const open = () => switchTab('manual');
+  if (typeof phOn === 'function' && phOn() && typeof phOpenPage === 'function') await phOpenPage(open); else open();
+  setTimeout(() => {
+    const a = document.getElementById(id);
+    if (!a || typeof deptManualOpen !== 'function') return;
+    const dk = String(a.dataset.d || '').split(' ')[0];
+    if (dk && typeof deptManualPick === 'function') deptManualPick(dk);
+    deptManualOpen(id, true);
+  }, 300);
+}
+// uiSkel(n) - while a list loads: n grey blocks of a row's shape (item 7), never the words "กำลังโหลด…". The busy state is for a screen reader.
+function uiSkel(n, kind) {
+  const k = kind === 'kpi' ? 'ui-skel-kpi' : 'ui-skel-row';
+  return `<div class="ui-skel" aria-busy="true" role="status"><span class="sr-only">กำลังโหลด</span>${Array.from({ length: Math.max(1, n || 3) }, () => `<span class="${k}"></span>`).join('')}</div>`;
+}
+// the "⋯" menu at the end of a phone's filter row (item 8): downloads, print and the secondary toggles. On a desktop the menu's items stay
+// inline where they were (.ui-more-pop is display: contents); on a phone they open under the ⋯ button and close on the next tap elsewhere.
+function uiMoreToggle(btn) {
+  const box = btn.closest('.ui-more'); if (!box) return;
+  const on = !box.classList.contains('is-open');
+  document.querySelectorAll('.ui-more.is-open').forEach(x => { x.classList.remove('is-open'); const b = x.querySelector('.ui-more-btn'); if (b) b.setAttribute('aria-expanded', 'false'); });
+  box.classList.toggle('is-open', on); btn.setAttribute('aria-expanded', on ? 'true' : 'false');
+}
+const UI_MORE_BTN = '<button type="button" class="ui-more-btn" aria-haspopup="true" aria-expanded="false" aria-label="เมนูเพิ่มเติม: ดาวน์โหลดและตัวเลือกอื่น" onclick="uiMoreToggle(this)">⋯</button>';
+// a page's own filter rows on a phone (item 8): a row of a card that holds a labelled select / date field becomes ONE row of chips (.ui-fbar,
+// scrolled sideways), and its downloads / print links move under a "⋯" at the row's end - the same elements, moved (their ids and handlers
+// stay, so the e2e specs and the page's code find them). Done once per row (data-ui-fb); a desktop never runs it (body.ph-on only).
+const _UI_FB_ACT = /ดาวน์โหลด|Excel|CSV|พิมพ์|แม่แบบ/;
+function uiCompactFilters(root) {
+  if (!root || typeof phOn !== 'function' || !phOn()) return;
+  root.querySelectorAll('.card > .flex.flex-wrap.items-end, .card > .flex.flex-wrap.items-center, .card > div > .flex.flex-wrap.items-end').forEach(row => {
+    if (row.dataset.uiFb || row.classList.contains('ui-fbar') || row.closest('.ui-frow')) return;
+    const kids = [...row.children];
+    const fields = kids.filter(c => c.tagName === 'LABEL' && c.querySelector('select, input[type="date"], input[type="month"], input[type="search"]'));
+    if (!fields.length) return;                                               // not a filter row (a form, a set of buttons)
+    row.dataset.uiFb = '1';
+    row.classList.add('ui-fbar');
+    const acts = kids.filter(c => /^(A|BUTTON)$/.test(c.tagName) && _UI_FB_ACT.test(c.textContent || ''));
+    const frow = document.createElement('div'); frow.className = 'ui-frow';
+    row.before(frow); frow.appendChild(row);
+    if (!acts.length) return;
+    const m = document.createElement('div'); m.className = 'ui-more';
+    m.innerHTML = UI_MORE_BTN + '<div class="ui-more-pop" role="menu"></div>';
+    const pop = m.querySelector('.ui-more-pop');
+    acts.forEach(a => pop.appendChild(a));
+    frow.appendChild(m);
+  });
+}
+document.addEventListener('click', e => {
+  const t = /** @type {HTMLElement} */ (e.target);
+  if (t && t.closest && t.closest('.ui-more-btn')) return;
+  document.querySelectorAll('.ui-more.is-open').forEach(x => {
+    if (t && t.closest && t.closest('.ui-more-pop') === x.querySelector('.ui-more-pop') && t.closest('select, input, label')) return;   // a field inside stays open
+    x.classList.remove('is-open'); const b = x.querySelector('.ui-more-btn'); if (b) b.setAttribute('aria-expanded', 'false');
+  });
+});
+
 // ── DV5 (phone table review 2026-10-25) · the ANSWER STRIP: three lines at the top of an analytics page on a phone in แตะง่าย - the
 // largest item in baht, the second, and the trend. A page gives its lines one of two ways:
 //   pageAnswer(key, lines)   its loader pushes them when it has drawn (key = tab, or 'tab|pane'); the push is stamped with the top bar's
@@ -3320,7 +3455,9 @@ function resetZoom(chartId) {
 // the ticks collide and the legend becomes a paragraph. Called from mkChart() when the
 // screen is ≤700 px wide (the full dashboard after เต็ม →); it only fills in what a chart
 // did not set itself, so an explicit legend / tick choice still wins:
-//   · the wrapper grows to 320 px (not for pies / doughnuts) with maintainAspectRatio off
+//   · phone review item 11 (owner 2026-10-31): the plot is at most 220 px tall (PH_CHART_MAX; maintainAspectRatio off) - it used to grow to 320 px;
+//     a chart with fewer than 3 points, a doughnut / pie, a scatter / bubble and a bar chart of more than 10 categories are not drawn on a
+//     phone at all: _phChartSwap puts a big number + one word, or a 5-row ranking + "ดูทั้งหมด", in their place
 //   · the legend moves below, small; it is dropped when there are more than 6 series
 //   · the category axis keeps ≤ 6 ticks, rotated as Chart.js sees fit (a horizontal bar chart keeps all its
 //     branch names), value axes ≤ 5 ticks, 11 px tick font, no x-axis title
@@ -3340,14 +3477,24 @@ function _fitChartFonts(o, depth) {
     else if (k !== 'data' && v && typeof v === 'object' && !Array.isArray(v)) _fitChartFonts(v, (depth || 0) + 1);
   });
 }
+const PH_CHART_MAX = 220;
 function _phoneChartTune(config, ctx) {
   const type = config.type;
   const o = config.options = config.options || {};
-  const wrap = ctx.parentElement;
-  const h = wrap ? parseInt(wrap.style.height || '', 10) : 0;
-  if (h && h >= 150 && h < 320 && !['doughnut', 'pie', 'polarArea', 'radar'].includes(type)) {
-    wrap.style.height = '320px';
-    o.maintainAspectRatio = false;
+  // item 11: the plot's box is at most 220 px (a box of its own when the canvas shares its wrapper with a legend or a note)
+  const MAX = typeof PH_CHART_MAX === 'number' ? PH_CHART_MAX : 220;
+  if (!(typeof ctx.closest === 'function' && ctx.closest('#mgtRptBody, [data-force-light]'))) {
+    let wrap = ctx.parentElement;
+    if (wrap && typeof ctx.before === 'function' && [...(wrap.children || [])].some(c => c !== ctx && !c.classList.contains('dive-btn'))) {
+      const box = document.createElement('div'); box.className = 'ph-chart-box';
+      ctx.before(box); box.appendChild(ctx); wrap = box;
+    }
+    if (wrap && wrap.style) {
+      const h = parseInt(wrap.style.height || '', 10) || (wrap.getBoundingClientRect ? wrap.getBoundingClientRect().height : 0) || MAX;
+      wrap.style.height = Math.min(MAX, Math.max(140, h)) + 'px'; wrap.style.maxHeight = MAX + 'px';
+      if (!wrap.style.position) wrap.style.position = 'relative';
+      o.maintainAspectRatio = false;
+    }
   }
   o.plugins = o.plugins || {};
   const ds = (config.data && config.data.datasets) || [];
@@ -3394,6 +3541,116 @@ function _phoneChartTune(config, ctx) {
   });
 }
 
+// ── item 11 (owner 2026-10-31) · what a phone shows instead of a chart that does not read at 375 px ─────────────────────────────────────
+// fewer than 3 points  -> ONE big number (the last point of the first series) + one word (เพิ่มขึ้น / ลดลง / เท่าเดิม against the point
+//                         before, or ในเป้า / เกินเป้า against a series named เป้า; config.phGoodUp = false when lower is better)
+// doughnut / pie / polar, scatter / bubble, a bar chart of more than 10 categories -> the 5 largest as bars (by baht where the points
+//                         carry it) + "ดูทั้งหมด (N)"; config.phRank = { label: p => text, value: p => number, fmt: v => text } names them.
+// config.phKeep = true keeps a chart as it is. The canvas stays in the page (hidden) and comes back on the next draw that keeps it.
+const PH_CHART_RANK = 5;
+function _phChartAltOff(id, ctx) {
+  document.querySelectorAll(`.ph-chart-alt[data-for="${CSS.escape(id)}"]`).forEach(x => x.remove());
+  if (ctx && ctx.hidden && ctx.dataset.phAlt) {
+    ctx.hidden = false; delete ctx.dataset.phAlt;
+    const host = ctx.parentElement;
+    if (host && host.classList.contains('ph-chart-box')) host.style.display = '';
+    else if (host && host.dataset.phH != null) { host.style.height = host.dataset.phH; delete host.dataset.phH; }
+  }
+}
+function _phChartNum(v, money) {
+  const x = _num(v); if (x == null) return '—';
+  const a = Math.abs(x);
+  return (money ? (x < 0 ? '−฿' : '฿') : (x < 0 ? '−' : '')) + (a >= 1000 ? fmt(a) : a.toFixed(a >= 100 || Number.isInteger(a) ? 0 : 1));
+}
+function _phChartCol(ds, i) {
+  const c = ds.backgroundColor || ds.borderColor;
+  const v = Array.isArray(c) ? c[i % c.length] : c;
+  return typeof v === 'string' ? v : '#4a70b0';
+}
+function phRankAll(btn) {
+  const box = btn.closest('.ph-rank'); if (!box) return;
+  const open = btn.getAttribute('aria-expanded') !== 'true';
+  box.querySelectorAll('.ph-rank-more').forEach(li => { li.hidden = !open; });
+  btn.setAttribute('aria-expanded', String(open));
+  btn.textContent = open ? 'ย่อ' : `ดูทั้งหมด (${fmtN(+box.dataset.n)})`;
+}
+function _phRankHtml(title, rows, f) {
+  const list = rows.filter(r => r.v != null && isFinite(r.v)).sort((a, b) => Math.abs(b.v) - Math.abs(a.v));
+  if (!list.length) return '';
+  const max = Math.max(1e-9, ...list.map(r => Math.abs(r.v)));
+  return `<div class="ph-rank" data-n="${list.length}">${title ? `<p class="ph-rank-h">${esc(title)}</p>` : ''}<ol class="ph-rank-list">${list.map((r, i) =>
+    `<li${i >= PH_CHART_RANK ? ' class="ph-rank-more" hidden' : ''}><span class="ph-rank-a"><span class="ph-rank-l">${esc(r.l)}</span><b class="ph-rank-v">${esc(f(r.v))}</b></span>`
+    + `<span class="ph-rank-bar" aria-hidden="true"><i style="width:${Math.max(2, Math.round(100 * Math.abs(r.v) / max))}%;background:${esc(r.c || '#4a70b0')}"></i></span></li>`).join('')}</ol>`
+    + (list.length > PH_CHART_RANK ? `<button type="button" class="shm-showall dv-more ph-rank-all" aria-expanded="false" onclick="phRankAll(this)">ดูทั้งหมด (${fmtN(list.length)})</button>` : '') + '</div>';
+}
+const _PH_MONEY_KEYS = ['impact', 'revenue', 'gp', 'profit', 'total_cost', 'cost', 'value', 'baht'];
+function _phChartSwap(id, config, ctx) {
+  _phChartAltOff(id, ctx);
+  if (config.phKeep || ctx.closest('#mgtRptBody, [data-force-light], .ph-frame')) return false;
+  const type = config.type, data = config.data || {}, o = config.options || {};
+  const ds = (data.datasets || []).filter(d => d && !d.hidden && Array.isArray(d.data));
+  if (!ds.length) return false;
+  const labels = data.labels || [];
+  const host = ctx.parentElement; if (!host) return false;
+  const put = html => {
+    if (!html) return false;
+    ctx.hidden = true; ctx.dataset.phAlt = '1';
+    const box = host.classList.contains('ph-chart-box') ? host.parentElement : host;
+    (box || host).insertAdjacentHTML('beforeend', `<div class="ph-chart-alt" data-for="${esc(id)}">${html}</div>`);
+    if (host.classList.contains('ph-chart-box')) host.style.display = 'none';
+    else { host.dataset.phH = host.style.height || ''; host.style.height = 'auto'; }
+    return true;
+  };
+  const rk = config.phRank || {};
+  const titleOf = () => { const t = o.plugins && o.plugins.title; return t && t.display !== false && t.text ? String(Array.isArray(t.text) ? t.text.join(' ') : t.text) : ''; };
+  if (['doughnut', 'pie', 'polarArea'].includes(type)) {
+    const d0 = ds[0];
+    const rows = d0.data.map((v, i) => ({ l: rk.label ? rk.label(v, i) : String(labels[i] ?? ''), v: rk.value ? rk.value(v, i) : _num(v), c: _phChartCol(d0, i) }));
+    return put(_phRankHtml(titleOf(), rows, rk.fmt || (v => _phChartNum(v, false))));
+  }
+  if (type === 'scatter' || type === 'bubble') {
+    let money = false;
+    const rows = ds.flatMap(d => d.data.map((p, i) => {
+      const it = (p && (p.item || p.row)) || {};
+      const l = rk.label ? rk.label(p) : (p && (p.label || p.name)) || it.description || it.name || it.menu || it.branch || String(labels[i] ?? '');
+      let v = rk.value ? rk.value(p) : null;
+      if (v == null) { const k = _PH_MONEY_KEYS.find(k => _num(it[k]) != null); if (k) { v = _num(it[k]); money = true; } }
+      if (v == null) v = _num(p && p.y);
+      return { l, v, c: _phChartCol(d, i) };
+    }));
+    return put(_phRankHtml(titleOf(), rows, rk.fmt || (v => _phChartNum(v, money))));
+  }
+  if (type !== 'bar' && type !== 'line') return false;
+  const n = Math.max(labels.length, ...ds.map(d => d.data.length));
+  if (n > 0 && n < 3) {
+    // a target series (named เป้า) is the line to judge against; the first other series is the figure
+    const tgt = ds.find(d => /เป้า|target/i.test(String(d.label || ''))), main = ds.find(d => d !== tgt) || ds[0];
+    const vals = main.data.map(v => _num(v && typeof v === 'object' ? v.y : v));
+    const last = vals[vals.length - 1], prev = vals.length > 1 ? vals[0] : null;
+    if (last == null) return false;
+    const up = config.phGoodUp !== false;
+    let word = '', tone = '';
+    if (tgt) {
+      const t = _num((tgt.data[tgt.data.length - 1] && typeof tgt.data[tgt.data.length - 1] === 'object') ? tgt.data[tgt.data.length - 1].y : tgt.data[tgt.data.length - 1]);
+      if (t != null) { const ok = up ? last >= t : last <= t; word = ok ? 'ในเป้า' : (up ? 'ต่ำกว่าเป้า' : 'เกินเป้า'); tone = ok ? 'good' : 'bad'; }
+    } else if (prev != null) {
+      word = last > prev ? '▲ เพิ่มขึ้น' : last < prev ? '▼ ลดลง' : 'เท่าเดิม';
+      tone = last === prev ? '' : (last > prev) === up ? 'good' : 'bad';
+    }
+    const unitPct = /%/.test(String(main.label || '')) || (last > 0 && last <= 100 && /pct|%|อัตรา|ต้นทุนอาหาร/.test(String(main.label || '') + titleOf()));
+    const v = unitPct ? last.toFixed(1) + '%' : _phChartNum(last, /฿|บาท|ยอด|รายได้|ต้นทุน/.test(String(main.label || '')));
+    const lbl = [main.label || titleOf(), labels[n - 1] != null ? String(labels[n - 1]) : ''].filter(Boolean).join(' · ');
+    return put(`<div class="ph-chart-tile"><span class="ph-chart-tile-l">${esc(lbl)}</span><span class="ph-chart-tile-v">${esc(v)}</span>`
+      + (word ? `<span class="ui-chip" data-tone="${tone === 'good' ? 'good' : tone === 'bad' ? 'fix' : 'neu'}">${esc(word)}</span>` : '') + '</div>');
+  }
+  // a bar chart of more than 10 categories (every branch): the 5 largest + ดูทั้งหมด, one series
+  if (type === 'bar' && n > 10 && ds.length === 1 && labels.length === n) {
+    const d0 = ds[0], money = /฿|บาท|ยอด|รายได้|ต้นทุน|กำไร|GP/.test(String(d0.label || '') + titleOf());
+    const rows = d0.data.map((v, i) => ({ l: String(labels[i]), v: _num(v && typeof v === 'object' ? (o.indexAxis === 'y' ? v.x : v.y) : v), c: _phChartCol(d0, i) }));
+    return put(_phRankHtml(titleOf() || d0.label || '', rows, rk.fmt || (v => _phChartNum(v, money))));
+  }
+  return false;
+}
 function mkChart(id, config) {
   // Vendor-load race: a tab loader can fire before chart.umd.min.js finishes
   // loading. Fail soft (the chart re-renders on the next tab/filter load) rather
@@ -3417,6 +3674,9 @@ function mkChart(id, config) {
   }
   stkChartWords(config);   // PL3: stock mode names no BoM on a chart either
   // A phone showing the full dashboard (เต็ม →) gets a chart cut for 375 px: see _phoneChartTune.
+  _phChartAltOff(id, ctx);
+  // item 11: a phone in แตะง่าย reads a number or a ranking where the chart would not read (the instance is null then; callers guard it)
+  if (_onPhoneScreen() && typeof phOn === 'function' && phOn()) { try { if (_phChartSwap(id, config, ctx)) { delete chartInstances[id]; return null; } } catch (e) { console.warn('phone chart swap:', e); } }
   if (_onPhoneScreen()) { try { _phoneChartTune(config, ctx); } catch (e) { console.warn('phone chart tune:', e); } }
   if (document.body.classList.contains('ph-fit')) {
     try {

@@ -111,11 +111,10 @@ Where หน้าแรก opens a page (หน้างาน), a second tap o
 In แตะง่าย (touch), the tables people read every day are drawn as **one card per row**. In พอดีจอ (fit) and on a desktop, the table stays a table.
 
 - **The renderer** is `phCardList(spec)` in `js/09c-mobile.js` ("CARD LISTS"), and it is the only one. `_phCardSpec` reads the table as the page drew it: its header texts, its body rows and the columns that `PAGE_CARDS` names.
-- **A card** shows, in order:
-  - the status or class pill (colour = meaning: the row's own chip keeps its colour, and plain text takes a tone from `tones`);
-  - the name, with a grey line under it (code, branch, date; dates as d/m);
-  - **three key figures** on one line;
-  - an optional sparkline (`msColumns`, B1);
+- **A card** is **two fixed lines** (since 2026-10-31, §10):
+  - line 1: the name (one line, ellipsis) and ONE key figure - the figure the list is sorted by, else the first one it has (bold, right);
+  - line 2: the status chip (at most 6 characters, `uiChipShort`; colour = meaning: the row's own chip gives its tone, plain text takes one from
+    `tones`), one grey line (code, branch, date as d/m, then the other figures as "label value") and the sparkline as a thin strip;
   - a chevron. A tap opens the MA row sheet with every column, plus the row's own buttons.
 - **The chips on top:**
   - **sort chips:** the name and the three key figures. A second tap flips the order. With no chip pressed, the list keeps the table's own order.
@@ -229,3 +228,40 @@ one headline number, one line, one button that opens the page of the work. Branc
   figure waiting on another department), green ✓ = the department's duties on that page are done. Pages with no status fold under
   "หน้าอื่น (n)". The other departments the role may open (แผนกอื่น) come last, and not at all for a role with only its own.
 
+## 10. Phone review set 2 (owner 2026-10-31, UI review items 3, 6, 7, 8, 11)
+
+Five rules, each with ONE shared piece in `js/01-core.js` (or `js/09c-mobile.js`) that the pages go through instead of their own markup.
+Pinned by `backend/test_mobile_review_set2.py`.
+
+1. **A list row is two fixed lines (item 3).** Line 1 = the name (one line, ellipsis) + the ONE key number (bold, right, tabular);
+   line 2 = a status chip of at most 6 characters that never wraps + one short fact (ellipsis) + an optional thin bar; everything else is
+   behind a tap (the row expands, or opens the branch sheet / the row sheet). Shared: `uiRow2(o)` + `uiChip` / `uiChipShort` (the app's long
+   status words have a short form: ไม่มีในตาราง (ใช้ต้นทุนเดิม) → ใช้เดิม, คลังจัดส่งแล้ว → ส่งแล้ว …; the full words stay in the title);
+   `msRow2` is now `uiRow2`. Lists on it: ต้องทำ / ตรวจวันนี้, เมนูที่ดันต้นทุน (`msCostRisersHtml`: cause chip ราคาขึ้น / ตักเพิ่ม / ทั้งสอง),
+   สาขา (`msRenderBranches`: the first 10, then ดูทั้งหมด), ขายดี (`msTopMenuHtml`), and every `PAGE_CARDS` table (`phCardList`: ต้นทุนต่อจาน,
+   คิวใบสั่งซื้อ, the DV2 rank tables, …).
+2. **A department page's tiles carry their status, work first (item 6).** ผู้บริหาร, ปฏิบัติการ, operation's own home grid and the
+   แผนก grid of the owner: tile = icon + name + ONE value or chip coloured by meaning - ยอดขายรายวัน = the chain's yesterday against its
+   normal (the hero's own pill rule), สรุปประจำวัน = สาขาต่ำกว่าปกติ, ส่วนลด = yesterday's chain discount against the 2.5 % ceiling, ต้นทุน =
+   food cost to date against the 58 % target, GP รายสาขา = 100 − food cost, a page with open work = its badge count. Pages with nothing to
+   show fold under "หน้าอื่น (n)"; a department tile carries how many of its pages need a look (or ✓). Values come only from
+   `GET /api/home/brief` + `GET /api/home/branch-scorecard`, the two answers the sales hero already loads (`phTileDataLoad`, both
+   `ttl_cache` on the server) and the nav badges - no new endpoint. One code path: `_phTileState` / `_phDtHtml` (#528) + `_phSalesVals`.
+3. **One empty state per page; skeletons while loading (item 7).** A page whose data is entirely empty shows ONE card (`uiEmpty`: icon, one
+   line of why, one button to the fix or to the manual's task, `uiManualGo`); an empty sub-section is hidden. Applied to เสียงลูกค้า (every
+   data section hidden), ใช้วัตถุดิบต่อยอดขาย (no 28 rows of zeros), ทะเบียนวัตถุดิบ, คิวใบสั่งซื้อ (no empty filter strip), ใบตัดเบิกสาขา,
+   the branch ตัดเบิก (no zone bar, no send bar, no empty history) and รับของ (one card that opens บันทึกของที่รับเอง). A table that renders
+   `uiEmpty` in its empty row shows the same card on the phone (`_phCardSpec` keeps it). While loading: `uiSkel(n)` grey rows, and every
+   remaining "กำลังโหลด…" line on a phone is drawn as a grey bar (`phTextFloor` marks it `.ui-skel-line`; the words stay for a screen reader).
+4. **Filters are one row (item 8).** On a phone a filter row is ONE row of chips (`.ui-fbar`, scrolled sideways; ช่วงเวลา · สาขา · สถานะ each
+   opening its native picker) and its downloads / print / file actions sit under a "⋯" at the row's end (`.ui-more`, inline on a desktop).
+   Static on ใบตัดเบิกสาขา (`#ohbIsMore`; the tab's month joins the row) and ต้นทุนต่อจาน (`#bmcDcMore`); every other card filter row with a
+   labelled select / date is compacted on open (`uiCompactFilters`, the same elements moved - ids and handlers stay). หน้างาน: เดือน · สาขา
+   in one row, the page name and the date are the header's; the state filter (`uiStateFilter`) is one row of 36 px tabs; the all-branches
+   line sits under งานของฉัน.
+5. **Charts on a phone are at most 220 px; tiny data is a number (item 11).** `_phoneChartTune` caps the plot box at `PH_CHART_MAX` = 220 px
+   (it used to grow charts to 320 px). `_phChartSwap` (in `mkChart`) draws no chart where one would not read: fewer than 3 points → one big
+   number + one word (เพิ่มขึ้น / ลดลง / เท่าเดิม, or ในเป้า / เกินเป้า against a series named เป้า); doughnut / pie, scatter / bubble and a bar
+   chart of more than 10 categories → the 5 largest as bars (by baht where the points carry it) + "ดูทั้งหมด (N)". `config.phKeep` keeps a
+   chart; `config.phRank` / `config.phGoodUp` name the ranking or the direction. One chart per question: สรุปประจำวัน keeps the month's pace
+   and folds ชั่วโมงพีค + เทรนด์ 7 วัน (`uiPhoneFold`). Chart colours stay hex; the glance plugin and `B1_PAL` are unchanged.

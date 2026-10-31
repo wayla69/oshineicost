@@ -141,6 +141,8 @@ def test_the_key_columns_are_headers_the_pages_print():
 # ── 3. the renderer ───────────────────────────────────────────────────────────────────────────────────────────────────────────
 PRE = ("const esc = s => String(s ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',\"'\":'&#39;'}[c]));\n"
        + re.search(r"const _PH_CL_PAGE = [^\n]*\n", CARDS).group(0) + re.search(r"const _PH_CL_TONE = [^\n]*\n", CARDS).group(0)
+       # phone review item 3 (2026-10-31): the pill is a chip of <= 6 characters (uiChipShort, js/01-core.js)
+       + CORE[CORE.index("const _UI_CHIP_SHORT = ["):CORE.index("// the chip: colour = meaning")]
        + _fn(MOB, "phCardList"))
 ROWS = [
     {"i": 0, "title": "ขอนแก่น", "sub": "KK01", "figs": [{"l": "ยอดขาย", "v": "฿5.0M", "n": 5e6}, {"l": "GP %", "v": "28%", "n": 28}, {"l": "ลูกค้า", "v": "7,598", "n": 7598}],
@@ -158,13 +160,25 @@ def _list(spec):
 
 
 @needs_node
-def test_a_card_has_its_pill_title_grey_line_three_figures_and_a_chevron_to_the_sheet():
+def test_a_card_is_two_fixed_lines_the_name_and_one_figure_then_the_chip_and_one_grey_line():
+    # phone review item 3 (owner 2026-10-31): line 1 = the name + the ONE key figure; line 2 = the chip + the grey line (the code, then the
+    # other figures as "label value"); every column is behind the tap (the row sheet). It was pill / name / grey line / three figures.
     h = _list({"id": "t", "rows": ROWS, "keys": ["ยอดขาย", "GP %", "ลูกค้า"]})
     card = re.search(r'<li class="ph-cl-card">(.*?)</li>', h, re.S).group(1)
-    assert '<span class="ph-cl-pill" data-tone="watch">ใกล้ขอบ</span>' in card                    # colour = meaning (the theme's watch ink)
-    assert '<span class="ph-cl-t">ขอนแก่น</span>' in card and '<span class="ph-cl-s">KK01</span>' in card
-    assert card.count('class="ph-cl-f"') == 3 and "฿5.0M" in card and "28%" in card and "7,598" in card
+    assert ('<span class="ph-cl-l1"><span class="ph-cl-t">ขอนแก่น</span><span class="ph-cl-f"><span class="ph-cl-fv">฿5.0M</span></span></span>'
+            in card)                                                                                  # the first figure is the key one
+    assert card.count('class="ph-cl-f"') == 1 and card.index("ph-cl-l1") < card.index("ph-cl-l2")
+    l2 = card[card.index('<span class="ph-cl-l2">'):]
+    assert '<span class="ph-cl-pill" data-tone="watch">ใกล้ขอบ</span>' in l2                      # colour = meaning (the theme's watch ink)
+    assert '<span class="ph-cl-s">KK01 · GP % 28% · ลูกค้า 7,598</span>' in l2
     assert 'onclick="phCardOpen(\'t\',0)"' in card and 'class="ph-cl-chev"' in card and "ดูทุกคอลัมน์" in card
+    assert 'aria-label="ขอนแก่น · ยอดขาย ฿5.0M · ดูทุกคอลัมน์"' in card
+    # sorted by a figure: that figure is the one on line 1
+    s = _list({"id": "t", "rows": ROWS, "keys": ["ยอดขาย", "GP %", "ลูกค้า"], "sort": {"k": 1, "dir": -1}})
+    assert re.search(r'<span class="ph-cl-t">ชลบุรี</span><span class="ph-cl-f"><span class="ph-cl-fv">41%</span>', s)
+    # a long status keeps <= 6 characters on the chip, its words in the title
+    long = [dict(ROWS[0], pill={"t": "ไม่มีในตาราง (ใช้ต้นทุนเดิม)", "k": "ใช้เดิม", "tone": "warn"})]
+    assert '<span class="ph-cl-pill" data-tone="watch" title="ไม่มีในตาราง (ใช้ต้นทุนเดิม)">ใช้เดิม</span>' in _list({"id": "t", "rows": long, "keys": ["ยอดขาย"]})
     assert '<li class="ph-cl-card ph-cl-tot">' in h and "รวมทุกสาขา" in h                         # a total row stays first, as a summary card
     assert h.index("รวมทุกสาขา") < h.index("ขอนแก่น")
 
@@ -268,6 +282,8 @@ def test_the_cards_follow_the_mode_and_keep_the_table_in_the_page():
     assert re.search(r"\.ph-cl-chip \{[^}]*min-height: 44px", css) and re.search(r"\.ph-cl-hit \{[^}]*min-height: 44px", css)
     for sel in (".ph-cl-t", ".ph-cl-fv"):
         assert re.search(re.escape(sel) + r" \{[^}]*font-size: 15px", css), sel
+    for sel in (".ph-cl-t", ".ph-cl-s", ".ph-cl-pill"):                                             # item 3: one line each, never wrapping
+        assert re.search(re.escape(sel) + r" \{[^}]*white-space: nowrap", css), sel
     for sel in (".ph-cl-fl", ".ph-cl-s"):                                                           # the small text is >= 12 px, a theme ink
         m = re.search(re.escape(sel) + r" \{([^}]*)\}", css).group(1)
         assert float(re.search(r"font-size: ([\d.]+)px", m).group(1)) >= 12 and "var(--text-secondary)" in m, sel

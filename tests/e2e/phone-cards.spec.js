@@ -1,6 +1,8 @@
 // @ts-check
 // PR-MB (owner 2026-10-24) · the card lists of a phone in แตะง่าย (touch), on a 390 x 844 phone:
 //   * a page's daily table is one card per row: a name, up to three key figures, a chevron; the table's own box is hidden meanwhile;
+//     (phone review item 3, 2026-10-31: the card is two fixed lines - the name + ONE key figure (the sorted one), then the chip and a grey
+//     line with the other figures; .ph-cl-f now holds that one figure, so the sort check below reads the figure the list is sorted by)
 //   * the sort chips (the name + the key figures) reorder the cards; the filter chips (the pill's values) narrow them;
 //   * a card opens the row sheet with every column; a tap on the dim closes it;
 //   * the text of the cards is >= 12 px, the chips and the cards are >= 44 px tall, the page never scrolls sideways;

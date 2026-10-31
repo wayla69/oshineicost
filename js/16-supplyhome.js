@@ -279,8 +279,12 @@ async function shmAdoptionLoad(role) {
   const show = !!(hit && _supplyItemAllowed(hit.item)) && _SHM_CENTRE_ROLES.includes(role);
   card.style.display = show ? '' : 'none';
   if (!show) return;
+  // phone review items 7 + 8 (owner 2026-10-31): on a phone the work comes first - the all-branches line sits under งานของฉัน
+  const mine = document.getElementById('shmMineCard');
+  if (typeof phOn === 'function' && phOn() && mine && mine.nextElementSibling !== card) mine.after(card);
   try {
     const g = await _bmcJson(`${API}/api/bom-center/hub/adoption`);
+    if (!g.total) { card.style.display = 'none'; return; }            // item 7: an empty part is hidden, not a row of zeros
     line.innerHTML = `ทั้งหมด ${g.total} สาขา ` + ['green', 'yellow', 'red', 'not_started'].filter(k => k !== 'not_started' || g.counts[k]).map(k => _bmcChip(`${_SHM_LIGHT[k][0]} ${g.counts[k]}`, _SHM_LIGHT[k][1])).join(' ');
   } catch (e) { line.innerHTML = `<span style="color:var(--bad-ink)">${esc(String(e.message || e).slice(0, 120))}</span>`; }
 }

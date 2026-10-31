@@ -621,7 +621,7 @@ async function bmcCrDecide(code, status, useCode, names) {
 // ── ingredient master ───────────────────────────────────────────────────────
 async function bmcLoadIng(force) {
   if (_bmcIng.length && !force) { bmcRenderIng(); return; }
-  document.getElementById('bmcIngBody').innerHTML = '<tr><td colspan="18" class="py-3" style="color:var(--text-muted)">กำลังโหลด…</td></tr>';
+  document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="18" class="py-3">${uiSkel(4)}</td></tr>`;   // phone review item 7: grey rows, not words
   try {
     const d = await _bmcJson(`${API}/api/bom-center/ingredients?month=${_bmcMonth()}`);
     try { _bmcZones = (await _bmcJson(`${API}/api/bom-center/zones`)).zones || []; } catch (e) { _bmcZones = _bmcZones || []; }
@@ -673,6 +673,14 @@ function bmcIngEdit(el) {
   delete _bmcIngErr[code];
   bmcStatus('bmcIngSummary', 'warn', `แก้ไขแล้ว ${Object.keys(_bmcIngEdits).length} รายการ (ยังไม่บันทึก)`);
 }
+// the button of the empty register: only for a login that may open ไฟล์ราคา
+function _bmcPfOk() { try { const h = _supplyItemOf('bomcenter', 'pricefile'); return !!(h && _supplyItemAllowed(h.item)); } catch (e) { return false; } }
+function bmcIngClearFilter() {
+  ['bmcIngQ', 'bmcIngKind'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+  const c = document.getElementById('bmcIngIssues'); if (c) c.checked = false;
+  _bmcIngGap = ''; _bmcIngProb = '';
+  bmcRenderIng();
+}
 function bmcRenderIng() {
   const q = (document.getElementById('bmcIngQ').value || '').toLowerCase();
   const kind = document.getElementById('bmcIngKind').value;
@@ -710,6 +718,24 @@ function bmcRenderIng() {
   const from = _bmcIngPage * BMC_ING_PAGE, shown = rows.slice(from, from + BMC_ING_PAGE);
   const pager = _bmcPagerHtml(_bmcIngPage, pages, rows.length ? from + 1 : 0, from + shown.length, rows.length);
   ['bmcIngPagerTop', 'bmcIngPager'].forEach(id => { const el = document.getElementById(id); if (el) el.innerHTML = pager; });
+  // phone review item 7 (owner 2026-10-31): nothing to list is ONE card - an empty register says where the rows come from, a filter that
+  // leaves nothing offers to clear it (the phone's card list shows the same card: _phCardSpec keeps its markup)
+  // an empty register: the one card above the tools, which (with the editor) wait for the first row
+  const emptyReg = !_bmcIng.length, eBox = document.getElementById('bmcIngEmpty');
+  if (eBox) {
+    eBox.style.display = emptyReg ? '' : 'none';
+    eBox.innerHTML = emptyReg ? uiEmpty(Object.assign({ icon: 'box', t: 'ยังไม่มีวัตถุดิบในทะเบียน วัตถุดิบเข้าทะเบียนเมื่อนำเข้าไฟล์ราคา' },
+      _bmcPfOk() ? { act: 'ไปที่ไฟล์ราคา', go: "supplyGo({tab:'bomcenter',pane:'pricefile'})" } : {})) : '';
+    ['bmcIngTools', 'bmcIngDesk'].forEach(id => { const el = document.getElementById(id); if (el) el.style.display = emptyReg ? 'none' : ''; });
+    const ed = document.getElementById('bmcIngDesk'); const edBox = ed && ed.nextElementSibling;
+    if (edBox && edBox.classList.contains('desk-only')) edBox.style.display = emptyReg ? 'none' : '';
+  }
+  if (!rows.length) {
+    document.getElementById('bmcIngBody').innerHTML = `<tr><td colspan="18" class="py-3">${!_bmcIng.length
+      ? uiEmpty(Object.assign({ icon: 'box', t: 'ยังไม่มีวัตถุดิบในทะเบียน วัตถุดิบเข้าทะเบียนเมื่อนำเข้าไฟล์ราคา' }, _bmcPfOk() ? { act: 'ไปที่ไฟล์ราคา', go: "supplyGo({tab:'bomcenter',pane:'pricefile'})" } : {}))
+      : uiEmpty({ icon: 'box', t: 'ไม่พบวัตถุดิบที่ตรงกับตัวกรอง', act: 'ล้างตัวกรอง', go: "bmcIngClearFilter()" })}</td></tr>`;
+    return;
+  }
   document.getElementById('bmcIngBody').innerHTML = shown.map(r => `<tr class="border-b" style="border-color:var(--border-soft)">
       <td class="py-1 pr-2 whitespace-nowrap">${esc(r.code)}<div class="text-[10px]"><a href="#" onclick="bmcAlToggle(${_bmcQ(r.code)});return false" style="color:var(--accent)">รหัสในระบบอื่น${r.aliases.length ? ` (${r.aliases.length})` : ''}</a></div>${r.aliases.length ? `<div class="text-[10px]" style="color:var(--text-muted)">${r.aliases.map(a => a.in_use ? `<b>${esc(a.alias)}</b>` : esc(a.alias)).join(', ')}</div>` : ''}</td>
       <td class="py-1 pr-2">${inp(r, 'name_th', 210)}</td>
