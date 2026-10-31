@@ -29,11 +29,11 @@
         <div class="flex items-center justify-between mb-1">
           <h2 class="section-title mb-0" id="scatterTitle">รายได้ × ความนิยม</h2>
           <div class="flex items-center gap-2">
-            <span id="scatterMode" class="pill pill-neu text-xs">no cost data</span>
+            <span id="scatterMode" class="pill pill-neu text-xs">ยังไม่มีต้นทุน</span>
             <button onclick="resetZoom('chartMenuScatter')" class="text-xs text-slate-400 hover:text-indigo-600 border border-slate-200 rounded px-2 py-0.5 transition-colors">&#x27F3; ล้างค่า</button>
           </div>
         </div>
-        <p id="scatterSubtitle" class="text-xs text-slate-400 mb-3">Each dot = one menu item. Size = revenue share. Color = category.</p>
+        <p id="scatterSubtitle" class="text-xs text-slate-400 mb-3">หนึ่งจุด = หนึ่งเมนู · สี = หมวด</p>
         <div class="flex gap-4">
           <div style="height:280px;flex:1;min-width:0"><canvas id="chartMenuScatter"></canvas></div>
           <div id="costAnalysisBar" class="flex-shrink-0 border-l border-slate-100 pl-3 space-y-3" style="width:140px;overflow:hidden"></div>
@@ -55,7 +55,7 @@
           <span class="text-xs font-bold text-emerald-700">ดาวเด่น</span>
           <span id="starCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
-        <p class="text-xs text-slate-400 mb-2">High volume · High margin</p>
+        <p class="text-xs text-slate-400 mb-2">ขายมาก · กำไรสูง</p>
         <ul id="starList" class="space-y-1"></ul>
       </div>
       <!-- Puzzles -->
@@ -65,7 +65,7 @@
           <span class="text-xs font-bold text-indigo-700">เพชรในตม</span>
           <span id="puzzleCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
-        <p class="text-xs text-slate-400 mb-2">Low volume · High margin</p>
+        <p class="text-xs text-slate-400 mb-2">ขายน้อย · กำไรสูง</p>
         <ul id="puzzleList" class="space-y-1"></ul>
       </div>
       <!-- Plowhorses -->
@@ -75,7 +75,7 @@
           <span class="text-xs font-bold text-amber-700">ม้างาน</span>
           <span id="plowhorseCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
-        <p class="text-xs text-slate-400 mb-2">High volume · Low margin</p>
+        <p class="text-xs text-slate-400 mb-2">ขายมาก · กำไรต่ำ</p>
         <ul id="plowhorseList" class="space-y-1"></ul>
       </div>
       <!-- Dogs -->
@@ -85,14 +85,14 @@
           <span class="text-xs font-bold text-red-600">ตัวถ่วง</span>
           <span id="dogCount" class="text-xs text-slate-400 ml-auto font-medium"></span>
         </div>
-        <p class="text-xs text-slate-400 mb-2">Low volume · Low margin</p>
+        <p class="text-xs text-slate-400 mb-2">ขายน้อย · กำไรต่ำ</p>
         <ul id="dogList" class="space-y-1"></ul>
       </div>
     </div>
 
     <!-- Pareto insight bar -->
     <div class="card p-5" id="paretoCard">
-      <h2 class="section-title">Pareto — การกระจุกตัวของรายได้</h2>
+      <h2 class="section-title">การกระจุกตัวของรายได้</h2>
       <div id="paretoContent"></div>
     </div>
 
@@ -107,7 +107,7 @@
   <div id="costtab-detail" class="hidden">
     <div class="card p-5">
       <div class="flex items-center gap-3 mb-4 flex-wrap">
-        <input id="costItemSearch" type="text" placeholder="Search item…"
+        <input id="costItemSearch" type="text" placeholder="ค้นหาเมนู…"
           oninput="filterCostDetail()"
           class="border border-slate-300 rounded-lg px-3 py-2 text-sm w-56 focus:outline-none focus:ring-2 focus:ring-indigo-400">
         <select id="costItemCat" onchange="filterCostDetail()"
@@ -158,7 +158,7 @@
     <div class="flex items-center justify-between mb-1 flex-wrap gap-2">
       <div>
         <h2 class="section-title mb-0">รายได้ เทียบ ต้นทุน BoM เทียบ จำนวนเสิร์ฟ · รายเดือน <a class="see-full no-print" onclick="switchTab('pnl')" title="หน้าหลักของคำถามนี้ — ตัวเลขชุดเดียวกัน">ดูเต็มที่ P&amp;L →</a></h2>
-        <p class="text-xs text-slate-400 mt-1">เปรียบเทียบรายได้ ex-VAT, CoGS ตามต้นทุน BoM, จำนวนเสิร์ฟ และ % ต้นทุนอาหาร</p>
+        <p class="text-xs text-slate-400 mt-1">เปรียบเทียบรายได้ไม่รวม VAT ต้นทุนขายตามต้นทุน BoM จำนวนเสิร์ฟ และ % ต้นทุนอาหาร</p>
       </div>
     </div>
     <div id="foodCostAlerts" class="mb-3 space-y-1"></div>

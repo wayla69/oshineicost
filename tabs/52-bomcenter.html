@@ -264,8 +264,8 @@
       <div class="text-sm font-semibold" style="color:var(--text-primary)">ไฟล์รอบส่งของสาขา · ตั้งวันส่งหลายสาขาพร้อมกัน</div>
       <div class="flex flex-wrap items-center gap-3 mt-2">
         <a href="#" onclick="bmcCalTemplate();return false" style="color:var(--accent);font-size:13px;text-decoration:underline">ดาวน์โหลดแม่แบบรอบส่งของสาขา (Excel)</a>
-        <label class="text-xs" style="color:var(--text-muted)">นำเข้าไฟล์รอบส่งของสาขา (.xlsx หรือ .csv)
-          <input type="file" id="bmcCalBulkFile" accept=".xlsx,.xlsm,.csv" onchange="bmcCalBulkPick(this)" class="ml-1 text-xs"></label>
+        <label style="color:var(--accent);font-size:13px;text-decoration:underline;cursor:pointer">นำเข้าไฟล์รอบส่งของสาขา (.xlsx หรือ .csv)
+          <input type="file" id="bmcCalBulkFile" accept=".xlsx,.xlsm,.csv" onchange="bmcCalBulkPick(this)" hidden></label>
       </div>
       <div id="bmcCalBulkPreview" class="mt-3"></div>
     </div>

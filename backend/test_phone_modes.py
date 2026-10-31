@@ -29,18 +29,18 @@ MOB, CORE, HTML, POLISH = _src("js/09c-mobile.js"), _src("js/01-core.js"), _src(
 MODES = MOB[MOB.index("PHONE DISPLAY MODES (PR-MA"):MOB.index("// ── Service worker (sw.js)")]
 REG = CORE[CORE.index("const _SUPPLY_CENTRE"):CORE.index("// ── end page registry")]
 
-# the brief's per-page defaults (with the lead's decisions of 2026-10-24 for the pages the brief did not name)
-FIT = ["overall", "dailysales", "trend", "gpbranch", "pnlbranch", "cost", "buffetperf", "childbuffet", "menu", "menuactionboard",
-       "menuopportunities", "menucompare", "feedback", "custtype", "timeflow", "opsreport", "discounts", "cashctl", "cancelbill", "staff", "modifiers",
-       "pricezone", "closetime", "costhead", "coverage", "menuefficiency", "pricetier", "simhub", "profit", "benchmark", "pnl", "pnlbill", "orderhub|comp",
-       "orderhub|issues", "orderhub|issuevar", "orderhub|adoption", "orderhub|queue", "orderhub|claims", "orderhub|persales", "bomcenter|fc",
-       "bomcenter|price", "bomcenter|issue", "fmsg",
-       "guest", "compare", "more", "heavyeater", "bomcost", "menuimpact", "branchbom", "ops", "report", "action", "checklist", "ordering",
-       "ingpurchase", "ordersetup|pack", "orderhub|month", "bomcenter|rcheck", "bomcenter|overview"]
-# DV5 (phone table review 2026-10-25): รายงานผู้บริหาร opens in touch on a phone - the answer strip, the PDF and the summary
+# Phone UI review 2026-10-31 (owner, item 1): EVERY page opens in แตะง่าย (touch) - the desktop tables shrunk to the screen read at 5-6 px.
+# พอดีจอ stays the person's own choice per page (phModeToggle, remembered on the device). These pages were the brief's fit pages.
+WAS_FIT = ["overall", "dailysales", "trend", "gpbranch", "pnlbranch", "cost", "buffetperf", "childbuffet", "menu", "menuactionboard",
+           "menuopportunities", "menucompare", "feedback", "custtype", "timeflow", "opsreport", "discounts", "cashctl", "cancelbill", "staff", "modifiers",
+           "pricezone", "closetime", "costhead", "coverage", "menuefficiency", "pricetier", "simhub", "profit", "benchmark", "pnl", "pnlbill", "orderhub|comp",
+           "orderhub|issues", "orderhub|issuevar", "orderhub|adoption", "orderhub|queue", "orderhub|claims", "orderhub|persales", "bomcenter|fc",
+           "bomcenter|price", "bomcenter|issue", "fmsg",
+           "guest", "compare", "more", "heavyeater", "bomcost", "menuimpact", "branchbom", "ops", "report", "action", "checklist", "ordering",
+           "ingpurchase", "ordersetup|pack", "orderhub|month", "bomcenter|rcheck", "bomcenter|overview", "hvmonitor"]
 TOUCH = ["mgtreport", "branchstock|issue", "branchstock|order", "branchstock|recv", "branchstock|var", "branchstock|count", "franchise", "supplyhome", "launcher",
          "home", "settings", "bomcenter|cal", "bomcenter|events", "bomcenter|zones", "bomcenter|codereq", "orderhub|central", "bomcenter|pricefile",
-         "bomcenter|rec", "bomcenter|prep", "bomcenter|conv"]
+         "bomcenter|rec", "bomcenter|prep", "bomcenter|conv"] + WAS_FIT
 
 
 def _registry(expr):
@@ -68,14 +68,22 @@ def test_every_page_of_the_registry_has_a_phone_default():
 
 
 @needs_node
-def test_the_defaults_follow_the_brief():
-    got = _registry("Object.fromEntries(%s.map(k => [k, phonePageDefault(...k.split('|'))]))" % json.dumps(FIT + TOUCH))
-    assert [k for k in FIT if got[k] != "fit"] == []
+def test_every_page_opens_in_touch():
+    got = _registry("Object.fromEntries(%s.map(k => [k, phonePageDefault(...k.split('|'))]))" % json.dumps(TOUCH))
     assert [k for k in TOUCH if got[k] != "touch"] == []
-    # two views: the dish cost table / the ingredient list fit, their import / edit touch
+    # no page of the registry opens in fit; a page with two views and a page the registry does not name open in touch too
+    assert _registry("Object.keys(PAGE_PHONE).filter(k => JSON.stringify(PAGE_PHONE[k]).includes('fit'))") == []
     two = _registry("[phonePageDefault('bomcenter', 'dishcost', 'table'), phonePageDefault('bomcenter', 'dishcost', 'import'),"
                     " phonePageDefault('bomcenter', 'ing', 'list'), phonePageDefault('bomcenter', 'ing', 'edit'), phonePageDefault('nosuchpage', '')]")
-    assert two == ["fit", "touch", "fit", "touch", "touch"]
+    assert two == ["touch"] * 5
+    # the person's own choice stays: the toggle and the per-page memory of the device
+    assert "phModeToggle" in MODES and "_PH_MODE_KEY = 'oshinei_phmode'" in MODES and "own === 'fit' || own === 'touch' ? own" in MODES
+
+
+def test_touch_lifts_every_text_under_12px_on_the_open_page():
+    fn = _fn(CORE, "phTextFloor")
+    assert "PH_TEXT_FLOOR = 12" in CORE and "el.dataset.ptf = '1'" in fn and "ph-fit" in fn and "#mgtRptBody" in fn
+    assert "phTextFloorSchedule();" in _fn(CORE, "_updateClusterBar")       # every page switch
 
 
 @needs_node

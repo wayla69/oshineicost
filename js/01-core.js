@@ -537,6 +537,7 @@ const _STK_WORDS = [
   [/\s*\(BoM basis\)/gi, ''],
   [/BoM recipe food cost/gi, 'dish food cost'],
   [/BoM basis/gi, 'dish-cost basis'],
+  [/BoM[ -]cost(?=\s*[฀-๿])/gi, 'ต้นทุนต่อจาน'],                       // a Thai label: "BoM Cost รวม" -> "ต้นทุนต่อจาน รวม" (phone UI review item 10)
   [/BoM[ -]cost/gi, 'dish cost'],
   [/\s*·\s*BoM(?=\s*·|\s*$|\s*\))/g, ''],                              // "56% ของรายได้ · BoM · MTD"
   [/ต้นทุน\s*BoM\s*(พุ่ง|ลด)/g, 'ต้นทุนอาหาร$1'],
@@ -807,6 +808,35 @@ function _launcherLanding() { try { return !window.matchMedia('(max-width:700px)
 // them, the owner's summary and the pages (js/09c-mobile.js, "PHONE SHELL"). body.ph-on is set only there, so every rule keyed on it is
 // inert on a desktop.
 function phOn() { return document.body.classList.contains('ph-on'); }
+// Phone UI review 2026-10-31 (item 1): every page opens in แตะง่าย, so แตะง่าย guarantees its 12 px text floor itself - a page's own small
+// class (a chip at 10.5 px, a sub-label at 11 px) is lifted to 12 px on the open page, after each draw (debounced). พอดีจอ has its own floor
+// inside the scaled frame (js/09c-mobile.js); the A4 report body, charts and icons keep their sizes. Marked data-ptf so it is undone exactly.
+const PH_TEXT_FLOOR = 12;
+let _phFloorT = null, _phFloorObs = null;
+function phTextFloor() {
+  const on = phOn() && !document.body.classList.contains('ph-fit');
+  if (!on) { document.querySelectorAll('[data-ptf]').forEach(el => { if (!el.dataset.phf) el.style.removeProperty('font-size'); delete el.dataset.ptf; }); return 0; }
+  const root = document.querySelector('.content-area') || document.body;
+  const seen = new Set(), w = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+  let n, lifted = 0;
+  while ((n = w.nextNode())) {
+    const el = n.parentElement;
+    if (!el || seen.has(el) || !n.textContent.trim()) continue;
+    seen.add(el);
+    if (el.offsetParent === null || el.closest('svg, #mgtRptBody, .ph-frame')) continue;
+    if (parseFloat(getComputedStyle(el).fontSize) < PH_TEXT_FLOOR) { el.style.fontSize = PH_TEXT_FLOOR + 'px'; el.dataset.ptf = '1'; lifted++; }
+  }
+  return lifted;
+}
+function phTextFloorSchedule() {
+  clearTimeout(_phFloorT); _phFloorT = setTimeout(phTextFloor, 200);
+  if (_phFloorObs || typeof MutationObserver !== 'function') return;
+  const ca = document.querySelector('.content-area'); if (!ca) return;
+  // a page draws after it opens and on every filter; the body's class follows the mode (ph-on / ph-fit)
+  _phFloorObs = new MutationObserver(() => { clearTimeout(_phFloorT); _phFloorT = setTimeout(phTextFloor, 300); });
+  _phFloorObs.observe(ca, { childList: true, subtree: true });
+  _phFloorObs.observe(document.body, { attributes: true, attributeFilter: ['class'] });
+}
 // PR-F1: the franchise owner has ONE page, ร้านของฉัน - the login lands on it directly (desktop and phone), never on a launcher of one tile
 function franchiseLogin() { return !!(window.AUTH && window.AUTH.enabled && window.AUTH.role === 'franchise'); }
 function _landingTab() { return franchiseLogin() ? 'franchise' : _launcherLanding() ? 'launcher' : 'home'; }
@@ -1314,20 +1344,21 @@ const PALETTE = ['#2a78d6','#eb6834','#1baf7a','#eda100','#e87ba4','#008300','#4
 // B1_PAL mirrors the --ch-* tokens in docs/ui-kit/tokens.css (backend/test_charts_b1.py keeps them equal); canvas charts cannot
 // read a CSS variable, so the plugin below takes these. a/aw above the average (weekend brighter), b/bw below it, t the latest
 // bar (gold, dark edge), c the 6 categorical series colours, spare 6 more for a chart with more series, s the 5-step sequential
-// scale, avg the average line, gi gold as text. Colour-blind safe: teal/indigo vs lilac vs gold, never red against green.
+// scale, avg the average line, gi gold as text. Colour-blind safe: teal vs lavender vs amber, never red against green.
+// Pastel A (2026-10-31): every -1/-2 pair is one colour, so the bars are flat (no gradient on screen).
 const B1_PAL = {
   light: {
-    a1: '#0c8f81', a2: '#3a2fb5', aw1: '#0f9d8e', aw2: '#5148d4', b1: '#8f78df', b2: '#7e62d2', bw1: '#9a84e6', bw2: '#8468d8',
-    t1: '#f0a500', t2: '#b86e00', tstroke: '#7a4a00', avg: '#475569', gi: '#7a4500',
-    c: ['#3a2fb5', '#0e8f87', '#c25e00', '#b01d62', '#1d78c9', '#6b7399'],
-    spare: ['#6a62d8', '#38a89f', '#d9822b', '#d4577f', '#4a97dc', '#8a92b8'],
+    a1: '#4e9a8f', a2: '#4e9a8f', aw1: '#72b2a8', aw2: '#72b2a8', b1: '#9aa3cf', b2: '#9aa3cf', bw1: '#b3bade', bw2: '#b3bade',
+    t1: '#e0a43a', t2: '#e0a43a', tstroke: '#7a5a20', avg: '#4a5568', gi: '#7a5a20',
+    c: ['#5b6ba8', '#4e9a8f', '#d08a3e', '#c0607a', '#5a8fc8', '#8b7ab8'],
+    spare: ['#8290c4', '#72b2a8', '#e0a866', '#d4849a', '#80a9d8', '#a99cc9'],
     s: ['#7686da', '#6a66d4', '#5b52cc', '#3f33a8', '#2b1f80'],
   },
   dark: {
-    a1: '#2dd4bf', a2: '#818cf8', aw1: '#5eead4', aw2: '#a5b4fc', b1: '#8b78d8', b2: '#7a66c8', bw1: '#9a88e4', bw2: '#8975d6',
-    t1: '#fcd34d', t2: '#f5b82e', tstroke: '#fff3c4', avg: '#c3cddb', gi: '#fcd34d',
-    c: ['#9d98ff', '#2dd4bf', '#fbbf24', '#f472b6', '#60a5fa', '#b4b9e0'],
-    spare: ['#b7b3ff', '#6fe3d3', '#fcd34d', '#f9a8d4', '#93c5fd', '#d3d7f0'],
+    a1: '#5fb3a7', a2: '#5fb3a7', aw1: '#7cc4b9', aw2: '#7cc4b9', b1: '#7e89be', b2: '#7e89be', bw1: '#959fcc', bw2: '#959fcc',
+    t1: '#e0b25a', t2: '#e0b25a', tstroke: '#fff3c4', avg: '#b6bfd0', gi: '#f0ce85',
+    c: ['#9aa7e0', '#5fb3a7', '#e0b25a', '#e58fa6', '#7fb0e3', '#b4a6d8'],
+    spare: ['#b8c1ea', '#86c8bd', '#ebc988', '#efb0c0', '#a3c6ec', '#cbc1e6'],
     s: ['#5c6bc0', '#7d86d8', '#9d98e8', '#c0b8f6', '#e6e0ff'],
   },
 };
@@ -1736,29 +1767,11 @@ function _glanceDot(ctx, x, y, color, surface) {
 // A see-through colour (many charts fade their non-highlighted bars) is flattened onto the card surface first, so it keeps
 // its tone but nothing shows through it.
 const _glanceMix = (c, t, k) => [0, 1, 2].map(i => Math.round(c[i] + (t[i] - c[i]) * k)).concat(1);
-// Lift a colour in HSL: +dl lightness (clamped to 0.86 so it never turns white) and
-// saturation × ks (clamped to 1) — the pastel that keeps its hue.
-function _glanceLift(c, dl, ks) {
-  const r = c[0] / 255, g = c[1] / 255, b = c[2] / 255;
-  const mx = Math.max(r, g, b), mn = Math.min(r, g, b);
-  let h = 0, sat = 0, l = (mx + mn) / 2;
-  if (mx !== mn) {
-    const d = mx - mn;
-    sat = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-    h = mx === r ? ((g - b) / d + (g < b ? 6 : 0)) : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    h /= 6;
-  }
-  l = Math.min(0.86, l + dl); sat = Math.min(1, sat * ks);
-  const f = (p, q, t) => { t = (t + 1) % 1; return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p; };
-  if (sat === 0) { const v = Math.round(l * 255); return [v, v, v, 1]; }
-  const q = l < 0.5 ? l * (1 + sat) : l + sat - l * sat, pp = 2 * l - q;
-  return [Math.round(f(pp, q, h + 1 / 3) * 255), Math.round(f(pp, q, h) * 255), Math.round(f(pp, q, h - 1 / 3) * 255), 1];
-}
 // One bar's fill: the tip colour easing to the base colour along the bar (so a short bar is still clearly its colour),
 // drawn per element because each bar has its own length and its own kind (B1) or series colour.
 function _glanceBarGrad(ctx, el, horizontal, tip, base) {
   const t = horizontal ? el.x : el.y, b = el.base;
-  if (!isFinite(t) || !isFinite(b) || t === b) return base;
+  if (tip === base || !isFinite(t) || !isFinite(b) || t === b) return base;   // Pastel A: one colour = a flat fill
   const g = horizontal ? ctx.createLinearGradient(t, 0, b, 0) : ctx.createLinearGradient(0, t, 0, b);
   g.addColorStop(0, tip);
   g.addColorStop(1, base);
@@ -2222,9 +2235,9 @@ const GLANCE_PLUGIN = {
             } else {
               rgba = _glanceRgba(own.backgroundColor);
               if (!rgba || !(rgba[3] > 0)) return;
-              // theme B categorical bars: the series colour, a touch lighter at the tip (a see-through colour is flattened onto the card first)
+              // categorical bars: the series colour, flat (Pastel A 2026-10-31: no lighter tip; a see-through colour is flattened onto the card first)
               const solid = rgba[3] >= 0.999 ? rgba : _glanceMix(rgba, surf, 1 - rgba[3]);
-              cTip = _glanceCss(_glanceLift(solid, 0.10, 1.05), 1); cBase = _glanceCss(solid, 1);
+              cTip = cBase = _glanceCss(solid, 1);
             }
             // A per-bar copy of the options: bars of one dataset share one options object, and every bar here has its own fill.
             const copy = Object.assign(Object.create(Object.getPrototypeOf(own)), own);
@@ -2244,10 +2257,8 @@ const GLANCE_PLUGIN = {
           if (lo.fill !== true && lo.fill !== 'origin' && lo.fill !== 'start') return;
           const rgba = _glanceRgba(lo.borderColor);
           if (!rgba) return;
-          const grad = chart.ctx.createLinearGradient(0, chart.chartArea.top, 0, chart.chartArea.bottom);
-          grad.addColorStop(0, _glanceCss(rgba, 0.24));
-          grad.addColorStop(1, _glanceCss(rgba, 0.01));
-          swap(lo, 'backgroundColor', grad);
+          // Pastel A (2026-10-31): a flat, light wash under the line instead of a fade
+          swap(lo, 'backgroundColor', _glanceCss(rgba, 0.12));
         }
       });
     }
@@ -2786,8 +2797,17 @@ async function periodHeadline(hostId, page) {
   const tiles = host.querySelector('.ph-tiles');
   const COL = ['#4a70b0', '#0891b2', '#7a66b8', '#0d9488'];
   if (tiles) tiles.innerHTML = (d.figures || []).map((f, i) => periodKpi({ l: esc(f.label), v: periodFmt(f.cur, f.format), c: COL[i % COL.length],
-    cur: f.cur, prev: f.prev, ly: f.ly, unit: f.unit, upGood: f.up_good, range: r, q: i === 0 })).join('');
+    cur: f.cur, prev: f.prev, ly: f.ly, unit: f.unit, upGood: f.up_good, range: r, q: i === 0 })).join('') + (host._phExtra || '');
   return d;
+}
+// Phone UI review 2026-10-31 (item 2): a page's own figures that the headline does not carry join the headline row as its last tiles (one KPI
+// row of at most 4 tiles, one figure once per page). The page's data and the headline arrive in either order: both paths draw the extras.
+function periodHeadlineExtra(hostId, html) {
+  const host = document.getElementById(hostId); if (!host) return;
+  host._phExtra = html || '';
+  const tiles = host.querySelector('.ph-tiles'); if (!tiles) return;
+  tiles.querySelectorAll('.ph-extra').forEach(e => e.remove());
+  if (html) tiles.insertAdjacentHTML('beforeend', html);
 }
 // periodPctDelta(pct, {upGood, title}) · the same for a change the server already worked out (null -> —)
 function periodPctDelta(v, opt) {
@@ -4175,21 +4195,22 @@ const PAGE_KEYWORDS = {
 // 'touch' (แตะง่าย) = the phone layout: 12 px text floor, 44 px targets, stacked cards. 'fit' (พอดีจอ) = the page's desktop layout in a frame
 // 760-900 px wide scaled to the screen width (js/09c-mobile.js, "PHONE DISPLAY MODES"). The person may switch per page (the ⤢ button of the
 // phone top bar, remembered on the device). scripts/check-departments.js fails when a page of a department or of หน้ารายงานทั้งหมด has no entry.
-// Analytics, reports and read-only tables: fit. Branch pages, หน้างาน, the launcher, ฉัน, ค้นหา, editors and import forms: touch.
-// DV5 (phone table review 2026-10-25): รายงานผู้บริหาร opens in touch - its answer strip, the PDF and the owner's summary (the printed report on demand).
+// Phone UI review 2026-10-31 (owner, item 1): EVERY page opens in แตะง่าย (touch) - the desktop table shrunk to the screen read at 5-6 px.
+// พอดีจอ stays the person's own choice per page (the ⤢ button, remembered on the device); a page keeps its entry here so a page may be
+// given a different default again ('fit' or { view: mode }).
 const PAGE_PHONE = {
   launcher: 'touch', allpages: 'touch', home: 'touch', supplyhome: 'touch', franchise: 'touch', manual: 'touch', settings: 'touch',
-  mgtreport: 'touch', report: 'fit', overall: 'fit', dailysales: 'fit', trend: 'fit', compare: 'fit', more: 'fit', action: 'fit', checklist: 'fit',
-  gpbranch: 'fit', pnlbranch: 'fit', pnlbill: 'fit', profit: 'fit', benchmark: 'fit', pnl: 'fit',
-  cost: 'fit', bomcost: 'fit', costhead: 'fit', hvmonitor: 'fit', coverage: 'fit', menuimpact: 'fit', pricetier: 'fit', menuefficiency: 'fit', branchbom: 'fit', simhub: 'fit', heavyeater: 'fit',
-  buffetperf: 'fit', childbuffet: 'fit', guest: 'fit', custtype: 'fit', timeflow: 'fit', feedback: 'fit',
-  menu: 'fit', menuactionboard: 'fit', menuopportunities: 'fit', menucompare: 'fit',
-  opsreport: 'fit', ops: 'fit', discounts: 'fit', cashctl: 'fit', cancelbill: 'fit', staff: 'fit', modifiers: 'fit', pricezone: 'fit', closetime: 'fit',
-  fmsg: 'fit', ordering: 'fit', ingpurchase: 'fit', 'ordersetup|pack': 'fit',
-  'orderhub|queue': 'fit', 'orderhub|claims': 'fit', 'orderhub|comp': 'fit', 'orderhub|issues': 'fit', 'orderhub|issuevar': 'fit', 'orderhub|persales': 'fit',
-  'orderhub|adoption': 'fit', 'orderhub|month': 'fit', 'orderhub|central': 'touch',
-  'bomcenter|fc': 'fit', 'bomcenter|price': 'fit', 'bomcenter|issue': 'fit', 'bomcenter|rcheck': 'fit', 'bomcenter|overview': 'fit',
-  'bomcenter|dishcost': { table: 'fit', import: 'touch' }, 'bomcenter|ing': { list: 'fit', edit: 'touch' },
+  mgtreport: 'touch', report: 'touch', overall: 'touch', dailysales: 'touch', trend: 'touch', compare: 'touch', more: 'touch', action: 'touch', checklist: 'touch',
+  gpbranch: 'touch', pnlbranch: 'touch', pnlbill: 'touch', profit: 'touch', benchmark: 'touch', pnl: 'touch',
+  cost: 'touch', bomcost: 'touch', costhead: 'touch', hvmonitor: 'touch', coverage: 'touch', menuimpact: 'touch', pricetier: 'touch', menuefficiency: 'touch', branchbom: 'touch', simhub: 'touch', heavyeater: 'touch',
+  buffetperf: 'touch', childbuffet: 'touch', guest: 'touch', custtype: 'touch', timeflow: 'touch', feedback: 'touch',
+  menu: 'touch', menuactionboard: 'touch', menuopportunities: 'touch', menucompare: 'touch',
+  opsreport: 'touch', ops: 'touch', discounts: 'touch', cashctl: 'touch', cancelbill: 'touch', staff: 'touch', modifiers: 'touch', pricezone: 'touch', closetime: 'touch',
+  fmsg: 'touch', ordering: 'touch', ingpurchase: 'touch', 'ordersetup|pack': 'touch',
+  'orderhub|queue': 'touch', 'orderhub|claims': 'touch', 'orderhub|comp': 'touch', 'orderhub|issues': 'touch', 'orderhub|issuevar': 'touch', 'orderhub|persales': 'touch',
+  'orderhub|adoption': 'touch', 'orderhub|month': 'touch', 'orderhub|central': 'touch',
+  'bomcenter|fc': 'touch', 'bomcenter|price': 'touch', 'bomcenter|issue': 'touch', 'bomcenter|rcheck': 'touch', 'bomcenter|overview': 'touch',
+  'bomcenter|dishcost': 'touch', 'bomcenter|ing': 'touch',
   'bomcenter|pricefile': 'touch', 'bomcenter|rec': 'touch', 'bomcenter|prep': 'touch', 'bomcenter|rel': 'touch', 'bomcenter|conv': 'touch',
   'bomcenter|cal': 'touch', 'bomcenter|events': 'touch', 'bomcenter|zones': 'touch', 'bomcenter|codereq': 'touch',
   'branchstock|issue': 'touch', 'branchstock|order': 'touch', 'branchstock|recv': 'touch', 'branchstock|var': 'touch', 'branchstock|count': 'touch',
@@ -4378,6 +4399,7 @@ function _updateClusterBar(name) {
   document.body.dataset.group = _groupOf(name);   // theme-groups.css colours the page by group
   phNavRender();                                   // the phone's bottom navigation follows every switch (js/09c-mobile.js)
   if (typeof phFitSchedule === 'function') phFitSchedule();   // PR-MA: the page's phone display mode (พอดีจอ / แตะง่าย, js/09c-mobile.js)
+  phTextFloorSchedule();                           // แตะง่าย: no text under 12 px on the open page (phTextFloor)
   if (typeof updateDeptNav === 'function') updateDeptNav(name);   // the rail's department entry that holds this page lights up (js/18-launcher.js)
   if (typeof renderDeptHead === 'function') renderDeptHead(name);  // PR-D2: breadcrumb + the department's band and icon tabs (a desktop hides the bar below)
   // The group you are in stays lit in the sidebar, whichever of its views is open

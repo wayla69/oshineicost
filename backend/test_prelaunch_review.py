@@ -50,17 +50,20 @@ def test_a_sub_tab_row_that_is_not_a_subtab_bar_wraps_on_a_phone():
 # ── contrast ─────────────────────────────────────────────────────────────────────────────────────────────────────────────────
 def test_the_sticky_first_head_cell_on_the_band_takes_the_band_ink_and_flat_tables_keep_their_own():
     css = _src("docs/ui-kit/theme-polish.css")
-    rule = re.search(r"\.content-area table thead th:first-child:not\(([^{]+)\) \{ background: var\(--accent\); color: #ffffff !important; \}", css)
+    # Pastel A (2026-10-31): the band is the --th-bg token (flat navy-indigo, both themes) under its --th-on ink
+    rule = re.search(r"\.content-area table thead th:first-child:not\(([^{]+)\) \{ background: var\(--th-bg\); color: var\(--th-on\) !important; \}", css)
     assert rule, "the phone rule paints the band colour AND the white ink"
     for flat in (".tbl-top60 th", ".heatmap-table th", ".frc-tbl th", '[style*="background"]', "table:not(.wt) th"):
         assert flat in rule.group(1), flat
 
 
 def test_the_active_chips_of_dark_mode_clear_4_5_to_1():
+    # Pastel A (2026-10-31): the active chip is the flat accent under --on-accent in both themes; that pair is in scripts/contrast_b.py
+    # (test_theme_vivid.py holds it >= 4.5:1, light and dark), so here: the rule names the tokens and no gradient is left
     css = _src("docs/ui-kit/theme-vivid.css")
-    m = re.search(r"body\.dark \.lnch-tab\[aria-pressed=\"true\"\], body\.dark \.ms-seg-on \{ background: linear-gradient\(135deg, (#[0-9a-f]{6}), (#[0-9a-f]{6})\) !important; color: (#[0-9a-f]{6})", css)
+    m = re.search(r"body\.dark \.lnch-tab\[aria-pressed=\"true\"\], body\.dark \.ms-seg-on \{\s*background: var\(--accent\) !important; color: var\(--on-accent\) !important;", css)
     assert m
-    assert min(_cr(m.group(3), m.group(1)), _cr(m.group(3), m.group(2))) >= 4.5
+    assert "gradient" not in re.sub(r"/\*.*?\*/", "", css, flags=re.S)
 
 
 def test_every_dark_group_ink_clears_4_5_to_1_on_its_own_tint():

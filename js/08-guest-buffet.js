@@ -1234,7 +1234,6 @@ async function loadBuffetPerformance() {
   const k = d.kpis;
   const cFoodPct = (k.combined_food_cost_pct != null) ? k.combined_food_cost_pct : k.food_cost_pct;
   const cGpPct   = (k.combined_gp_pct        != null) ? k.combined_gp_pct        : null;
-  const cRev     = k.combined_revenue_ex_vat || 0;
   const cCogs    = k.combined_cogs           || 0;
   const cGp      = k.combined_gross_profit   || 0;
   const fct       = fcTargetSet(k.food_cost_target);   // ONE food-cost target (owner 2026-10-25)
@@ -1243,7 +1242,6 @@ async function loadBuffetPerformance() {
   const premColor = k.premium_tier_pct >= 30 ? '#10b981' : k.premium_tier_pct >= 15 ? '#f59e0b' : '#ef4444';
   const wasteColor = k.over_consumption_pct < 2 ? '#10b981' : k.over_consumption_pct < 5 ? '#f59e0b' : '#ef4444';
   const bevColor = k.beverage_attach_pct >= 15 ? '#10b981' : k.beverage_attach_pct >= 8 ? '#f59e0b' : '#ef4444';
-  const _fmtBaht = v => ''  + (Number(v)||0).toLocaleString('th-TH', { maximumFractionDigits: 0 });
 
   const kpiCard = (label, value, sub, color) =>
     `<div class="rounded-lg p-3 border" style="background:${color}10;border-color:${color}33">
@@ -1251,12 +1249,12 @@ async function loadBuffetPerformance() {
       <p class="text-lg font-bold" style="color:${textInk(color)}">${value}</p>
       <p class="text-[10px] text-slate-500">${sub}</p>
     </div>`;
+  // Phone UI review 2026-10-31 (item 2): one figure once per page. รายได้รวม and the covers are the page's headline row (phd-buffetperf), so
+  // they are not repeated here; the cost in baht rides on the food-cost tile; every baht figure in one format (fmt: 32.68M).
   document.getElementById('bperfKpiRow').innerHTML = [
-    kpiCard('รายได้รวม',         _fmtBaht(cRev),                            `รวมทุก SKU (บุฟเฟ่ต์ + อลาคาท)`,                '#4a70b0'),
-    kpiCard('ต้นทุน (COGS)',      _fmtBaht(cCogs),                           `ทั้งร้าน · ใช้สูตร BoM`,                       '#0891b2'),
-    kpiCard('ต้นทุนอาหาร รวม',  cFoodPct.toFixed(1) + '%',                 `เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(cFoodPct, fct)}`, fcColor),
-    kpiCard('GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${_fmtBaht(cGp)} · ทั้งร้าน`,                    gpColor),
-    kpiCard('Pax / บิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `${(Number(k.total_pax)||0).toLocaleString()} pax · เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#7a66b8'),
+    kpiCard('ต้นทุนอาหาร รวม',  cFoodPct.toFixed(1) + '%',                 `ต้นทุน ${fmt(cCogs)} · เป้า ${fcTargetTxt(fct)}% · ${fcStatusText(cFoodPct, fct)}`, fcColor),
+    kpiCard('GP รวม',         (cGpPct != null ? cGpPct.toFixed(1) : '–') + '%', `${fmt(cGp)} · ทั้งร้าน`,                    gpColor),
+    kpiCard('ลูกค้าต่อบิล',     (Number(k.avg_pax_per_bill)||0).toFixed(2),  `เด็ก ${(Number(k.child_pct)||0).toFixed(1)}%`, '#7a66b8'),
     kpiCard('บิลที่สั่งดื่ม',  (Number(k.beverage_bill_attach_pct)||0).toFixed(0) + '%',  `เครื่องดื่ม ${(Number(k.beverage_attach_pct)||0).toFixed(1)}% ของรายได้`, (k.beverage_bill_attach_pct>=60?'#10b981':k.beverage_bill_attach_pct>=40?'#f59e0b':'#ef4444')),
   ].join('');
 

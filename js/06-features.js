@@ -1613,7 +1613,7 @@ function _gpbRenderSummary(data) {
     const c = P.cur, R = P.period, v = (o, k) => o ? o[k] : null, bk = _gpbStatusBucket(c.food_cost_pct, fct);
     const K = (l, val, k, col, unit, upGood, i) => periodKpi({ l, v: val, c: col, cur: c[k], prev: v(P.prev, k), ly: v(P.ly, k), unit, upGood, range: R, q: i === 0 });
     document.getElementById('gpbSummary').innerHTML = [
-      K('รายได้รวม (ex VAT)', fmtB(c.revenue), 'revenue', '#0ea5e9', '%', true, 0),
+      K('รายได้รวม (ไม่รวม VAT)', fmtB(c.revenue), 'revenue', '#0ea5e9', '%', true, 0),
       K('BoM Cost รวม', fmtB(c.cogs), 'cogs', '#f59e0b', '%', false),
       K('GP รวม', fmtB(c.gp), 'gp', c.gp >= 0 ? '#10b981' : '#ef4444', '%', true),
       K('GP %', fmtPct(c.gp_pct), 'gp_pct', '#7a66b8', 'pp', true),
@@ -1623,7 +1623,7 @@ function _gpbRenderSummary(data) {
     return;
   }
   document.getElementById('gpbSummary').innerHTML = [
-    card('รายได้รวม (ex VAT)', fmtB(g.revenue), `${data.rows.length} สาขา`, '#0ea5e9'),
+    card('รายได้รวม (ไม่รวม VAT)', fmtB(g.revenue), `${data.rows.length} สาขา`, '#0ea5e9'),
     card('BoM Cost รวม',       fmtB(g.cogs),    'ตามสูตร BoM ใหม่',           '#f59e0b'),
     card('GP รวม',             fmtB(g.gp),      (g.gp >= 0 ? 'กำไร' : 'ขาดทุน'), g.gp >= 0 ? '#10b981' : '#ef4444'),
     card('GP %',               fmtPct(g.gp_pct), `เป้า GP ${fcTargetTxt(100 - fct)}%`, '#7a66b8'),

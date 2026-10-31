@@ -68,7 +68,8 @@ def test_the_cases_the_rewrite_is_made_for():
         "ต้นทุน BoM รวม": "ต้นทุนรวม",
         "ใช้สูตร BoM เท่านั้น": "ใช้ต้นทุนต่อจาน",
         "56.1% ของรายได้ · BoM · MTD 1–19": "56.1% ของรายได้ · MTD 1–19",
-        "BoM Cost รวม": "dish cost รวม",
+        "BoM Cost รวม": "ต้นทุนต่อจาน รวม",          # a Thai label stays Thai (phone UI review 2026-10-31, item 10)
+        "BoM cost": "dish cost",
         "BoM": "ต้นทุนต่อจาน",
         "สูตรเสนอ": "ต้นทุนเสนอ",
         "BoM basis · last month 56.6%": "dish-cost basis · last month 56.6%",
