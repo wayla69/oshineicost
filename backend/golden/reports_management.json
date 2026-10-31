@@ -479,7 +479,8 @@
    "reprints": 0,
    "voids": 0,
    "voids_open": 0,
-   "voids_reissued": 0
+   "voids_reissued": 0,
+   "voids_zero": 0
   }
  },
  "watch": null,

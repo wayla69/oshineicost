@@ -84,10 +84,11 @@ def _row(name, btype, bills, cnt, rep, min_bills):
     """One branch of a window. cnt = (all voids, baht, NOT re-issued, their baht) of mgt_watch.void_counts. The level and the
     sort are on the voids not re-issued (owner 2026-10-31: a void followed by a new bill is a correction); voids / amount /
     rate_pct stay every void, as the card's bills / amount / rate_pct."""
-    cb, amt, ob, oamt = cnt
+    cb, amt, ob, oamt = cnt[:4]
+    zb = cnt[4] if len(cnt) > 4 else 0
     tot = bills + cb
     r = {"branch": name, "type": btype, "bills_total": tot, "voids": cb, "amount": round(amt), "rate_pct": None,
-         "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": None, "voids_reissued": cb - ob, "level": "none",
+         "voids_open": ob, "amount_open": round(oamt), "rate_open_pct": None, "voids_reissued": cb - ob - zb, "voids_zero": zb, "level": "none",
          "reprints": rep.get("bills", 0), "reprint_baht": rep.get("baht", 0)}
     if tot > 0:
         r["rate_pct"], r["rate_open_pct"] = round(cb / tot * 100, 2), round(ob / tot * 100, 2)
@@ -105,7 +106,7 @@ def _level1(con, ids, s, e, where, params, cover, window, cls=None):
     min_bills = W.T_VOID_MIN_BILLS if window == "day" else 0
     rows = []
     for bid, name in ids.items():
-        cnt = canc.get(bid, (0, 0, 0, 0))
+        cnt = canc.get(bid, (0, 0, 0, 0, 0))
         b = bills.get(bid, 0)
         btype, active = types.get(bid, ("master", 1))
         if not active and not b and not cnt[0]:     # a closed branch with nothing in the window is not a row
@@ -115,7 +116,8 @@ def _level1(con, ids, s, e, where, params, cover, window, cls=None):
     tv, to, tb = sum(r["voids"] for r in rows), sum(r["voids_open"] for r in rows), sum(r["bills_total"] for r in rows)
     total = {"voids": tv, "amount": sum(r["amount"] for r in rows), "bills_total": tb,
              "rate_pct": round(tv / tb * 100, 2) if tb else None,
-             "voids_open": to, "amount_open": sum(r["amount_open"] for r in rows), "voids_reissued": tv - to,
+             "voids_open": to, "amount_open": sum(r["amount_open"] for r in rows),
+             "voids_zero": sum(r.get("voids_zero", 0) for r in rows), "voids_reissued": tv - to - sum(r.get("voids_zero", 0) for r in rows),
              "rate_open_pct": round(to / tb * 100, 2) if tb else None,
              "reprints": sum(r["reprints"] for r in rows), "reprint_baht": sum(r["reprint_baht"] for r in rows),
              "branches": len(rows), "flagged": sum(1 for r in rows if r["level"] in ("fix", "watch"))}
@@ -140,7 +142,7 @@ def bill_lists(con, bid, s, e, where, params, cls=None, cap=BILL_CAP):
     """One branch's bills of s..e: (voids, reasons, voids beyond the cap, reprints, reprints beyond the cap) - every voided bill
     (newest first, with its class: reissued_as = the receipt of the new bill, or None = not re-issued) and every discounted bill
     printed more than once. The drill-down's level 2 and the report's §7.1 both read this. cap=None = every bill (the .xlsx)."""
-    from rules import classify_voids, receipt_label
+    from rules import VOID_ZERO, classify_voids, receipt_label
     rs = _reasons(con)
     bills, reasons, more = [], [], 0
     try:
@@ -155,8 +157,10 @@ def bill_lists(con, bid, s, e, where, params, cls=None, cap=BILL_CAP):
         n = len(q) if cap is None else cap
         more = max(0, len(q) - n)
         bills = [{"at": r[1], "receipt": r[2] or "", "amount": round(r[4] or 0), "reason": _reason(rs, r[3]),
-                  "user": r[5] or "", "discount": round(r[6] or 0), "reissued_as": cls.get(r[0]),
-                  "reissued_no": receipt_label(cls.get(r[0])) if cls.get(r[0]) else None} for r in q[:n]]
+                  "user": r[5] or "", "discount": round(r[6] or 0),
+                  "reissued_as": None if cls.get(r[0]) == VOID_ZERO else cls.get(r[0]),
+                  "reissued_no": receipt_label(cls.get(r[0])) if cls.get(r[0]) and cls.get(r[0]) != VOID_ZERO else None,
+                  "zero": cls.get(r[0]) == VOID_ZERO} for r in q[:n]]
         acc: dict = {}
         for r in q:
             a = acc.setdefault(_reason(rs, r[3]), [0, 0, 0])
@@ -178,7 +182,7 @@ def _level2(con, bid, name, s, e, where, params, cover, window):
     from rules import classify_voids
     cls = classify_voids(con, [bid], s, e)
     source, rows, total = _level1(con, {bid: name}, s, e, where, params, cover, window, cls=cls)
-    head = rows[0] if rows else _row(name, _types(con, {bid: name}).get(bid, ("master", 1))[0], 0, (0, 0, 0, 0), {}, 0)
+    head = rows[0] if rows else _row(name, _types(con, {bid: name}).get(bid, ("master", 1))[0], 0, (0, 0, 0, 0, 0), {}, 0)
     bills, reasons, more, reprints, rmore = bill_lists(con, bid, s, e, where, params, cls=cls)
     if source != "detail":
         bills, reasons, more = [], [], 0
@@ -187,7 +191,7 @@ def _level2(con, bid, name, s, e, where, params, cover, window):
     ns, ne = s - _dt.timedelta(days=7 * NORMAL_WEEKS), s - _dt.timedelta(days=1)
     nsrc, ncanc, nbills = W.void_counts(con, {bid: name}, ns, ne, cover, month_ok=False)
     if nsrc == "detail":
-        cb, _, ob, _ = ncanc.get(bid, (0, 0, 0, 0)); tot = nbills.get(bid, 0) + cb
+        cb, _, ob, _ = ncanc.get(bid, (0, 0, 0, 0, 0))[:4]; tot = nbills.get(bid, 0) + cb
         if tot:
             normal = {"rate_open_pct": round(ob / tot * 100, 2), "rate_pct": round(cb / tot * 100, 2),
                       "range": [ns.isoformat(), ne.isoformat()], "voids": cb, "voids_open": ob, "bills_total": tot}

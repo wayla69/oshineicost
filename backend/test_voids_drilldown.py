@@ -218,3 +218,24 @@ def test_the_franchise_finding_uses_the_open_count(tmp_path):
     item = next(f for f in flags["items"] if f["key"] == "voids")
     assert "ไม่ออกใหม่ 2 ใบ" in item["text"] and "รวมยกเลิกทั้งหมด 4 ใบ" in item["text"]
     assert F.void_open(con, ids[1], "2026-04") is None                 # the per-bill table does not cover April
+
+
+def test_a_zero_baht_void_is_an_empty_bill_not_an_alert(tmp_path):
+    """Owner 2026-10-31 ("ตัด"): a ฿0 void is its own class (rules.VOID_ZERO) - out of voids_open and out of voids_reissued, and
+    the drill-down lists it as บิลเปล่า (zero: true, reissued_as None)."""
+    import rules
+    con, ids = _reissue_db(tmp_path)
+    con.execute("INSERT INTO pos_cancel_bill_detail(branch_id, period_month, sale_date, receipt_no, reason_id, amount, cancel_user, discount)"
+                " VALUES(1, '2026-06', '2026-06-02T15:00:00', 'Z0', 1, 0, 'admin', 0)")
+    con.commit()
+    cls = rules.classify_voids(con, [1], CS, CE)
+    rid = con.execute("SELECT rowid FROM pos_cancel_bill_detail WHERE receipt_no='Z0'").fetchone()[0]
+    assert cls[rid] == rules.VOID_ZERO
+    m = W.voids(con, ids, CS, CE, WHERE, {})["windows"]["month"]
+    r = next(x for x in m["rows"] if x["branch"] == ids[1])
+    assert (r["bills"], r["voids_open"], r["voids_reissued"], r["voids_zero"]) == (5, 2, 2, 1)
+    from routers import voids as V
+    l2 = V._level2(con, 1, ids[1], CS, CE, WHERE, {}, W._detail_cover(con), "month")[1]
+    z = next(b for b in l2["bills"] if b["receipt"] == "Z0")
+    assert z["zero"] is True and z["reissued_as"] is None
+    assert l2["header"]["voids_open"] == 2 and l2["header"]["voids_zero"] == 1
