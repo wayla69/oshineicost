@@ -14,6 +14,8 @@ from core import get_db, ttl_cache
 from bom_center import nav_badges as _nb
 from bom_center.schema import ensure as _ensure
 from . import franchise_msgs as _fm
+from . import feedback as _fb
+from bom_center import dept_hero as _dh
 
 router = APIRouter()
 
@@ -58,8 +60,23 @@ def nav_badges(request: Request):
             extra = _fm.badge_counts(con, role if _auth.auth_enabled() else "management", modules, branch or None)
     except Exception:       # pragma: no cover - a badge never breaks the menu
         extra = {}
-    if not extra:
+    # 2026-10-31 (phone review item 4): การตลาด has no หน้างาน; its department hero is the queue of เสียงลูกค้า (feedback.reply_counts,
+    # the page's own rule). Not cached: one indexed scan of the unanswered rows, and an answer must leave the count at once.
+    hero = None
+    if _auth.auth_enabled() and role == "marketing" and "customer.feedback" in modules:
+        try:
+            with get_db() as con:
+                n, late = _fb.reply_counts(con)
+            hero = _dh.marketing(n, late, _fb.SLA_DAYS)
+        except Exception:   # pragma: no cover - the hero never breaks the menu
+            hero = None
+    if not extra and not hero:
         return out
     if not isinstance(out, dict):           # core.ttl_cache hands back the cached JSON bytes as a Response
         out = json.loads(bytes(out.body).decode("utf-8"))
-    return {**out, "messages": extra}
+    out = dict(out)
+    if extra:
+        out["messages"] = extra
+    if hero:
+        out["hero"] = hero
+    return out

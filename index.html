@@ -2391,6 +2391,22 @@ body.mgt-reading .content-area { padding-top: 10px; }
 .ph-cz { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 13px; font-weight: 600; line-height: 1.5; background: rgba(255,255,255,.16); color: var(--hero-ink); }
 .ph-cz-bad { background: var(--fix-f); color: var(--fix-on); }
 .ph-cz-good { background: var(--good-f); color: var(--good-on); }
+/* 2026-10-31 (phone review items 4 + 6) · a department's own หน้าแรก (js/09c-mobile.js _phDeptHome): its headline, one line, the one page to
+   open; its page tiles carry ONE status chip (red overdue · amber waiting · green ✓ nothing open); pages with no status fold under หน้าอื่น */
+.ph-dh { width: 100%; }
+.ph-dh .ph-yest-v small { font-size: 15px; font-weight: 600; }
+.ph-dh-ok { display: inline-block; padding: 2px 12px; border-radius: 999px; font-size: 20px; font-weight: 700; background: var(--good-f); color: var(--good-on); }
+.ph-dh-line { font-size: 14px; line-height: 1.4; color: var(--hero-ink2); margin-top: 2px; overflow-wrap: anywhere; }
+.ph-dh-act { margin-top: 8px; padding: 6px 12px; border-radius: 999px; font-size: 14px; font-weight: 700; background: var(--hero-ink); color: var(--hero1); }
+.ph-ts { margin-left: auto; flex: 0 0 auto; min-width: 24px; padding: 1px 8px; border-radius: 999px; font-size: 13px; font-weight: 700; text-align: center; line-height: 1.6; }
+.ph-ts-bad { background: var(--fix-t); color: var(--bad-ink); }
+.ph-ts-watch { background: var(--watch-t); color: var(--amber-ink); }
+.ph-ts-good { background: var(--good-t); color: var(--good-ink); }
+.ph-more > summary { min-height: 44px; display: flex; align-items: center; gap: 6px; font-size: 14px; font-weight: 600; color: var(--text-secondary); cursor: pointer; list-style: none; }
+.ph-more > summary::-webkit-details-marker { display: none; }
+.ph-more > summary::before { content: '›'; font-size: 18px; transition: transform .15s; }
+.ph-more[open] > summary::before { transform: rotate(90deg); }
+.ph-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .ph-ov { padding-top: 14px; }
 .ph-ov-h { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
 .ph-ov-st { font-size: 12px; color: var(--text-secondary); text-align: right; }
